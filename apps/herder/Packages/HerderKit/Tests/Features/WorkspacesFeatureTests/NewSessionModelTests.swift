@@ -134,7 +134,7 @@ import Testing
         #expect(git.addedWorktrees == [
             .init(
                 repository: repository,
-                path: repository.appending(path: "agent-add-minimap"),
+                path: repository.appending(path: "agent/add-minimap"),
                 newBranch: "agent/add-minimap",
                 base: "main"
             )

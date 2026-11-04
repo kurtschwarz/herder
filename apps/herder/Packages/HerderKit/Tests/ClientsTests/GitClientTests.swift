@@ -317,7 +317,23 @@ import Testing
         let trees = try await client.worktrees(at: repository)
         #expect(trees.map(\.checkout) == [.branch("main"), .branch("agent/add-minimap")])
         #expect(trees.last?.path == path.resolvingSymlinksInPath())
-        #expect(path.lastPathComponent == "agent-add-minimap")
+        #expect(path.pathComponents.suffix(2) == ["agent", "add-minimap"])
+    }
+
+    @Test func aNestedWorktreeExcludesTheFolderItSitsIn() async throws {
+        let repository = try makeRepository("repo")
+        let path = GitWorktreeLocation.path(
+            forBranch: "agent/add-minimap",
+            inRepository: repository,
+            kind: .mainWorkingTree
+        )!
+
+        try await client.addWorktree(in: repository, at: path, newBranch: "agent/add-minimap", from: "main")
+
+        #expect(try git("status", "--porcelain", in: repository).isEmpty)
+        let exclude = try String(contentsOf: repository.appending(path: ".git/info/exclude"), encoding: .utf8)
+        // The folder git made for the branch family, not the worktree itself.
+        #expect(exclude.split(separator: "\n").contains("/agent/"))
     }
 
     @Test func theWorktreeFolderStaysOutOfGitStatus() async throws {

@@ -153,8 +153,11 @@ public struct LiveGitClient: GitClient {
         newBranch: String,
         from base: String
     ) async throws {
+        // Before resolving: `path` was built from `repository` as the caller
+        // had it, so that is the pair that compares.
+        let excluded = GitWorktreeLocation.topLevelFolder(of: path, inRepository: repository)
         let repository = repository.resolvingSymlinksInPath()
-        excludeWorktree(at: path, inRepository: repository)
+        if let excluded { exclude(excluded, inRepository: repository) }
 
         try runGit([
             "-C", repository.path(percentEncoded: false),
@@ -192,21 +195,18 @@ public struct LiveGitClient: GitClient {
 
     /// Keeps a worktree inside a working tree out of `git status`, where it
     /// would otherwise show as untracked. Goes in the repository's own exclude
-    /// file so no tracked file changes. A bare repository has no status to keep
-    /// clean. Best effort: a failure here only means the folder shows up as
-    /// untracked.
-    private func excludeWorktree(at path: URL, inRepository repository: URL) {
+    /// file so no tracked file changes. A repository with no checkout of its
+    /// own has no status to keep clean. Best effort: a failure here only means
+    /// the folder shows up as untracked.
+    private func exclude(_ folder: String, inRepository repository: URL) {
         let dotGit = repository.appending(path: ".git")
-        guard entryKind(at: dotGit) == .directory,
-              !isBare(dotGit),
-              path.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath() == repository
-        else { return }
+        guard entryKind(at: dotGit) == .directory, !isBare(dotGit) else { return }
 
         let info = dotGit.appending(path: "info")
         let exclude = info.appending(path: "exclude")
         // Anchored, so only this folder at the top is ignored, not any folder
         // of the same name deeper down.
-        let entry = "/\(path.lastPathComponent)/"
+        let entry = "/\(folder)/"
 
         let existing = (try? String(contentsOf: exclude, encoding: .utf8)) ?? ""
         guard !existing.split(separator: "\n").contains(where: { $0 == entry }) else { return }
