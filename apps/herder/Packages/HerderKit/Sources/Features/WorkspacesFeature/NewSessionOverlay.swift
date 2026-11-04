@@ -246,28 +246,35 @@ private struct NewWorktreeCard: View {
         .onTapGesture { model.selectNewWorktree() }
     }
 
+    /// The caret is drawn over the menu rather than inside its label: a menu
+    /// flattens its label into a native control that ignores a custom view's
+    /// frame, and a resizable image in there fills all the space it is offered.
     private var baseMenu: some View {
         Menu {
             ForEach(model.branches, id: \.self) { branch in
                 Button(branch) { model.baseBranch = branch }
             }
         } label: {
-            HStack(spacing: Theme.Spacing.normal) {
-                Text(model.baseBranch.isEmpty ? "—" : model.baseBranch)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(Theme.Palette.text)
-                    .lineLimit(1)
-                PhIcon(Ph.caretUpDown.regular, size: 12)
-                    .foregroundStyle(Theme.Palette.secondaryText)
-            }
-            .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-            .frame(minHeight: Theme.Size.control + 6)
-            .fieldSurface()
+            Text(model.baseBranch.isEmpty ? "—" : model.baseBranch)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(Theme.Palette.text)
+                .lineLimit(1)
+                .padding(.leading, Theme.Spacing.normal + Theme.Spacing.tight)
+                .padding(.trailing, Theme.Spacing.section + Theme.Spacing.tight)
+                .frame(minHeight: Theme.Size.control + 6)
+                .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(model.branches.isEmpty)
+        .fieldSurface()
+        .overlay(alignment: .trailing) {
+            PhIcon(Ph.caretUpDown.regular, size: 12)
+                .foregroundStyle(Theme.Palette.secondaryText)
+                .padding(.trailing, Theme.Spacing.normal + Theme.Spacing.tight)
+                .allowsHitTesting(false)
+        }
     }
 
     private var message: String? {
