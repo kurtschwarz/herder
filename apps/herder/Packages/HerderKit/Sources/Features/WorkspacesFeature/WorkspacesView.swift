@@ -25,7 +25,7 @@ public struct WorkspacesView: View {
                 EmptyWorkspaces { model.beginAdding() }
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                    LazyVStack(alignment: .leading, spacing: 2) {
                         ForEach(workspaces) { workspace in
                             WorkspaceSection(workspace: workspace, model: model)
                         }

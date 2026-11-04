@@ -24,7 +24,7 @@ struct WorkspaceRow: View {
                     // The hit area is the frame, not the glyph: a plain button
                     // only responds where it draws, and the chevron is a few
                     // pixels of stroke.
-                    .frame(width: 24, height: 24)
+                    .frame(width: 24, height: 20)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -54,7 +54,7 @@ struct WorkspaceRow: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Theme.Spacing.normal)
-        .padding(.vertical, Theme.Spacing.tight + 2)
+        .padding(.vertical, Theme.Spacing.tight)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                 .fill(isHovering ? Theme.Palette.control : .clear)
