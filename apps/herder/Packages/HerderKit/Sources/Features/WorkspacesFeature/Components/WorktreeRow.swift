@@ -6,13 +6,29 @@ import SwiftUI
 struct WorktreeRow: View {
     let worktree: GitWorktree
 
-    /// The worktree under the pointer, shared with the section so its guide
-    /// line can step aside.
-    @Binding var hovered: GitWorktree.ID?
-
-    private var isHovering: Bool { hovered == worktree.id }
+    @State private var isHovering = false
 
     var body: some View {
+        HStack(spacing: 0) {
+            // This row's stretch of the guide line, sitting under the
+            // chevron. Each row draws its own so that hovering one hides only
+            // its piece: the hover plate sits right against the line, and with
+            // both showing its edge reads as a double rule.
+            Rectangle()
+                .fill(Theme.Palette.hairline)
+                .frame(width: 1)
+                .opacity(isHovering ? 0 : 1)
+                .animation(.easeOut(duration: 0.1), value: isHovering)
+                .padding(.leading, Theme.Spacing.normal + Theme.Size.chevron / 2)
+
+            content
+        }
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .help(worktree.path.path(percentEncoded: false))
+    }
+
+    private var content: some View {
         HStack(spacing: Theme.Spacing.normal) {
             PhIcon(Ph.gitBranch.bold, size: 16)
                 .foregroundStyle(Theme.Palette.secondaryText)
@@ -41,14 +57,5 @@ struct WorktreeRow: View {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                 .fill(isHovering ? Theme.Palette.control : .clear)
         }
-        .contentShape(Rectangle())
-        .onHover { inside in
-            if inside {
-                hovered = worktree.id
-            } else if hovered == worktree.id {
-                hovered = nil
-            }
-        }
-        .help(worktree.path.path(percentEncoded: false))
     }
 }
