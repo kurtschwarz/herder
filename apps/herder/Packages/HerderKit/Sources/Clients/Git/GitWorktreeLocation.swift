@@ -2,25 +2,19 @@ import Foundation
 
 /// Where a new worktree goes on disk.
 ///
-/// Always inside the workspace folder: that is the folder the user handed the
-/// app, so a worktree there is in reach of everything the workspace is.
+/// Always directly inside the workspace folder, whatever kind of repository it
+/// is: a worktree there sits beside the repository's own files, and is in reach
+/// of everything the workspace is.
 public enum GitWorktreeLocation {
-    /// Holds the worktrees of a repository that has a working tree of its own.
-    /// Kept out of `git status` through the repository's exclude file.
-    public static let containerName = ".worktrees"
-
     /// `nil` for anything but a main working tree or a bare repository.
     public static func path(
         forBranch branch: String,
         inRepository repository: URL,
         kind: GitRepositoryKind
     ) -> URL? {
-        let folder = folderName(forBranch: branch)
         switch kind {
-        case .mainWorkingTree:
-            return repository.appending(path: containerName).appending(path: folder)
-        case .bare:
-            return repository.appending(path: folder)
+        case .mainWorkingTree, .bare:
+            return repository.appending(path: folderName(forBranch: branch))
         case .linkedWorktree, .notARepository:
             return nil
         }

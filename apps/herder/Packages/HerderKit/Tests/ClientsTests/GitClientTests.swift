@@ -207,7 +207,7 @@ import Testing
 
         #expect(try git("status", "--porcelain", in: repository).isEmpty)
         let exclude = try String(contentsOf: repository.appending(path: ".git/info/exclude"), encoding: .utf8)
-        #expect(exclude.components(separatedBy: ".worktrees/").count == 2)
+        #expect(exclude.split(separator: "\n").filter { $0 == "/feature/" || $0 == "/other/" }.count == 2)
     }
 
     @Test func addingToABareRepositoryPutsTheWorktreeBesideTheRest() async throws {
@@ -329,7 +329,7 @@ import Testing
 
     @Test func theStubRecordsWhatWasAdded() async throws {
         let repository = URL(filePath: "/tmp/repo")
-        let path = URL(filePath: "/tmp/repo/.worktrees/feature")
+        let path = URL(filePath: "/tmp/repo/feature")
 
         try await client.addWorktree(in: repository, at: path, newBranch: "feature", from: "main")
 

@@ -145,7 +145,7 @@ public struct LiveGitClient: GitClient {
         from base: String
     ) async throws {
         let repository = repository.resolvingSymlinksInPath()
-        excludeWorktreeContainer(of: path, inRepository: repository)
+        excludeWorktree(at: path, inRepository: repository)
 
         try runGit([
             "-C", repository.path(percentEncoded: false),
@@ -181,16 +181,22 @@ public struct LiveGitClient: GitClient {
         }
     }
 
-    /// Keeps `.worktrees` out of `git status`, using the repository's own
-    /// exclude file so no tracked file changes. Best effort: a failure here
-    /// only means the folder shows up as untracked.
-    private func excludeWorktreeContainer(of path: URL, inRepository repository: URL) {
-        let container = GitWorktreeLocation.containerName
-        guard path.deletingLastPathComponent().lastPathComponent == container else { return }
+    /// Keeps a worktree inside a working tree out of `git status`, where it
+    /// would otherwise show as untracked. Goes in the repository's own exclude
+    /// file so no tracked file changes. A bare repository has no status to keep
+    /// clean. Best effort: a failure here only means the folder shows up as
+    /// untracked.
+    private func excludeWorktree(at path: URL, inRepository repository: URL) {
+        let dotGit = repository.appending(path: ".git")
+        guard entryKind(at: dotGit) == .directory,
+              path.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath() == repository
+        else { return }
 
-        let info = repository.appending(path: ".git/info")
+        let info = dotGit.appending(path: "info")
         let exclude = info.appending(path: "exclude")
-        let entry = "\(container)/"
+        // Anchored, so only this folder at the top is ignored, not any folder
+        // of the same name deeper down.
+        let entry = "/\(path.lastPathComponent)/"
 
         let existing = (try? String(contentsOf: exclude, encoding: .utf8)) ?? ""
         guard !existing.split(separator: "\n").contains(where: { $0 == entry }) else { return }

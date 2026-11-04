@@ -211,7 +211,7 @@ import Testing
         await session.load()
         session.editBranchName("fix")
         // What git would now list, once the worktree exists.
-        let created = GitWorktree(path: url.appending(path: ".worktrees/fix"), checkout: .branch("fix"), isMainWorkingTree: false)
+        let created = GitWorktree(path: url.appending(path: "fix"), checkout: .branch("fix"), isMainWorkingTree: false)
 
         git.seed(worktrees: [created], at: url)
         await model.submitNewSession()

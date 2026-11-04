@@ -5,12 +5,12 @@ import Testing
 @Suite struct GitWorktreeLocationTests {
     let repository = URL(filePath: "/code/api")
 
-    @Test func aMainWorkingTreeKeepsItsWorktreesInADotFolder() {
+    @Test func aMainWorkingTreeKeepsItsWorktreesInItsRoot() {
         let path = GitWorktreeLocation.path(forBranch: "feature", inRepository: repository, kind: .mainWorkingTree)
-        #expect(path == URL(filePath: "/code/api/.worktrees/feature"))
+        #expect(path == URL(filePath: "/code/api/feature"))
     }
 
-    @Test func aBareRepositoryKeepsThemBesideItsOwnFiles() {
+    @Test func aBareRepositoryDoesTheSame() {
         let path = GitWorktreeLocation.path(forBranch: "feature", inRepository: repository, kind: .bare)
         #expect(path == URL(filePath: "/code/api/feature"))
     }

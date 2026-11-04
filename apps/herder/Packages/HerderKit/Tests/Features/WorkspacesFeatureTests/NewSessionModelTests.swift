@@ -23,8 +23,8 @@ import Testing
         git.seed(branches: branches, at: repository)
         git.seed(worktrees: [
             GitWorktree(path: repository, checkout: .branch(checkout), isMainWorkingTree: true),
-            GitWorktree(path: repository.appending(path: ".worktrees/feature"), checkout: .branch("feature"), isMainWorkingTree: false),
-            GitWorktree(path: repository.appending(path: ".worktrees/old"), checkout: .detached(sha: "abc1234"), isMainWorkingTree: false),
+            GitWorktree(path: repository.appending(path: "feature"), checkout: .branch("feature"), isMainWorkingTree: false),
+            GitWorktree(path: repository.appending(path: "old"), checkout: .detached(sha: "abc1234"), isMainWorkingTree: false),
         ], at: repository)
     }
 
@@ -134,7 +134,7 @@ import Testing
         #expect(git.addedWorktrees == [
             .init(
                 repository: repository,
-                path: repository.appending(path: ".worktrees/agent-add-minimap"),
+                path: repository.appending(path: "agent-add-minimap"),
                 newBranch: "agent/add-minimap",
                 base: "main"
             )
