@@ -23,7 +23,7 @@ public enum Theme {
         public static let sidebarWidth: CGFloat = 236
         /// Header strip tall enough to clear the traffic lights.
         public static let titleBar: CGFloat = 48
-        public static let wolfMark = CGSize(width: 20, height: 26)
+        public static let wolfMark = CGSize(width: 15, height: 19.5)
     }
 
     public enum Radius {
