@@ -14,6 +14,9 @@ struct HerderApp: App {
         WindowGroup {
             AppView(model: model)
         }
-        .defaultSize(width: 980, height: 620)
+        .defaultSize(width: 1180, height: 760)
+        // The design puts the traffic lights inside the sidebar's header rather
+        // than in a title bar of their own.
+        .windowStyle(.hiddenTitleBar)
     }
 }

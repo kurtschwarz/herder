@@ -1,7 +1,11 @@
 import DesignSystem
 import SwiftUI
 
-/// Root view. Owns navigation and composes features; holds no feature logic.
+/// Root view. Owns the window layout and composes features; holds no feature logic.
+///
+/// Panes float on the window with a uniform inset and gap rather than sitting in a
+/// `NavigationSplitView`, because the design has no divider and gives each pane its
+/// own rounded surface.
 public struct AppView: View {
     @State private var model: AppModel
 
@@ -10,25 +14,29 @@ public struct AppView: View {
     }
 
     public var body: some View {
-        NavigationSplitView {
+        HStack(spacing: Theme.Spacing.paneGap) {
             Sidebar()
-                .navigationSplitViewColumnWidth(min: 180, ideal: 220)
-        } detail: {
-            VStack(spacing: Theme.Spacing.normal) {
-                Image(systemName: "dog")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Theme.Palette.accent)
-                Text("Herder")
-                    .font(.title2)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(width: Theme.Size.sidebarWidth)
+                .paneBackground()
+
+            Detail()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .padding(Theme.Spacing.windowPadding)
+        .frame(minWidth: 720, minHeight: 460)
+        .background(Theme.Palette.window)
+        .background(WindowChrome())
+        // The window draws no title bar, but SwiftUI still reserves a safe area
+        // the height of one. Without this the panes start below the traffic
+        // lights instead of around them.
+        .ignoresSafeArea()
+        .preferredColorScheme(.dark)
     }
 }
 
 #if DEBUG
 #Preview {
     AppView(model: AppModel(files: PreviewFileClient()))
-        .frame(width: 900, height: 560)
+        .frame(width: 980, height: 620)
 }
 #endif
