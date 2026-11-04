@@ -9,6 +9,7 @@ import Synchronization
 public final class StubGitClient: GitClient {
     private let kinds = Mutex<[String: GitRepositoryKind]>([:])
     private let trees = Mutex<[String: [GitWorktree]]>([:])
+    private let unreadable = Mutex<Set<String>>([])
 
     public init() {}
 
@@ -23,11 +24,24 @@ public final class StubGitClient: GitClient {
         trees.withLock { $0[FolderKey.of(url)] = worktrees }
     }
 
+    /// Makes `worktrees(at:)` throw for `url`, as it would for a folder that
+    /// vanished between being listed and being read.
+    public func seedUnreadable(_ url: URL) {
+        unreadable.withLock { _ = $0.insert(FolderKey.of(url)) }
+    }
+
     public func repositoryKind(at url: URL) async throws -> GitRepositoryKind {
         kinds.withLock { $0[FolderKey.of(url)] } ?? .notARepository
     }
 
     public func worktrees(at url: URL) async throws -> [GitWorktree] {
-        trees.withLock { $0[FolderKey.of(url)] } ?? []
+        if unreadable.withLock({ $0.contains(FolderKey.of(url)) }) {
+            throw StubGitClientError.unreadable
+        }
+        return trees.withLock { $0[FolderKey.of(url)] } ?? []
     }
+}
+
+public enum StubGitClientError: Error, Equatable {
+    case unreadable
 }

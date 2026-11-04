@@ -2,6 +2,7 @@ import Clients
 import Observation
 import SwiftData
 import Storage
+import WorkspacesFeature
 
 /// Composition root for the feature graph.
 ///
@@ -17,6 +18,9 @@ public final class AppModel {
     /// itself with `@Query` against the injected container.
     public let workspaces: WorkspaceStore
 
+    /// What the sidebar shows beside the list itself.
+    public let workspaceList: WorkspacesModel
+
     /// `context` is the app's `mainContext`, the same one `@Query` reads, so a
     /// change made here shows up in the sidebar without a round trip.
     public init(
@@ -26,7 +30,9 @@ public final class AppModel {
         context: ModelContext
     ) {
         self.files = files
-        self.workspaces = WorkspaceStore(context: context, bookmarks: bookmarks, git: git)
+        let workspaces = WorkspaceStore(context: context, bookmarks: bookmarks, git: git)
+        self.workspaces = workspaces
+        self.workspaceList = WorkspacesModel(store: workspaces, git: git)
     }
 
     /// Takes access to every workspace folder. Called at launch, before any view

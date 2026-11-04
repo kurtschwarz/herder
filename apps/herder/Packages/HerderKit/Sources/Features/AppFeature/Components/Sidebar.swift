@@ -1,13 +1,17 @@
 import DesignSystem
+import SwiftData
 import SwiftUI
+import WorkspacesFeature
 
-/// Leading pane. Empty for now beyond its header. Internal: only `AppFeature`
-/// uses it.
+/// Leading pane: the window's own header over the workspace list. Internal: only
+/// `AppFeature` uses it.
 struct Sidebar: View {
+    let workspaces: WorkspacesModel
+
     var body: some View {
         VStack(spacing: 0) {
             SidebarHeader()
-            Spacer(minLength: 0)
+            WorkspacesView(model: workspaces)
         }
     }
 }
@@ -27,7 +31,8 @@ private struct SidebarHeader: View {
 
 #if DEBUG
 #Preview {
-    Sidebar()
+    Sidebar(workspaces: AppModel.preview.workspaceList)
+        .modelContainer(AppModel.previewContainer)
         .frame(width: Theme.Size.sidebarWidth, height: 420)
         .glassPaneBackground()
         .padding(Theme.Spacing.windowPadding)

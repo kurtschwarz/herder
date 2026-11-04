@@ -44,8 +44,15 @@ let package = Package(
         // each other. Feature targets carry an explicit `path` because SwiftPM
         // otherwise looks for them directly under `Sources`.
         .target(
-            name: "AppFeature",
+            name: "WorkspacesFeature",
             dependencies: ["Models", "Clients", "DesignSystem", "Storage"],
+            path: "Sources/Features/WorkspacesFeature",
+            swiftSettings: ui
+        ),
+
+        .target(
+            name: "AppFeature",
+            dependencies: ["Models", "Clients", "DesignSystem", "Storage", "WorkspacesFeature"],
             path: "Sources/Features/AppFeature",
             swiftSettings: ui
         ),
@@ -58,6 +65,12 @@ let package = Package(
         .testTarget(
             name: "StorageTests",
             dependencies: ["Storage", "ClientsTestSupport"],
+            swiftSettings: ui
+        ),
+        .testTarget(
+            name: "WorkspacesFeatureTests",
+            dependencies: ["WorkspacesFeature", "Clients", "ClientsTestSupport", "Storage"],
+            path: "Tests/Features/WorkspacesFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(

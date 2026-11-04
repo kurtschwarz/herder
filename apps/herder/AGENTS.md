@@ -15,6 +15,7 @@ apps/herder/
     ├── Package.swift
     ├── Sources/
     │   ├── Features/         # one target per feature, each with an explicit path
+    │   │   ├── WorkspacesFeature/  # workspace list, worktrees, add modal
     │   │   └── AppFeature/   # root view and composition
     │   │       ├── AppModel.swift    # @Observable, builds the feature graph
     │   │       ├── AppView.swift     # window layout, no feature logic
@@ -23,7 +24,8 @@ apps/herder/
     │   │       └── Previews/         # #if DEBUG preview doubles
     │   ├── Models/           # Sendable value types, one per file
     │   ├── Clients/          # side effects behind protocols, one folder per client
-    │   │   └── Git/{GitClient,LiveGitClient}.swift
+    │   │   ├── Git/{GitClient,LiveGitClient}.swift
+    │   │   └── FolderPicker/{FolderPickerClient,LiveFolderPickerClient}.swift
     │   ├── ClientsTestSupport/   # fakes; never linked into the app
     │   ├── Storage/          # SwiftData models, schema versions, container
     │   └── DesignSystem/     # Theme.swift + Views/, Modifiers/, Shapes/

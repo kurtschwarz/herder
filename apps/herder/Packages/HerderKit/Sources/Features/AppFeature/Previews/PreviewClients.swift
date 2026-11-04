@@ -27,24 +27,43 @@ struct PreviewBookmarkClient: BookmarkClient {
 
 struct PreviewGitClient: GitClient {
     func repositoryKind(at url: URL) async throws -> GitRepositoryKind { .mainWorkingTree }
-    func worktrees(at url: URL) async throws -> [GitWorktree] { [] }
+    func worktrees(at url: URL) async throws -> [GitWorktree] {
+        [
+            GitWorktree(path: url, checkout: .branch("main"), isMainWorkingTree: true),
+            GitWorktree(path: url.appending(path: "feature"), checkout: .branch("feature"), isMainWorkingTree: false),
+        ]
+    }
 }
 
 extension AppModel {
-    /// An app model backed by an empty in-memory store. Traps rather than
-    /// returning an optional: a preview that cannot build its store has nothing
-    /// to show, and the message is what tells you why the canvas is blank.
-    static var preview: AppModel {
+    /// Two workspaces in an in-memory store. One container for every preview,
+    /// because a context outlives nothing: its container has to stay alive for
+    /// as long as a view queries it. Traps rather than returning an optional: a
+    /// preview that cannot build its store has nothing to show, and the message
+    /// is what tells you why the canvas is blank.
+    @MainActor static let previewContainer: ModelContainer = {
         do {
-            return AppModel(
-                files: PreviewFileClient(),
-                bookmarks: PreviewBookmarkClient(),
-                git: PreviewGitClient(),
-                context: ModelContext(try WorkspaceContainer.inMemory())
-            )
+            let container = try WorkspaceContainer.inMemory()
+            for (index, name) in ["agent-editor", "herder"].enumerated() {
+                let path = "/preview/\(name)"
+                container.mainContext.insert(
+                    Workspace(name: name, path: path, bookmark: Data(path.utf8), order: index)
+                )
+            }
+            return container
         } catch {
             fatalError("Could not build the preview workspace store: \(error)")
         }
+    }()
+
+    /// An app model over the seeded preview store.
+    @MainActor static var preview: AppModel {
+        AppModel(
+            files: PreviewFileClient(),
+            bookmarks: PreviewBookmarkClient(),
+            git: PreviewGitClient(),
+            context: previewContainer.mainContext
+        )
     }
 }
 #endif
