@@ -31,25 +31,29 @@ public struct WorkspaceStore {
         )
     }
 
+    /// Whether a folder could be added, without adding it. Runs exactly the
+    /// checks `add` runs and throws exactly what it would, so the UI can say no
+    /// as soon as a folder is picked instead of when the user commits.
+    ///
+    /// Returns what git made of the folder, which is what the default name
+    /// depends on.
+    @discardableResult
+    public func validate(url: URL) async throws -> GitRepositoryKind {
+        let url = url.standardizedFileURL
+        let kind = try await repositoryKind(of: url)
+        guard try !isAlreadyAWorkspace(url) else { throw WorkspaceStoreError.alreadyOpen(url) }
+        return kind
+    }
+
     /// Adopts a folder, appending it to the bottom of the sidebar.
     ///
     /// Passing no name takes the folder's own, which is what the sidebar shows
-    /// until the user renames it.
+    /// until the user renames it. Validates again rather than trusting an
+    /// earlier `validate`: the folder may have changed since it was picked.
     @discardableResult
     public func add(url: URL, name: String? = nil) async throws -> Workspace {
         let url = url.standardizedFileURL
-        let kind = try await git.repositoryKind(at: url)
-
-        switch kind {
-        case .mainWorkingTree, .bare:
-            break
-        case .linkedWorktree(let mainRepository):
-            throw WorkspaceStoreError.isLinkedWorktree(mainRepository: mainRepository)
-        case .notARepository:
-            throw WorkspaceStoreError.notAGitRepository(url)
-        }
-
-        guard try !isAlreadyAWorkspace(url) else { throw WorkspaceStoreError.alreadyOpen(url) }
+        let kind = try await validate(url: url)
 
         let workspace = Workspace(
             name: name ?? Self.defaultName(for: url, kind: kind),
@@ -102,21 +106,23 @@ public struct WorkspaceStore {
     /// the same workspace, somewhere else.
     public func relocate(_ workspace: Workspace, to url: URL) async throws {
         let url = url.standardizedFileURL
-        let kind = try await git.repositoryKind(at: url)
-
-        switch kind {
-        case .mainWorkingTree, .bare:
-            break
-        case .linkedWorktree(let mainRepository):
-            throw WorkspaceStoreError.isLinkedWorktree(mainRepository: mainRepository)
-        case .notARepository:
-            throw WorkspaceStoreError.notAGitRepository(url)
-        }
+        try await repositoryKind(of: url)
 
         workspace.bookmark = try bookmarks.makeBookmark(for: url)
         workspace.path = url.path(percentEncoded: false)
         try context.save()
         workspace.isAvailable = access.begin(url, for: workspace.id)
+    }
+
+    /// Renames a workspace. A blank name keeps the current one: the user had
+    /// already chosen something, and an empty row in the sidebar is never what
+    /// they meant. Duplicates are fine, since two checkouts of one repository
+    /// legitimately share a name and identity is the `id`.
+    public func rename(_ workspace: Workspace, to name: String) throws {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != workspace.name else { return }
+        workspace.name = name
+        try context.save()
     }
 
     /// Forgets a workspace. The folder on disk is untouched: only the app's
@@ -142,6 +148,22 @@ public struct WorkspaceStore {
         try context.save()
     }
 
+    /// What git makes of the folder, refusing anything that cannot be a
+    /// workspace.
+    @discardableResult
+    private func repositoryKind(of url: URL) async throws -> GitRepositoryKind {
+        let kind = try await git.repositoryKind(at: url)
+
+        switch kind {
+        case .mainWorkingTree, .bare:
+            return kind
+        case .linkedWorktree(let mainRepository):
+            throw WorkspaceStoreError.isLinkedWorktree(mainRepository: mainRepository)
+        case .notARepository:
+            throw WorkspaceStoreError.notAGitRepository(url)
+        }
+    }
+
     /// Compares where each existing workspace's bookmark points now, not the
     /// cached path: the same folder reached by a new path is still the same
     /// folder. A workspace whose bookmark no longer resolves falls back to its
@@ -160,7 +182,7 @@ public struct WorkspaceStore {
 
     /// The folder's own name, less the `.git` suffix a bare repository carries:
     /// that suffix is a repository-layout detail, not something to show.
-    static func defaultName(for url: URL, kind: GitRepositoryKind) -> String {
+    public static func defaultName(for url: URL, kind: GitRepositoryKind) -> String {
         let component = url.lastPathComponent
         guard kind == .bare, component.hasSuffix(".git"), component != ".git" else {
             return component

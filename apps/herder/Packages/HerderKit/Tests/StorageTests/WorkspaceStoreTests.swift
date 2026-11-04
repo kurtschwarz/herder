@@ -101,6 +101,71 @@ import Testing
 
     // MARK: - Ordering
 
+    // MARK: - Validating
+
+    @Test func validatingReportsWhatGitMadeOfTheFolder() async throws {
+        let url = repository("/code/api.git", kind: .bare)
+        #expect(try await store.validate(url: url) == .bare)
+    }
+
+    @Test func validatingAddsNothing() async throws {
+        let url = repository("/code/api")
+        try await store.validate(url: url)
+        #expect(try store.workspaces().isEmpty)
+    }
+
+    @Test func validatingRefusesWhatAddingRefuses() async throws {
+        let main = url("/code/api")
+        let worktree = repository("/code/feature", kind: .linkedWorktree(mainRepository: main))
+        let open = repository("/code/web")
+        try await store.add(url: open)
+
+        await #expect(throws: WorkspaceStoreError.notAGitRepository(url("/code/notes"))) {
+            try await store.validate(url: url("/code/notes"))
+        }
+        await #expect(throws: WorkspaceStoreError.isLinkedWorktree(mainRepository: main)) {
+            try await store.validate(url: worktree)
+        }
+        await #expect(throws: WorkspaceStoreError.alreadyOpen(open)) {
+            try await store.validate(url: open)
+        }
+    }
+
+    @Test func theDefaultNameIsWhatAddingWouldUse() async throws {
+        let url = url("/code/api.git")
+        #expect(WorkspaceStore.defaultName(for: url, kind: .bare) == "api")
+        #expect(WorkspaceStore.defaultName(for: url, kind: .mainWorkingTree) == "api.git")
+    }
+
+    // MARK: - Renaming
+
+    @Test func renamingPersistsTheNewName() async throws {
+        let workspace = try await store.add(url: repository("/code/api"))
+
+        try store.rename(workspace, to: "  Gateway ")
+
+        #expect(workspace.name == "Gateway")
+        #expect(try relaunch().workspaces().first?.name == "Gateway")
+    }
+
+    @Test func aBlankNameKeepsTheCurrentOne() async throws {
+        let workspace = try await store.add(url: repository("/code/api"), name: "Gateway")
+
+        try store.rename(workspace, to: "   ")
+
+        #expect(workspace.name == "Gateway")
+    }
+
+    @Test func twoWorkspacesMayShareAName() async throws {
+        let first = try await store.add(url: repository("/code/api"), name: "api")
+        let second = try await store.add(url: repository("/work/api"), name: "other")
+
+        try store.rename(second, to: "api")
+
+        #expect(first.name == second.name)
+        #expect(try store.workspaces().count == 2)
+    }
+
     @Test func newWorkspacesGoToTheBottom() async throws {
         for name in ["api", "web", "infra"] {
             try await store.add(url: repository("/code/\(name)"))
