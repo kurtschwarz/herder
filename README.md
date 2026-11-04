@@ -9,6 +9,7 @@ herder/
 ├── justfile                  # forwards every task to an app or service
 └── apps/
     └── herder/               # the macOS app
+        ├── AGENTS.md         # structure and conventions, for agents
         ├── justfile          # how to build, test and run this app
         ├── project.yml       # source of truth for Herder.xcodeproj
         ├── Herder/           # thin app target: entry point and glue only
@@ -83,17 +84,21 @@ Run the module tests with `just test`. It takes arguments, so
 
 ### Adding a feature
 
-One module per feature, under `Sources/`:
+One module per feature, under `Sources/Features/`:
 
 ```
-EditorFeature/
+Features/EditorFeature/
 ├── EditorView.swift
 ├── EditorModel.swift      # @Observable, owns state and logic
-└── Components/            # subviews only this feature uses
+├── Components/            # subviews only this feature uses
+├── Platform/              # AppKit bridging, if it needs any
+└── Previews/              # #if DEBUG doubles
 ```
 
 Organise by feature, not by type. No top-level `Views/` or `ViewModels/` folders —
-those become junk drawers.
+those become junk drawers. Within a module, group by role: `DesignSystem` splits
+into `Views/`, `Modifiers/` and `Shapes/`, and each client in `Clients` keeps its
+protocol and live implementation together in `Clients/<Subject>/`.
 
 Register it in `Package.swift` with the `ui` settings, add a matching test target,
 and depend on it from `AppFeature`:
@@ -102,14 +107,19 @@ and depend on it from `AppFeature`:
 .target(
     name: "EditorFeature",
     dependencies: ["Models", "Clients", "DesignSystem"],
+    path: "Sources/Features/EditorFeature",
     swiftSettings: ui
 ),
 .testTarget(
     name: "EditorFeatureTests",
     dependencies: ["EditorFeature", "ClientsTestSupport"],
+    path: "Tests/Features/EditorFeatureTests",
     swiftSettings: ui
 ),
 ```
+
+The `path` is what buys the `Features/` folder: SwiftPM maps a target name straight
+onto `Sources/<name>` unless told otherwise.
 
 The dependency graph only points downward. Features depend on `Clients`, `Models`,
 `Storage` and `DesignSystem`, never on each other. If two features need to talk,

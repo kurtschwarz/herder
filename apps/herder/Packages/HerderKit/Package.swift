@@ -39,11 +39,14 @@ let package = Package(
         // Shared views, styles, tokens.
         .target(name: "DesignSystem", swiftSettings: ui),
 
-        // Root view and navigation. Add one target per feature alongside it, and
-        // depend on them from here: features never import each other.
+        // Root view and navigation. Add one target per feature alongside it under
+        // `Sources/Features`, and depend on them from here: features never import
+        // each other. Feature targets carry an explicit `path` because SwiftPM
+        // otherwise looks for them directly under `Sources`.
         .target(
             name: "AppFeature",
             dependencies: ["Models", "Clients", "DesignSystem", "Storage"],
+            path: "Sources/Features/AppFeature",
             swiftSettings: ui
         ),
 
@@ -60,6 +63,7 @@ let package = Package(
         .testTarget(
             name: "AppFeatureTests",
             dependencies: ["AppFeature", "ClientsTestSupport"],
+            path: "Tests/Features/AppFeatureTests",
             swiftSettings: ui
         ),
     ]
