@@ -8,6 +8,7 @@ import Synchronization
 /// All state sits behind a lock because Swift Testing runs tests in parallel.
 public final class StubGitClient: GitClient {
     private let kinds = Mutex<[String: GitRepositoryKind]>([:])
+    private let trees = Mutex<[String: [GitWorktree]]>([:])
 
     public init() {}
 
@@ -17,7 +18,16 @@ public final class StubGitClient: GitClient {
         kinds.withLock { $0[FolderKey.of(url)] = kind }
     }
 
+    /// Declares the worktrees git would list for `url`, in display order.
+    public func seed(worktrees: [GitWorktree], at url: URL) {
+        trees.withLock { $0[FolderKey.of(url)] = worktrees }
+    }
+
     public func repositoryKind(at url: URL) async throws -> GitRepositoryKind {
         kinds.withLock { $0[FolderKey.of(url)] } ?? .notARepository
+    }
+
+    public func worktrees(at url: URL) async throws -> [GitWorktree] {
+        trees.withLock { $0[FolderKey.of(url)] } ?? []
     }
 }

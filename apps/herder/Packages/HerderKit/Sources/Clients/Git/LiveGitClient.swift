@@ -37,7 +37,82 @@ public struct LiveGitClient: GitClient {
         }
     }
 
+    /// Main working tree first, then branches alphabetically, then detached
+    /// checkouts. Linked worktrees whose folder has gone missing are skipped:
+    /// git still lists them until pruned, but there is nothing to open.
+    @concurrent
+    public func worktrees(at url: URL) async throws -> [GitWorktree] {
+        let url = url.resolvingSymlinksInPath()
+        let dotGit = url.appending(path: ".git")
+
+        var result: [GitWorktree] = []
+        let gitDirectory: URL
+
+        switch try await repositoryKind(at: url) {
+        case .mainWorkingTree:
+            gitDirectory = dotGit
+            if let checkout = checkout(inGitDirectory: dotGit) {
+                result.append(GitWorktree(path: url, checkout: checkout, isMainWorkingTree: true))
+            }
+        case .bare:
+            gitDirectory = url
+        case .linkedWorktree, .notARepository:
+            return []
+        }
+
+        let administrative = gitDirectory.appending(path: "worktrees")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: administrative.path(percentEncoded: false))) ?? []
+
+        var linked: [GitWorktree] = []
+        for name in names {
+            let entry = administrative.appending(path: name)
+            guard
+                let pointer = try? String(contentsOf: entry.appending(path: "gitdir"), encoding: .utf8),
+                let checkout = checkout(inGitDirectory: entry)
+            else { continue }
+
+            let marker = pointer.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !marker.isEmpty else { continue }
+            let path = resolve(marker, relativeTo: entry).deletingLastPathComponent()
+            guard FileManager.default.fileExists(atPath: path.path(percentEncoded: false)) else { continue }
+
+            linked.append(GitWorktree(path: path, checkout: checkout, isMainWorkingTree: false))
+        }
+
+        linked.sort { lhs, rhs in
+            switch (lhs.checkout, rhs.checkout) {
+            case (.branch(let a), .branch(let b)):
+                let order = a.localizedStandardCompare(b)
+                return order == .orderedSame ? lhs.path.path < rhs.path.path : order == .orderedAscending
+            case (.branch, .detached):
+                return true
+            case (.detached, .branch):
+                return false
+            case (.detached, .detached):
+                return lhs.path.path < rhs.path.path
+            }
+        }
+        return result + linked
+    }
+
     // MARK: - Layout
+
+    /// What a git directory's `HEAD` points at: `ref: refs/heads/<branch>` on a
+    /// branch, a bare commit id when detached.
+    private func checkout(inGitDirectory directory: URL) -> GitWorktree.Checkout? {
+        guard
+            let head = try? String(contentsOf: directory.appending(path: "HEAD"), encoding: .utf8)
+        else { return nil }
+        let line = head.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let prefix = "ref:"
+        if line.hasPrefix(prefix) {
+            let ref = line.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
+            let heads = "refs/heads/"
+            return .branch(ref.hasPrefix(heads) ? String(ref.dropFirst(heads.count)) : ref)
+        }
+        return line.isEmpty ? nil : .detached(sha: String(line.prefix(7)))
+    }
 
     private enum EntryKind {
         case directory, file, missing

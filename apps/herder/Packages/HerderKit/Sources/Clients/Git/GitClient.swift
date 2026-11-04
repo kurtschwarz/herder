@@ -20,7 +20,43 @@ public enum GitRepositoryKind: Sendable, Equatable {
     case notARepository
 }
 
+/// One working tree of a repository, as the sidebar lists it.
+///
+/// Derived from the repository's layout on every read rather than persisted: a
+/// worktree is created and removed with `git` in a terminal, so the app's copy
+/// would be wrong more often than not.
+public struct GitWorktree: Sendable, Equatable, Identifiable {
+    /// What the working tree has checked out. A worktree is always on one or the
+    /// other, and only one of the two is cheap to read: a branch name sits in
+    /// `HEAD`, where a detached `HEAD` holds the commit itself.
+    public enum Checkout: Sendable, Equatable {
+        case branch(String)
+        case detached(sha: String)
+    }
+
+    /// The working tree's folder. Unique within a repository, so it identifies
+    /// the row.
+    public var path: URL
+    public var checkout: Checkout
+
+    /// The repository's own working tree, as opposed to one added with
+    /// `git worktree add`. A bare repository has none.
+    public var isMainWorkingTree: Bool
+
+    public var id: URL { path }
+
+    public init(path: URL, checkout: Checkout, isMainWorkingTree: Bool) {
+        self.path = path
+        self.checkout = checkout
+        self.isMainWorkingTree = isMainWorkingTree
+    }
+}
+
 /// What the app needs to know about git before it will adopt a folder.
 public protocol GitClient: Sendable {
     func repositoryKind(at url: URL) async throws -> GitRepositoryKind
+
+    /// Every working tree of the repository at `url`, in the order the sidebar
+    /// shows them. Empty for a folder that is not a repository root.
+    func worktrees(at url: URL) async throws -> [GitWorktree]
 }

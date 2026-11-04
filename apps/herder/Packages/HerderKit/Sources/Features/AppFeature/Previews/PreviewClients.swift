@@ -27,6 +27,7 @@ struct PreviewBookmarkClient: BookmarkClient {
 
 struct PreviewGitClient: GitClient {
     func repositoryKind(at url: URL) async throws -> GitRepositoryKind { .mainWorkingTree }
+    func worktrees(at url: URL) async throws -> [GitWorktree] { [] }
 }
 
 extension AppModel {

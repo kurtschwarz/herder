@@ -112,6 +112,87 @@ import Testing
         let url = directory.appending(path: "nothing-here")
         #expect(try await client.repositoryKind(at: url) == .notARepository)
     }
+
+    // MARK: - worktrees
+
+    @Test func repositoryWithoutWorktreesListsOnlyItsMainWorkingTree() async throws {
+        let repository = try makeRepository("repo")
+        let trees = try await client.worktrees(at: repository)
+        #expect(trees == [
+            GitWorktree(
+                path: repository.resolvingSymlinksInPath(),
+                checkout: .branch("main"),
+                isMainWorkingTree: true
+            )
+        ])
+    }
+
+    @Test func linkedWorktreesFollowMainAndSortByBranch() async throws {
+        let repository = try makeRepository("repo")
+        for branch in ["zeta", "alpha"] {
+            let path = directory.appending(path: branch)
+            try git("worktree", "add", path.path(percentEncoded: false), "-b", branch, in: repository)
+        }
+
+        let trees = try await client.worktrees(at: repository)
+        #expect(trees.map(\.checkout) == [.branch("main"), .branch("alpha"), .branch("zeta")])
+        #expect(trees.map(\.isMainWorkingTree) == [true, false, false])
+        #expect(trees[1].path == directory.appending(path: "alpha").resolvingSymlinksInPath())
+    }
+
+    @Test func detachedWorktreeShowsShortShaAndSortsLast() async throws {
+        let repository = try makeRepository("repo")
+        let detached = directory.appending(path: "detached")
+        try git("worktree", "add", "--detach", detached.path(percentEncoded: false), in: repository)
+        let branch = directory.appending(path: "beta")
+        try git("worktree", "add", branch.path(percentEncoded: false), "-b", "beta", in: repository)
+
+        let sha = try git("rev-parse", "--short=7", "HEAD", in: repository)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let trees = try await client.worktrees(at: repository)
+        #expect(trees.map(\.checkout) == [.branch("main"), .branch("beta"), .detached(sha: sha)])
+    }
+
+    @Test func bareRepositoryContributesOnlyItsWorktrees() async throws {
+        let bare = try makeDirectory("origin.git")
+        try git("init", "--bare", "--initial-branch=main", in: bare)
+        let seed = try makeDirectory("seed")
+        try git("clone", bare.path(percentEncoded: false), seed.path(percentEncoded: false), in: directory)
+        try git("config", "user.email", "test@example.com", in: seed)
+        try git("config", "user.name", "Test", in: seed)
+        try Data("x".utf8).write(to: seed.appending(path: "README.md"))
+        try git("add", ".", in: seed)
+        try git("commit", "-m", "first", in: seed)
+        try git("push", "origin", "main", in: seed)
+
+        let worktree = directory.appending(path: "bare-main")
+        try git("worktree", "add", worktree.path(percentEncoded: false), "main", in: bare)
+
+        let trees = try await client.worktrees(at: bare)
+        #expect(trees.count == 1)
+        #expect(trees.first?.checkout == .branch("main"))
+        #expect(trees.first?.isMainWorkingTree == false)
+    }
+
+    @Test func worktreeWhoseFolderWasDeletedIsSkipped() async throws {
+        let repository = try makeRepository("repo")
+        let gone = directory.appending(path: "gone")
+        try git("worktree", "add", gone.path(percentEncoded: false), "-b", "gone", in: repository)
+        try FileManager.default.removeItem(at: gone)
+
+        let trees = try await client.worktrees(at: repository)
+        #expect(trees.map(\.checkout) == [.branch("main")])
+    }
+
+    @Test func nonRepositoriesAndLinkedWorktreesHaveNoWorktrees() async throws {
+        let plain = try makeDirectory("plain")
+        #expect(try await client.worktrees(at: plain).isEmpty)
+
+        let repository = try makeRepository("repo")
+        let linked = directory.appending(path: "linked")
+        try git("worktree", "add", linked.path(percentEncoded: false), "-b", "linked", in: repository)
+        #expect(try await client.worktrees(at: linked).isEmpty)
+    }
 }
 
 /// The fake has to behave like the real thing, or tests written against it lie.
@@ -126,5 +207,13 @@ import Testing
         let url = URL(filePath: "/tmp/repo")
         client.seed(url, .mainWorkingTree)
         #expect(try await client.repositoryKind(at: url) == .mainWorkingTree)
+    }
+
+    @Test func seededWorktreesComeBackInOrder() async throws {
+        let url = URL(filePath: "/tmp/repo")
+        let trees = [GitWorktree(path: url, checkout: .branch("main"), isMainWorkingTree: true)]
+        client.seed(worktrees: trees, at: url)
+        #expect(try await client.worktrees(at: url) == trees)
+        #expect(try await client.worktrees(at: URL(filePath: "/tmp/other")).isEmpty)
     }
 }
