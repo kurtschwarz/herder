@@ -59,9 +59,9 @@ private struct WorkspacesHeader: View {
             }
             .buttonStyle(.icon)
             .help("Add workspace")
-            // The plate is wider than the glyph; pull it out so the glyph
-            // stays where the header's inset puts it.
-            .padding(.trailing, -(Theme.Size.iconButton - 18) / 2)
+            // Centred under the wolf mark above it, which sits flush with the
+            // pane inset: the plate is wider than the mark, so it overhangs.
+            .padding(.trailing, -(Theme.Size.iconButton - Theme.Size.wolfMark.width) / 2)
         }
         .padding(.horizontal, Theme.Spacing.paneInset)
         .padding(.bottom, Theme.Spacing.normal)
