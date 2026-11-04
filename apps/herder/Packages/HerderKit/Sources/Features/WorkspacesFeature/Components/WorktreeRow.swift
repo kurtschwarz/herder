@@ -11,7 +11,7 @@ struct WorktreeRow: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.normal) {
             PhIcon(Ph.gitBranch.bold, size: 12)
-                .foregroundStyle(Theme.Palette.violet)
+                .foregroundStyle(Theme.Palette.secondaryText)
 
             switch worktree.checkout {
             case .branch(let name):

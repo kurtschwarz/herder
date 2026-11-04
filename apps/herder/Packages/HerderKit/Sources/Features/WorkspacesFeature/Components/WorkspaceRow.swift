@@ -35,7 +35,7 @@ struct WorkspaceRow: View {
             .disabled(!isAvailable)
 
             PhIcon(isAvailable ? Ph.folderSimple.duotone : Ph.warning.fill, size: 16)
-                .foregroundStyle(isAvailable ? Theme.Palette.violet : Theme.Palette.warning)
+                .foregroundStyle(isAvailable ? Theme.Palette.secondaryText : Theme.Palette.warning)
 
             if model.renaming == workspace.id {
                 RenameField(name: workspace.name) { model.commitRename(workspace, to: $0) }
