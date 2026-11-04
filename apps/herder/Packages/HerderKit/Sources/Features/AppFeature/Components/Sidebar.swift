@@ -13,6 +13,9 @@ struct Sidebar: View {
             SidebarHeader()
             WorkspacesView(model: workspaces)
         }
+        // The empty list has nothing tall in it, and the pane would shrink to
+        // fit; the pane's height is the window's, not its content's.
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
