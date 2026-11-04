@@ -24,6 +24,10 @@ public enum Theme {
         /// Header strip tall enough to clear the traffic lights.
         public static let titleBar: CGFloat = 48
         public static let wolfMark = CGSize(width: 15, height: 19.5)
+        /// Width of a centred modal card, measured off the add-workspace mockup.
+        public static let modalWidth: CGFloat = 480
+        /// Height of a field or button inside a modal.
+        public static let control: CGFloat = 32
     }
 
     public enum Radius {
@@ -33,6 +37,11 @@ public enum Theme {
         /// off a screenshot: the arc completes 30px from the window's top edge at
         /// 2x. It is a macOS 26 value; earlier systems round their windows less.
         public static let pane: CGFloat = 16
+        public static let modal: CGFloat = 20
+        /// The boxed group of fields inside a modal.
+        public static let fieldGroup: CGFloat = 14
+        /// Text fields, chips and buttons.
+        public static let control: CGFloat = 9
     }
 
     public enum Palette {
@@ -56,6 +65,27 @@ public enum Theme {
         public static let secondaryText = Color(red: 152 / 255, green: 152 / 255, blue: 159 / 255)
         public static let tertiaryText = Color(red: 128 / 255, green: 128 / 255, blue: 136 / 255)
         public static let accent = Color(red: 122 / 255, green: 162 / 255, blue: 247 / 255)
+
+        /// Folder glyphs and the primary button. Distinct from `accent`, which
+        /// is the blue of interactive text.
+        public static let violet = Color(red: 184 / 255, green: 156 / 255, blue: 240 / 255)
+
+        /// Label on a violet fill.
+        public static let onViolet = Color(red: 28 / 255, green: 20 / 255, blue: 46 / 255)
+
+        /// Flat dimming over the window behind a modal.
+        public static let scrim = Color.black.opacity(0.45)
+
+        public static let modal = Color(red: 33 / 255, green: 33 / 255, blue: 37 / 255)
+        public static let fieldGroup = Color(red: 29 / 255, green: 29 / 255, blue: 33 / 255)
+        public static let field = Color(red: 19 / 255, green: 19 / 255, blue: 22 / 255)
+        public static let control = Color.white.opacity(0.08)
+        public static let controlPressed = Color.white.opacity(0.14)
+
+        /// Hairline around modal surfaces and fields.
+        public static let hairline = Color.white.opacity(0.09)
+
+        public static let warning = Color(red: 255 / 255, green: 158 / 255, blue: 100 / 255)
     }
 
     public enum Gradient {
@@ -84,5 +114,11 @@ public enum Theme {
         /// Half the mockup's 30px CSS blur: SwiftUI radius is roughly blur / 2.
         public static let paneRadius: CGFloat = 15
         public static let paneOffset: CGFloat = 10
+
+        /// Large and soft: with no blur behind it, this is what separates the
+        /// card from the dimmed window.
+        public static let modalColor = Color.black.opacity(0.55)
+        public static let modalRadius: CGFloat = 40
+        public static let modalOffset: CGFloat = 20
     }
 }
