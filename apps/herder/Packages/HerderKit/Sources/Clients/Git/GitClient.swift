@@ -9,7 +9,10 @@ public enum GitRepositoryKind: Sendable, Equatable {
     /// The root of an ordinary repository with a working tree.
     case mainWorkingTree
 
-    /// A bare repository directory, the usual parent of sibling worktrees.
+    /// A repository with no working tree of its own, the usual parent of sibling
+    /// worktrees. Either a bare repository directory, or a project folder whose
+    /// `.git` is a bare repository: the layout that keeps the git internals in
+    /// `.git` and every checkout beside it.
     case bare
 
     /// A worktree added with `git worktree add`, and the repository it belongs to.

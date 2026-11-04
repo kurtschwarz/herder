@@ -20,7 +20,10 @@ public struct LiveGitClient: GitClient {
 
         switch entryKind(at: dotGit) {
         case .directory:
-            return isGitDirectory(dotGit) ? .mainWorkingTree : .notARepository
+            guard isGitDirectory(dotGit) else { return .notARepository }
+            // A `.git` that is itself bare means the folder around it holds no
+            // checkout: its worktrees are the folders beside `.git`.
+            return isBare(dotGit) ? .bare : .mainWorkingTree
 
         case .file:
             guard let gitDirectory = linkedGitDirectory(at: dotGit, relativeTo: url) else {
@@ -60,7 +63,7 @@ public struct LiveGitClient: GitClient {
                 ))
             }
         case .bare:
-            gitDirectory = url
+            gitDirectory = bareGitDirectory(at: url)
         case .linkedWorktree, .notARepository:
             return []
         }
@@ -113,7 +116,7 @@ public struct LiveGitClient: GitClient {
         let gitDirectory: URL
         switch try await repositoryKind(at: url) {
         case .mainWorkingTree: gitDirectory = url.appending(path: ".git")
-        case .bare: gitDirectory = url
+        case .bare: gitDirectory = bareGitDirectory(at: url)
         case .linkedWorktree, .notARepository: return []
         }
 
@@ -189,6 +192,7 @@ public struct LiveGitClient: GitClient {
     private func excludeWorktree(at path: URL, inRepository repository: URL) {
         let dotGit = repository.appending(path: ".git")
         guard entryKind(at: dotGit) == .directory,
+              !isBare(dotGit),
               path.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath() == repository
         else { return }
 
@@ -258,6 +262,12 @@ public struct LiveGitClient: GitClient {
         ["HEAD", "objects", "refs"].allSatisfy {
             FileManager.default.fileExists(atPath: url.appending(path: $0).path(percentEncoded: false))
         }
+    }
+
+    /// Where a bare repository keeps its git files: the folder itself, or the
+    /// `.git` inside a project folder that has no checkout of its own.
+    private func bareGitDirectory(at url: URL) -> URL {
+        isGitDirectory(url) ? url : url.appending(path: ".git")
     }
 
     /// `bare = true` under `[core]`. The section matters: a remote or a branch is
