@@ -10,7 +10,7 @@ struct WorktreeRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.normal) {
-            PhIcon(Ph.gitBranch.bold, size: 12)
+            PhIcon(Ph.gitBranch.bold, size: 16)
                 .foregroundStyle(Theme.Palette.secondaryText)
 
             switch worktree.checkout {
@@ -30,7 +30,9 @@ struct WorktreeRow: View {
         .truncationMode(.tail)
         .padding(.horizontal, Theme.Spacing.normal)
         .padding(.vertical, Theme.Spacing.tight + 2)
-        .padding(.leading, Theme.Spacing.normal)
+        // Past the guide line, landing the icon under the workspace's own:
+        // the line sits mid-chevron, and the icon a chevron's width past it.
+        .padding(.leading, Theme.Size.chevron / 2 - 1)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                 .fill(isHovering ? Theme.Palette.control : .clear)

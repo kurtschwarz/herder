@@ -30,6 +30,9 @@ public enum Theme {
         public static let control: CGFloat = 32
         /// Square hit area and hover plate of a glyph-only button.
         public static let iconButton: CGFloat = 28
+        /// Width of the expand/collapse chevron's hit area. The worktree rows
+        /// are indented from it so their icons line up with the workspace icon.
+        public static let chevron: CGFloat = 24
     }
 
     public enum Radius {
