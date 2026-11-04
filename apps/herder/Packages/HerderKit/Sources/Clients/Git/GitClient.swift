@@ -43,13 +43,28 @@ public struct GitWorktree: Sendable, Equatable, Identifiable {
     /// `git worktree add`. A bare repository has none.
     public var isMainWorkingTree: Bool
 
+    /// When the working tree last changed what it has checked out, from the
+    /// repository's reflog. `nil` when git has recorded nothing for it.
+    public var lastActivity: Date?
+
     public var id: URL { path }
 
-    public init(path: URL, checkout: Checkout, isMainWorkingTree: Bool) {
+    public init(
+        path: URL,
+        checkout: Checkout,
+        isMainWorkingTree: Bool,
+        lastActivity: Date? = nil
+    ) {
         self.path = path
         self.checkout = checkout
         self.isMainWorkingTree = isMainWorkingTree
+        self.lastActivity = lastActivity
     }
+}
+
+public enum GitClientError: Error, Equatable {
+    /// `git` ran and refused, with what it said.
+    case commandFailed(String)
 }
 
 /// What the app needs to know about git before it will adopt a folder.
@@ -59,4 +74,14 @@ public protocol GitClient: Sendable {
     /// Every working tree of the repository at `url`, in the order the sidebar
     /// shows them. Empty for a folder that is not a repository root.
     func worktrees(at url: URL) async throws -> [GitWorktree]
+
+    /// Local branch names of the repository at `url`, sorted. Empty for a folder
+    /// that is not the root of a main working tree or a bare repository.
+    func branches(at url: URL) async throws -> [String]
+
+    /// Adds a working tree at `path` on a new branch cut from `base`.
+    ///
+    /// Changes the repository, unlike everything else here, so it runs `git`
+    /// itself rather than reproducing what `git worktree add` writes.
+    func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws
 }

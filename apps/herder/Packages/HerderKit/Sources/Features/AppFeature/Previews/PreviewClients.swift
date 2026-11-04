@@ -31,6 +31,8 @@ struct PreviewFolderPickerClient: FolderPickerClient {
 }
 
 struct PreviewGitClient: GitClient {
+    func branches(at url: URL) async throws -> [String] { ["feature", "main"] }
+    func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {}
     func repositoryKind(at url: URL) async throws -> GitRepositoryKind { .mainWorkingTree }
     func worktrees(at url: URL) async throws -> [GitWorktree] {
         [

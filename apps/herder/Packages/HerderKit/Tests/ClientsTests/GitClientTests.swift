@@ -118,13 +118,131 @@ import Testing
     @Test func repositoryWithoutWorktreesListsOnlyItsMainWorkingTree() async throws {
         let repository = try makeRepository("repo")
         let trees = try await client.worktrees(at: repository)
-        #expect(trees == [
-            GitWorktree(
-                path: repository.resolvingSymlinksInPath(),
-                checkout: .branch("main"),
-                isMainWorkingTree: true
-            )
-        ])
+        #expect(trees.count == 1)
+        #expect(trees.first?.path == repository.resolvingSymlinksInPath())
+        #expect(trees.first?.checkout == .branch("main"))
+        #expect(trees.first?.isMainWorkingTree == true)
+    }
+
+    @Test func worktreesReportWhenTheyLastChanged() async throws {
+        let repository = try makeRepository("repo")
+        let linked = directory.appending(path: "feature")
+        try git("worktree", "add", linked.path(percentEncoded: false), "-b", "feature", in: repository)
+
+        let trees = try await client.worktrees(at: repository)
+
+        for tree in trees {
+            let activity = try #require(tree.lastActivity)
+            #expect(abs(activity.timeIntervalSinceNow) < 120)
+        }
+    }
+
+    // MARK: - branches
+
+    @Test func listsLocalBranchesIncludingSlashedAndPackedOnes() async throws {
+        let repository = try makeRepository("repo")
+        try git("branch", "agent/add-minimap", in: repository)
+        try git("branch", "zeta", in: repository)
+        try git("pack-refs", "--all", in: repository)
+        try git("branch", "alpha", in: repository)
+
+        let branches = try await client.branches(at: repository)
+
+        #expect(branches == ["agent/add-minimap", "alpha", "main", "zeta"])
+    }
+
+    @Test func aBareRepositoryListsItsBranches() async throws {
+        let bare = try makeDirectory("origin.git")
+        try git("init", "--bare", "--initial-branch=main", in: bare)
+        let seed = try makeDirectory("seed")
+        try git("clone", bare.path(percentEncoded: false), seed.path(percentEncoded: false), in: directory)
+        try git("config", "user.email", "test@example.com", in: seed)
+        try git("config", "user.name", "Test", in: seed)
+        try Data("x".utf8).write(to: seed.appending(path: "README.md"))
+        try git("add", ".", in: seed)
+        try git("commit", "-m", "first", in: seed)
+        try git("push", "origin", "main", in: seed)
+
+        #expect(try await client.branches(at: bare) == ["main"])
+    }
+
+    @Test func nonRepositoriesAndLinkedWorktreesHaveNoBranchList() async throws {
+        #expect(try await client.branches(at: try makeDirectory("plain")).isEmpty)
+
+        let repository = try makeRepository("repo")
+        let linked = directory.appending(path: "linked")
+        try git("worktree", "add", linked.path(percentEncoded: false), "-b", "linked", in: repository)
+        #expect(try await client.branches(at: linked).isEmpty)
+    }
+
+    // MARK: - addWorktree
+
+    @Test func addingAWorktreeCreatesItOnANewBranch() async throws {
+        let repository = try makeRepository("repo")
+        let path = GitWorktreeLocation.path(
+            forBranch: "agent/add-minimap",
+            inRepository: repository,
+            kind: .mainWorkingTree
+        )!
+
+        try await client.addWorktree(in: repository, at: path, newBranch: "agent/add-minimap", from: "main")
+
+        let trees = try await client.worktrees(at: repository)
+        #expect(trees.map(\.checkout) == [.branch("main"), .branch("agent/add-minimap")])
+        #expect(trees.last?.path == path.resolvingSymlinksInPath())
+        #expect(path.lastPathComponent == "agent-add-minimap")
+    }
+
+    @Test func theWorktreeFolderStaysOutOfGitStatus() async throws {
+        let repository = try makeRepository("repo")
+        let path = GitWorktreeLocation.path(forBranch: "feature", inRepository: repository, kind: .mainWorkingTree)!
+
+        try await client.addWorktree(in: repository, at: path, newBranch: "feature", from: "main")
+        try await client.addWorktree(
+            in: repository,
+            at: GitWorktreeLocation.path(forBranch: "other", inRepository: repository, kind: .mainWorkingTree)!,
+            newBranch: "other",
+            from: "main"
+        )
+
+        #expect(try git("status", "--porcelain", in: repository).isEmpty)
+        let exclude = try String(contentsOf: repository.appending(path: ".git/info/exclude"), encoding: .utf8)
+        #expect(exclude.components(separatedBy: ".worktrees/").count == 2)
+    }
+
+    @Test func addingToABareRepositoryPutsTheWorktreeBesideTheRest() async throws {
+        let bare = try makeDirectory("origin.git")
+        try git("init", "--bare", "--initial-branch=main", in: bare)
+        let seed = try makeDirectory("seed")
+        try git("clone", bare.path(percentEncoded: false), seed.path(percentEncoded: false), in: directory)
+        try git("config", "user.email", "test@example.com", in: seed)
+        try git("config", "user.name", "Test", in: seed)
+        try Data("x".utf8).write(to: seed.appending(path: "README.md"))
+        try git("add", ".", in: seed)
+        try git("commit", "-m", "first", in: seed)
+        try git("push", "origin", "main", in: seed)
+
+        let path = GitWorktreeLocation.path(forBranch: "feature", inRepository: bare, kind: .bare)!
+        try await client.addWorktree(in: bare, at: path, newBranch: "feature", from: "main")
+
+        let trees = try await client.worktrees(at: bare)
+        #expect(trees.map(\.checkout) == [.branch("feature")])
+        #expect(path.deletingLastPathComponent().standardizedFileURL == bare.standardizedFileURL)
+    }
+
+    @Test func gitsRefusalComesBackAsTheError() async throws {
+        let repository = try makeRepository("repo")
+        let path = GitWorktreeLocation.path(forBranch: "main", inRepository: repository, kind: .mainWorkingTree)!
+
+        let error = await #expect(throws: GitClientError.self) {
+            try await client.addWorktree(in: repository, at: path, newBranch: "main", from: "main")
+        }
+
+        guard case .commandFailed(let message)? = error else {
+            Issue.record("expected commandFailed")
+            return
+        }
+        #expect(message.contains("already exists"))
     }
 
     @Test func linkedWorktreesFollowMainAndSortByBranch() async throws {
@@ -207,6 +325,36 @@ import Testing
         let url = URL(filePath: "/tmp/repo")
         client.seed(url, .mainWorkingTree)
         #expect(try await client.repositoryKind(at: url) == .mainWorkingTree)
+    }
+
+    @Test func theStubRecordsWhatWasAdded() async throws {
+        let repository = URL(filePath: "/tmp/repo")
+        let path = URL(filePath: "/tmp/repo/.worktrees/feature")
+
+        try await client.addWorktree(in: repository, at: path, newBranch: "feature", from: "main")
+
+        #expect(client.addedWorktrees == [
+            .init(repository: repository, path: path, newBranch: "feature", base: "main")
+        ])
+    }
+
+    @Test func theStubCanRefuseToAdd() async {
+        client.failAddingWorktrees(with: "nope")
+
+        await #expect(throws: GitClientError.commandFailed("nope")) {
+            try await client.addWorktree(
+                in: URL(filePath: "/tmp/repo"),
+                at: URL(filePath: "/tmp/x"),
+                newBranch: "x",
+                from: "main"
+            )
+        }
+    }
+
+    @Test func seededBranchesComeBack() async throws {
+        let url = URL(filePath: "/tmp/repo")
+        client.seed(branches: ["a", "main"], at: url)
+        #expect(try await client.branches(at: url) == ["a", "main"])
     }
 
     @Test func seededWorktreesComeBackInOrder() async throws {

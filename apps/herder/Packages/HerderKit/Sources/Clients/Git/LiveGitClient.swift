@@ -2,10 +2,10 @@ import Foundation
 
 /// `GitClient` that reads the repository layout off disk instead of running `git`.
 ///
-/// The app is sandboxed, and a child process inherits that sandbox without
-/// inheriting the security-scoped access the app holds, so shelling out to `git`
-/// is unreliable exactly where it matters. Everything this client answers is
-/// visible in the layout itself: `.git` as a directory means a main working tree,
+/// Reading never shells out to `git`: it is quicker, needs no git install, and
+/// everything these questions ask is visible in the layout itself. Only
+/// `addWorktree`, which has to change the repository, runs the real thing.
+/// The layout: `.git` as a directory means a main working tree,
 /// `.git` as a file means a linked worktree and names its git directory, and a
 /// repository directory with `bare = true` in its config is a bare repository.
 public struct LiveGitClient: GitClient {
@@ -52,7 +52,12 @@ public struct LiveGitClient: GitClient {
         case .mainWorkingTree:
             gitDirectory = dotGit
             if let checkout = checkout(inGitDirectory: dotGit) {
-                result.append(GitWorktree(path: url, checkout: checkout, isMainWorkingTree: true))
+                result.append(GitWorktree(
+                    path: url,
+                    checkout: checkout,
+                    isMainWorkingTree: true,
+                    lastActivity: lastActivity(inGitDirectory: dotGit)
+                ))
             }
         case .bare:
             gitDirectory = url
@@ -76,7 +81,12 @@ public struct LiveGitClient: GitClient {
             let path = resolve(marker, relativeTo: entry).deletingLastPathComponent()
             guard FileManager.default.fileExists(atPath: path.path(percentEncoded: false)) else { continue }
 
-            linked.append(GitWorktree(path: path, checkout: checkout, isMainWorkingTree: false))
+            linked.append(GitWorktree(
+                path: path,
+                checkout: checkout,
+                isMainWorkingTree: false,
+                lastActivity: lastActivity(inGitDirectory: entry)
+            ))
         }
 
         linked.sort { lhs, rhs in
@@ -93,6 +103,114 @@ public struct LiveGitClient: GitClient {
             }
         }
         return result + linked
+    }
+
+    /// Every local branch, loose and packed, sorted.
+    @concurrent
+    public func branches(at url: URL) async throws -> [String] {
+        let url = url.resolvingSymlinksInPath()
+
+        let gitDirectory: URL
+        switch try await repositoryKind(at: url) {
+        case .mainWorkingTree: gitDirectory = url.appending(path: ".git")
+        case .bare: gitDirectory = url
+        case .linkedWorktree, .notARepository: return []
+        }
+
+        var names = Set<String>()
+        let heads = gitDirectory.appending(path: "refs/heads").path(percentEncoded: false)
+        for relative in (try? FileManager.default.subpathsOfDirectory(atPath: heads)) ?? [] {
+            var isDirectory: ObjCBool = false
+            let exists = FileManager.default.fileExists(atPath: heads + "/" + relative, isDirectory: &isDirectory)
+            if exists, !isDirectory.boolValue { names.insert(relative) }
+        }
+
+        if let packed = try? String(contentsOf: gitDirectory.appending(path: "packed-refs"), encoding: .utf8) {
+            let prefix = "refs/heads/"
+            for line in packed.split(separator: "\n") where !line.hasPrefix("#") && !line.hasPrefix("^") {
+                let parts = line.split(separator: " ", maxSplits: 1)
+                if parts.count == 2, parts[1].hasPrefix(prefix) {
+                    names.insert(String(parts[1].dropFirst(prefix.count)))
+                }
+            }
+        }
+        return names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    @concurrent
+    public func addWorktree(
+        in repository: URL,
+        at path: URL,
+        newBranch: String,
+        from base: String
+    ) async throws {
+        let repository = repository.resolvingSymlinksInPath()
+        excludeWorktreeContainer(of: path, inRepository: repository)
+
+        try runGit([
+            "-C", repository.path(percentEncoded: false),
+            "worktree", "add",
+            "-b", newBranch,
+            path.path(percentEncoded: false),
+            base,
+        ])
+    }
+
+    // MARK: - Running git
+
+    private func runGit(_ arguments: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(filePath: "/usr/bin/git")
+        process.arguments = arguments
+        // A credential prompt has nowhere to appear and would hang the call.
+        process.environment = ProcessInfo.processInfo.environment
+            .merging(["GIT_TERMINAL_PROMPT": "0"]) { _, new in new }
+
+        let errors = Pipe()
+        process.standardError = errors
+        process.standardOutput = FileHandle.nullDevice
+
+        try process.run()
+        let output = errors.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let message = String(decoding: output, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            throw GitClientError.commandFailed(message.isEmpty ? "git exited with \(process.terminationStatus)" : message)
+        }
+    }
+
+    /// Keeps `.worktrees` out of `git status`, using the repository's own
+    /// exclude file so no tracked file changes. Best effort: a failure here
+    /// only means the folder shows up as untracked.
+    private func excludeWorktreeContainer(of path: URL, inRepository repository: URL) {
+        let container = GitWorktreeLocation.containerName
+        guard path.deletingLastPathComponent().lastPathComponent == container else { return }
+
+        let info = repository.appending(path: ".git/info")
+        let exclude = info.appending(path: "exclude")
+        let entry = "\(container)/"
+
+        let existing = (try? String(contentsOf: exclude, encoding: .utf8)) ?? ""
+        guard !existing.split(separator: "\n").contains(where: { $0 == entry }) else { return }
+
+        try? FileManager.default.createDirectory(at: info, withIntermediateDirectories: true)
+        let separator = existing.isEmpty || existing.hasSuffix("\n") ? "" : "\n"
+        try? (existing + separator + entry + "\n").write(to: exclude, atomically: true, encoding: .utf8)
+    }
+
+    /// The reflog's modification time: git appends to it on every commit and
+    /// checkout, so it tracks the working tree better than `HEAD` itself, which
+    /// only changes on a checkout.
+    private func lastActivity(inGitDirectory directory: URL) -> Date? {
+        for name in ["logs/HEAD", "HEAD"] {
+            let path = directory.appending(path: name).path(percentEncoded: false)
+            if let date = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date {
+                return date
+            }
+        }
+        return nil
     }
 
     // MARK: - Layout
