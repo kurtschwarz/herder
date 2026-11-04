@@ -30,7 +30,7 @@ struct WorktreeRow: View {
 
     private var content: some View {
         HStack(spacing: Theme.Spacing.normal) {
-            PhIcon(Ph.gitBranch.bold, size: 16)
+            PhIcon(Ph.gitBranch.regular, size: 16)
                 .foregroundStyle(Theme.Palette.secondaryText)
 
             switch worktree.checkout {
