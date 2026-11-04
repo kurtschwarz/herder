@@ -15,7 +15,10 @@ public struct AddWorkspaceOverlay: View {
     public var body: some View {
         ZStack {
             if let adding = model.adding {
+                // The window has no title bar, but its safe area still reserves
+                // one; without this the scrim stops short of the top edge.
                 Theme.Palette.scrim
+                    .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { model.cancelAdding() }
                     .transition(.opacity)
