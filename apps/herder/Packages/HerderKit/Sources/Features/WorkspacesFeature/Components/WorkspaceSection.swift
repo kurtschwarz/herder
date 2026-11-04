@@ -17,7 +17,7 @@ struct WorkspaceSection: View {
                     Rectangle()
                         .fill(Theme.Palette.hairline)
                         .frame(width: 1)
-                        .padding(.leading, Theme.Spacing.normal + Theme.Spacing.tight)
+                        .padding(.leading, Theme.Spacing.normal + 12)
 
                     VStack(alignment: .leading, spacing: 0) {
                         switch model.listings[workspace.id] {

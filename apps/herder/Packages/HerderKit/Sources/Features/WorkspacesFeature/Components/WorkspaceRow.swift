@@ -20,7 +20,11 @@ struct WorkspaceRow: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Theme.Palette.secondaryText)
                     .rotationEffect(.degrees(model.isExpanded(workspace) ? 0 : -90))
-                    .frame(width: 14, height: 14)
+                    // The hit area is the frame, not the glyph: a plain button
+                    // only responds where it draws, and the chevron is a few
+                    // pixels of stroke.
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             // An unavailable workspace has nothing to show, so there is
