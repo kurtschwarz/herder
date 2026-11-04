@@ -34,7 +34,10 @@ struct WorkspaceSection: View {
                         }
                     }
                 }
+                .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: 0.15), value: model.isExpanded(workspace))
+        .clipped()
     }
 }
