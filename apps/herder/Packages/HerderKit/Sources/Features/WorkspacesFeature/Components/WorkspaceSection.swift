@@ -1,3 +1,4 @@
+import Clients
 import DesignSystem
 import Storage
 import SwiftUI
@@ -6,6 +7,8 @@ import SwiftUI
 struct WorkspaceSection: View {
     let workspace: Workspace
     let model: WorkspacesModel
+
+    @State private var hoveredWorktree: GitWorktree.ID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -17,12 +20,16 @@ struct WorkspaceSection: View {
                     Rectangle()
                         .fill(Theme.Palette.hairline)
                         .frame(width: 1)
+                        // The hover plate sits right against the line; with
+                        // both showing, the plate's edge reads as a double rule.
+                        .opacity(hoveredWorktree == nil ? 1 : 0)
+                        .animation(.easeOut(duration: 0.1), value: hoveredWorktree == nil)
                         .padding(.leading, Theme.Spacing.normal + Theme.Size.chevron / 2)
 
                     VStack(alignment: .leading, spacing: 0) {
                         switch model.listings[workspace.id] {
                         case .loaded(let worktrees):
-                            ForEach(worktrees) { WorktreeRow(worktree: $0) }
+                            ForEach(worktrees) { WorktreeRow(worktree: $0, hovered: $hoveredWorktree) }
                         case .unreadable:
                             Text("Couldn't read worktrees")
                                 .font(.callout)

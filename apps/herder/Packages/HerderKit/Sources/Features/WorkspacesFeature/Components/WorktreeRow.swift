@@ -6,7 +6,11 @@ import SwiftUI
 struct WorktreeRow: View {
     let worktree: GitWorktree
 
-    @State private var isHovering = false
+    /// The worktree under the pointer, shared with the section so its guide
+    /// line can step aside.
+    @Binding var hovered: GitWorktree.ID?
+
+    private var isHovering: Bool { hovered == worktree.id }
 
     var body: some View {
         HStack(spacing: Theme.Spacing.normal) {
@@ -38,7 +42,13 @@ struct WorktreeRow: View {
                 .fill(isHovering ? Theme.Palette.control : .clear)
         }
         .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
+        .onHover { inside in
+            if inside {
+                hovered = worktree.id
+            } else if hovered == worktree.id {
+                hovered = nil
+            }
+        }
         .help(worktree.path.path(percentEncoded: false))
     }
 }
