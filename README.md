@@ -140,6 +140,16 @@ implementations are injected from the app target in `Herder/HerderApp.swift`; te
 pass fakes from `ClientsTestSupport`. Pass them via `init` into `@Observable`
 models, or through `@Environment` for views. No DI framework until it hurts.
 
+### Sandbox
+
+The app is not sandboxed. It creates git worktrees and will launch agents and
+shells in the user's folders, and a child process in a sandbox cannot reach the
+folders the app was granted. That rules out the Mac App Store; the entitlements
+file is empty on purpose. Reads of a repository still go straight to disk rather
+than through `git` (see `LiveGitClient`), and workspaces still keep a bookmark of
+their folder, which costs nothing and would be needed again if the sandbox came
+back.
+
 ### Persistence
 
 `Storage` holds the SwiftData layer. Its schema is versioned from the first
