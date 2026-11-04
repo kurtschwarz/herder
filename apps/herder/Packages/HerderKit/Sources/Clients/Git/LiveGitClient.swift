@@ -29,6 +29,12 @@ public struct LiveGitClient: GitClient {
             guard let gitDirectory = linkedGitDirectory(at: dotGit, relativeTo: url) else {
                 return .notARepository
             }
+            // The file may name a bare repository rather than a worktree's own
+            // git directory: the layout that hides the internals in `.bare` and
+            // puts every checkout in a folder beside it. The folder holding the
+            // two is the repository, and has no checkout of its own.
+            if isGitDirectory(gitDirectory), isBare(gitDirectory) { return .bare }
+
             let common = commonDirectory(for: gitDirectory)
             return .linkedWorktree(mainRepository: repositoryRoot(forCommonDirectory: common))
 
@@ -267,7 +273,10 @@ public struct LiveGitClient: GitClient {
     /// Where a bare repository keeps its git files: the folder itself, or the
     /// `.git` inside a project folder that has no checkout of its own.
     private func bareGitDirectory(at url: URL) -> URL {
-        isGitDirectory(url) ? url : url.appending(path: ".git")
+        if isGitDirectory(url) { return url }
+        let dotGit = url.appending(path: ".git")
+        guard entryKind(at: dotGit) == .file else { return dotGit }
+        return linkedGitDirectory(at: dotGit, relativeTo: url) ?? dotGit
     }
 
     /// `bare = true` under `[core]`. The section matters: a remote or a branch is
@@ -320,7 +329,30 @@ public struct LiveGitClient: GitClient {
     /// The folder a user would call the repository: the working tree beside a
     /// `.git` directory, or the bare directory itself.
     private func repositoryRoot(forCommonDirectory common: URL) -> URL {
-        common.lastPathComponent == ".git" ? common.deletingLastPathComponent() : common
+        let parent = common.deletingLastPathComponent()
+        if common.lastPathComponent == ".git" { return parent }
+
+        // A `.git` file beside the git directory, naming it, means the folder
+        // holding both is what the user calls the repository. That is the
+        // `.bare` layout, where the git directory is not named `.git` at all.
+        let dotGit = parent.appending(path: ".git")
+        if entryKind(at: dotGit) == .file,
+           let named = linkedGitDirectory(at: dotGit, relativeTo: parent),
+           isSameFolder(named, common) {
+            return parent
+        }
+        return common
+    }
+
+    /// Compares two folder URLs by path. Resolving one of them can leave a
+    /// trailing slash the other does not have, which is enough to make two URLs
+    /// for the same folder unequal.
+    private func isSameFolder(_ lhs: URL, _ rhs: URL) -> Bool {
+        func key(_ url: URL) -> String {
+            let path = url.path(percentEncoded: false)
+            return path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+        }
+        return key(lhs) == key(rhs)
     }
 
     private func resolve(_ path: String, relativeTo base: URL) -> URL {

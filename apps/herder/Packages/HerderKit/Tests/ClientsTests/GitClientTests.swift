@@ -170,6 +170,71 @@ import Testing
         #expect(exclude?.contains("/feature/") != true)
     }
 
+    // MARK: - A project folder with a .bare and a .git file
+
+    /// The layout the `.bare` convention produces: the git internals hidden in
+    /// `.bare`, a one-line `.git` file naming it, and every checkout a folder
+    /// beside them.
+    func makeBareLayout(_ name: String) throws -> URL {
+        let project = try makeDirectory(name)
+        let bare = project.appending(path: ".bare")
+        try FileManager.default.createDirectory(at: bare, withIntermediateDirectories: true)
+        try git("init", "--bare", "--initial-branch=main", in: bare)
+        try Data("gitdir: ./.bare\n".utf8).write(to: project.appending(path: ".git"))
+
+        let seed = try makeDirectory("seed-\(name)")
+        try git("clone", bare.path(percentEncoded: false), seed.path(percentEncoded: false), in: directory)
+        try git("config", "user.email", "test@example.com", in: seed)
+        try git("config", "user.name", "Test", in: seed)
+        try Data("x".utf8).write(to: seed.appending(path: "README.md"))
+        try git("add", ".", in: seed)
+        try git("commit", "-m", "first", in: seed)
+        try git("push", "origin", "main", in: seed)
+
+        try git("worktree", "add", "main", "main", in: project)
+        return project
+    }
+
+    @Test func aDotGitFileNamingABareRepositoryIsABareRepository() async throws {
+        let project = try makeBareLayout("project")
+        #expect(try await client.repositoryKind(at: project) == .bare)
+    }
+
+    @Test func itsWorktreesAreTheFoldersBesideTheBareDirectory() async throws {
+        let project = try makeBareLayout("project")
+
+        let trees = try await client.worktrees(at: project)
+
+        #expect(trees.map(\.checkout) == [.branch("main")])
+        #expect(trees.first?.path == project.appending(path: "main").resolvingSymlinksInPath())
+        #expect(trees.first?.isMainWorkingTree == false)
+    }
+
+    @Test func itListsItsBranchesFromTheBareDirectory() async throws {
+        let project = try makeBareLayout("project")
+        #expect(try await client.branches(at: project) == ["main"])
+    }
+
+    @Test func oneOfItsWorktreesPointsBackAtTheProjectFolder() async throws {
+        let project = try makeBareLayout("project")
+
+        let kind = try await client.repositoryKind(at: project.appending(path: "main"))
+
+        // Not `.bare`, which is where the files are, and not the worktree itself.
+        #expect(kind == .linkedWorktree(mainRepository: project.resolvingSymlinksInPath()))
+    }
+
+    @Test func addingToItCreatesAFolderBesideTheOthers() async throws {
+        let project = try makeBareLayout("project")
+        let path = GitWorktreeLocation.path(forBranch: "feature", inRepository: project, kind: .bare)!
+
+        try await client.addWorktree(in: project, at: path, newBranch: "feature", from: "main")
+
+        let trees = try await client.worktrees(at: project)
+        #expect(trees.map(\.checkout) == [.branch("feature"), .branch("main")])
+        #expect(path.deletingLastPathComponent().standardizedFileURL == project.standardizedFileURL)
+    }
+
     @Test func missingFolderIsNotARepository() async throws {
         let url = directory.appending(path: "nothing-here")
         #expect(try await client.repositoryKind(at: url) == .notARepository)
