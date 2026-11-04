@@ -30,7 +30,7 @@ public struct WorkspacesView: View {
                             WorkspaceSection(workspace: workspace, model: model)
                         }
                     }
-                    .padding(.horizontal, Theme.Spacing.normal)
+                    .padding(.horizontal, Theme.Spacing.tight)
                     .padding(.bottom, Theme.Spacing.loose)
                 }
                 .scrollIndicators(.hidden)

@@ -32,7 +32,7 @@ public enum Theme {
         public static let iconButton: CGFloat = 28
         /// Width of the expand/collapse chevron's hit area. The worktree rows
         /// are indented from it so their icons line up with the workspace icon.
-        public static let chevron: CGFloat = 24
+        public static let chevron: CGFloat = 20
     }
 
     public enum Radius {
