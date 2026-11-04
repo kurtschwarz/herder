@@ -20,6 +20,7 @@ struct WorkspaceRow: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Theme.Palette.secondaryText)
                     .rotationEffect(.degrees(model.isExpanded(workspace) ? 0 : -90))
+                    .animation(.easeOut(duration: 0.15), value: model.isExpanded(workspace))
                     // The hit area is the frame, not the glyph: a plain button
                     // only responds where it draws, and the chevron is a few
                     // pixels of stroke.
