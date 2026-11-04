@@ -12,6 +12,7 @@ import Testing
     let git = StubGitClient()
     let container: ModelContainer
     let store: WorkspaceStore
+    let picker = StubFolderPickerClient()
     let defaults: UserDefaults
     let suite: String
     let model: WorkspacesModel
@@ -21,7 +22,7 @@ import Testing
         store = WorkspaceStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
         suite = "WorkspacesModelTests-\(UUID().uuidString)"
         defaults = try #require(UserDefaults(suiteName: suite))
-        model = WorkspacesModel(store: store, git: git, defaults: defaults)
+        model = WorkspacesModel(store: store, git: git, picker: picker, defaults: defaults)
     }
 
     func addWorkspace(_ path: String) async throws -> Workspace {
@@ -89,7 +90,7 @@ import Testing
         let workspace = try await addWorkspace("/code/api")
         await model.toggle(workspace)
 
-        let next = WorkspacesModel(store: store, git: git, defaults: defaults)
+        let next = WorkspacesModel(store: store, git: git, picker: picker, defaults: defaults)
 
         #expect(!next.isExpanded(workspace))
     }
@@ -125,5 +126,46 @@ import Testing
 
         #expect(model.renaming == nil)
         #expect(workspace.name == "api")
+    }
+
+    @Test func beginningToAddOpensTheModalOnce() {
+        model.beginAdding()
+        let first = model.adding
+        model.beginAdding()
+
+        #expect(first != nil)
+        #expect(model.adding === first)
+    }
+
+    @Test func cancellingClosesTheModal() {
+        model.beginAdding()
+        model.cancelAdding()
+        #expect(model.adding == nil)
+    }
+
+    @Test func submittingClosesTheModalOnceTheWorkspaceIsAdded() async throws {
+        let url = URL(filePath: "/code/api")
+        git.seed(url, .mainWorkingTree)
+        picker.script(url)
+        model.beginAdding()
+        await model.adding?.browse()
+
+        await model.submitAdding()
+
+        #expect(model.adding == nil)
+        #expect(try store.workspaces().count == 1)
+    }
+
+    @Test func aRefusedSubmitLeavesTheModalUp() async throws {
+        let url = URL(filePath: "/code/api")
+        git.seed(url, .mainWorkingTree)
+        picker.script(url)
+        model.beginAdding()
+        await model.adding?.browse()
+        git.seed(url, .notARepository)
+
+        await model.submitAdding()
+
+        #expect(model.adding?.refusal == .notARepository)
     }
 }

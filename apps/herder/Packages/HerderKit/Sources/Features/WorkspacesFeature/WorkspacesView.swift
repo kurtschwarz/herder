@@ -18,10 +18,10 @@ public struct WorkspacesView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            WorkspacesHeader { model.isAddingWorkspace = true }
+            WorkspacesHeader { model.beginAdding() }
 
             if workspaces.isEmpty {
-                EmptyWorkspaces { model.isAddingWorkspace = true }
+                EmptyWorkspaces { model.beginAdding() }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Theme.Spacing.tight) {

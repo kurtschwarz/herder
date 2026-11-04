@@ -21,6 +21,7 @@ public final class WorkspacesModel {
 
     private let store: WorkspaceStore
     private let git: any GitClient
+    private let picker: any FolderPickerClient
     private let defaults: UserDefaults
 
     public private(set) var listings: [UUID: Listing] = [:]
@@ -32,15 +33,37 @@ public final class WorkspacesModel {
     /// The workspace whose name is being edited in place.
     public var renaming: UUID?
 
-    /// Whether the add-workspace modal is up.
-    public var isAddingWorkspace = false
+    /// The add-workspace modal's state while it is up, `nil` otherwise.
+    public private(set) var adding: AddWorkspaceModel?
 
-    public init(store: WorkspaceStore, git: any GitClient, defaults: UserDefaults = .standard) {
+    public init(
+        store: WorkspaceStore,
+        git: any GitClient,
+        picker: any FolderPickerClient,
+        defaults: UserDefaults = .standard
+    ) {
         self.store = store
         self.git = git
+        self.picker = picker
         self.defaults = defaults
         let saved = defaults.stringArray(forKey: Self.collapsedKey) ?? []
         self.collapsed = Set(saved.compactMap(UUID.init(uuidString:)))
+    }
+
+    public func beginAdding() {
+        guard adding == nil else { return }
+        adding = AddWorkspaceModel(store: store, picker: picker)
+    }
+
+    public func cancelAdding() {
+        adding = nil
+    }
+
+    /// Adds the folder the modal has validated and closes it. A refusal at this
+    /// point leaves the modal up, showing why.
+    public func submitAdding() async {
+        guard let adding, await adding.submit() else { return }
+        self.adding = nil
     }
 
     public func isExpanded(_ workspace: Workspace) -> Bool {

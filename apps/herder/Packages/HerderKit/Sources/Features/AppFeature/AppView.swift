@@ -1,5 +1,6 @@
 import DesignSystem
 import SwiftUI
+import WorkspacesFeature
 
 /// Root view. Owns the window layout and composes features; holds no feature logic.
 ///
@@ -22,6 +23,9 @@ public struct AppView: View {
             Detail()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        // The modal's scrim swallows clicks; this stops the keyboard reaching
+        // what it covers.
+        .disabled(model.workspaceList.adding != nil)
         .padding(Theme.Spacing.windowPadding)
         .frame(minWidth: 720, minHeight: 460)
         .background { WindowGlass() }
@@ -30,6 +34,9 @@ public struct AppView: View {
         // the height of one. Without this the panes start below the traffic
         // lights instead of around them.
         .ignoresSafeArea()
+        // After the safe area is ignored, so the scrim covers the whole window,
+        // title bar included.
+        .overlay { AddWorkspaceOverlay(model: model.workspaceList) }
         .preferredColorScheme(.dark)
     }
 }

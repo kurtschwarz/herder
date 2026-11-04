@@ -18,6 +18,7 @@ import Testing
             files: files,
             bookmarks: bookmarks,
             git: git,
+            folderPicker: StubFolderPickerClient(),
             context: ModelContext(try WorkspaceContainer.inMemory())
         )
     }

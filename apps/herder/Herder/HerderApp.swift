@@ -18,6 +18,7 @@ struct HerderApp: App {
             files: LiveFileClient(),
             bookmarks: LiveBookmarkClient(),
             git: LiveGitClient(),
+            folderPicker: LiveFolderPickerClient(),
             context: container.mainContext
         )
         // Before any scene exists: a view must never render a workspace the
@@ -40,6 +41,13 @@ struct HerderApp: App {
         // than in a title bar of their own.
         .windowStyle(.hiddenTitleBar)
         .modelContainer(container)
+        .commands {
+            // ⌘N already opens a new window.
+            CommandGroup(after: .newItem) {
+                Button("Add Workspace…") { model.beginAddingWorkspace() }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
+            }
+        }
     }
 
     /// There is no app without its workspaces, and nothing useful to fall back

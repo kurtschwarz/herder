@@ -27,12 +27,19 @@ public final class AppModel {
         files: any FileClient,
         bookmarks: any BookmarkClient,
         git: any GitClient,
+        folderPicker: any FolderPickerClient,
         context: ModelContext
     ) {
         self.files = files
         let workspaces = WorkspaceStore(context: context, bookmarks: bookmarks, git: git)
         self.workspaces = workspaces
-        self.workspaceList = WorkspacesModel(store: workspaces, git: git)
+        self.workspaceList = WorkspacesModel(store: workspaces, git: git, picker: folderPicker)
+    }
+
+    /// Opens the add-workspace modal. Here rather than on the sidebar because a
+    /// menu command, not just the sidebar's button, asks for it.
+    public func beginAddingWorkspace() {
+        workspaceList.beginAdding()
     }
 
     /// Takes access to every workspace folder. Called at launch, before any view

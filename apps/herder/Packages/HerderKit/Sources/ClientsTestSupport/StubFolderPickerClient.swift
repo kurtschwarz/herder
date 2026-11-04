@@ -13,7 +13,7 @@ public final class StubFolderPickerClient: FolderPickerClient {
 
     private struct State {
         var answers: [URL?] = []
-        var requests = 0
+        var starts: [URL?] = []
     }
 
     public init() {}
@@ -23,15 +23,18 @@ public final class StubFolderPickerClient: FolderPickerClient {
         state.withLock { $0.answers.append(url) }
     }
 
-    /// How many times the picker was opened, for assertions.
-    public var requests: Int {
-        state.withLock { $0.requests }
+    /// Where each opening of the picker was pointed, for assertions.
+    public var starts: [URL?] {
+        state.withLock { $0.starts }
     }
 
+    /// How many times the picker was opened, for assertions.
+    public var requests: Int { starts.count }
+
     @MainActor
-    public func pickFolder() async -> URL? {
+    public func pickFolder(startingAt: URL?) async -> URL? {
         state.withLock { state in
-            state.requests += 1
+            state.starts.append(startingAt)
             return state.answers.isEmpty ? nil : state.answers.removeFirst()
         }
     }

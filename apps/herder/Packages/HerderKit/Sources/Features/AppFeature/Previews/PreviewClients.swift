@@ -25,6 +25,11 @@ struct PreviewBookmarkClient: BookmarkClient {
     func stopAccessing(_ url: URL) {}
 }
 
+struct PreviewFolderPickerClient: FolderPickerClient {
+    @MainActor
+    func pickFolder(startingAt: URL?) async -> URL? { URL(filePath: "/preview/my-project") }
+}
+
 struct PreviewGitClient: GitClient {
     func repositoryKind(at url: URL) async throws -> GitRepositoryKind { .mainWorkingTree }
     func worktrees(at url: URL) async throws -> [GitWorktree] {
@@ -62,6 +67,7 @@ extension AppModel {
             files: PreviewFileClient(),
             bookmarks: PreviewBookmarkClient(),
             git: PreviewGitClient(),
+            folderPicker: PreviewFolderPickerClient(),
             context: previewContainer.mainContext
         )
     }

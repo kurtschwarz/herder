@@ -8,7 +8,7 @@ import Testing
     let client = StubFolderPickerClient()
 
     @Test func cancelsWhenNothingIsScripted() async {
-        #expect(await client.pickFolder() == nil)
+        #expect(await client.pickFolder(startingAt: nil) == nil)
     }
 
     @Test func answersInTheOrderScripted() async {
@@ -18,15 +18,22 @@ import Testing
         client.script(nil)
         client.script(second)
 
-        #expect(await client.pickFolder() == first)
-        #expect(await client.pickFolder() == nil)
-        #expect(await client.pickFolder() == second)
-        #expect(await client.pickFolder() == nil)
+        #expect(await client.pickFolder(startingAt: nil) == first)
+        #expect(await client.pickFolder(startingAt: nil) == nil)
+        #expect(await client.pickFolder(startingAt: nil) == second)
+        #expect(await client.pickFolder(startingAt: nil) == nil)
+    }
+
+    @Test func remembersWhereEachRequestStarted() async {
+        let start = URL(filePath: "/tmp/start")
+        _ = await client.pickFolder(startingAt: start)
+        _ = await client.pickFolder(startingAt: nil)
+        #expect(client.starts == [start, nil])
     }
 
     @Test func countsEveryRequest() async {
-        _ = await client.pickFolder()
-        _ = await client.pickFolder()
+        _ = await client.pickFolder(startingAt: nil)
+        _ = await client.pickFolder(startingAt: nil)
         #expect(client.requests == 2)
     }
 }
