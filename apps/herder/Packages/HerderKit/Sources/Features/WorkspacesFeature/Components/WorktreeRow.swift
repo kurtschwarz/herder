@@ -5,6 +5,8 @@ import SwiftUI
 
 struct WorktreeRow: View {
     let worktree: GitWorktree
+    let isSelected: Bool
+    let select: () -> Void
 
     @State private var isHovering = false
 
@@ -25,6 +27,7 @@ struct WorktreeRow: View {
         }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
+        .onTapGesture(perform: select)
         .help(worktree.path.path(percentEncoded: false))
     }
 
@@ -55,7 +58,7 @@ struct WorktreeRow: View {
         .padding(.leading, Theme.Size.chevron / 2 - 1)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .fill(isHovering ? Theme.Palette.control : .clear)
+                .fill(isHovering || isSelected ? Theme.Palette.control : .clear)
         }
     }
 }

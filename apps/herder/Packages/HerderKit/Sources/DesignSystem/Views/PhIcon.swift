@@ -8,16 +8,16 @@ import SwiftUI
 /// nothing to an image that keeps its own colours. Rendering as a template is
 /// what makes them take the style, and what lets a button recolour one on
 /// hover.
-struct PhIcon: View {
+public struct PhIcon: View {
     private let image: Image
     private let size: CGFloat
 
-    init(_ image: Image, size: CGFloat) {
+    public init(_ image: Image, size: CGFloat) {
         self.image = image
         self.size = size
     }
 
-    var body: some View {
+    public var body: some View {
         image
             .renderingMode(.template)
             .aspectRatio(contentMode: .fit)

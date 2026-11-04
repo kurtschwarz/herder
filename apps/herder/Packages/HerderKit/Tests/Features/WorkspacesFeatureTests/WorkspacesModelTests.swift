@@ -235,4 +235,45 @@ import Testing
         #expect(model.newSession != nil)
         #expect(session.failure == "no")
     }
+
+    @Test func selectingAWorktreeRemembersItAcrossLaunches() async throws {
+        let workspace = try await addWorkspace("/code/api")
+        let worktree = GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true)
+
+        model.select(worktree, in: workspace)
+
+        #expect(model.selectedWorktree == worktree.path)
+        let relaunched = WorkspacesModel(store: store, git: git, picker: picker, defaults: defaults)
+        #expect(relaunched.selectedWorktree == worktree.path)
+    }
+
+    @Test func aWorktreeThatHasGoneIsDeselected() async throws {
+        let workspace = try await addWorkspace("/code/api")
+        let gone = GitWorktree(path: URL(filePath: "/code/api-gone"), checkout: .branch("gone"), isMainWorkingTree: false)
+        model.select(gone, in: workspace)
+
+        await model.refresh(workspace)
+
+        #expect(model.selectedWorktree == nil)
+    }
+
+    @Test func aWorktreeThatIsStillThereStaysSelected() async throws {
+        let workspace = try await addWorkspace("/code/api")
+        let main = GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true)
+        model.select(main, in: workspace)
+
+        await model.refresh(workspace)
+
+        #expect(model.selectedWorktree == main.path)
+    }
+
+    @Test func removingAWorkspaceDeselectsItsWorktree() async throws {
+        let workspace = try await addWorkspace("/code/api")
+        let main = GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true)
+        model.select(main, in: workspace)
+
+        model.remove(workspace)
+
+        #expect(model.selectedWorktree == nil)
+    }
 }

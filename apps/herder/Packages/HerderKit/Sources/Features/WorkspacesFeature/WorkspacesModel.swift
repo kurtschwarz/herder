@@ -18,6 +18,8 @@ public final class WorkspacesModel {
     }
 
     private static let collapsedKey = "collapsedWorkspaces"
+    private static let selectedPathKey = "selectedWorktreePath"
+    private static let selectedWorkspaceKey = "selectedWorktreeWorkspace"
 
     private let store: WorkspaceStore
     private let git: any GitClient
@@ -29,6 +31,14 @@ public final class WorkspacesModel {
     /// Folded workspaces rather than unfolded ones, so a workspace the user has
     /// never touched, and one added later, starts open.
     public private(set) var collapsed: Set<UUID>
+
+    /// The worktree the user last clicked, whose files the explorer shows.
+    /// Cleared when a read finds it gone.
+    public private(set) var selectedWorktree: URL?
+
+    /// The workspace `selectedWorktree` was picked under, so that workspace's
+    /// listing is the one that can say it has gone.
+    private var selectedWorkspace: UUID?
 
     /// The workspace whose name is being edited in place.
     public var renaming: UUID?
@@ -58,6 +68,17 @@ public final class WorkspacesModel {
         self.defaults = defaults
         let saved = defaults.stringArray(forKey: Self.collapsedKey) ?? []
         self.collapsed = Set(saved.compactMap(UUID.init(uuidString:)))
+        if let path = defaults.string(forKey: Self.selectedPathKey),
+           let workspace = defaults.string(forKey: Self.selectedWorkspaceKey).flatMap(UUID.init(uuidString:)) {
+            self.selectedWorktree = URL(filePath: path)
+            self.selectedWorkspace = workspace
+        }
+    }
+
+    /// Selecting what is already selected changes nothing.
+    public func select(_ worktree: GitWorktree, in workspace: Workspace) {
+        guard worktree.path != selectedWorktree else { return }
+        setSelection(worktree.path, in: workspace.id)
     }
 
     public func beginAdding() {
@@ -128,6 +149,9 @@ public final class WorkspacesModel {
         do {
             let worktrees = try await git.worktrees(at: URL(filePath: workspace.path))
             listings[id] = .loaded(worktrees)
+            if selectedWorkspace == id, let selectedWorktree, !worktrees.contains(where: { $0.path == selectedWorktree }) {
+                setSelection(nil, in: nil)
+            }
         } catch {
             // The task that asked was cancelled, which says nothing about the
             // folder.
@@ -154,7 +178,15 @@ public final class WorkspacesModel {
             return
         }
         listings[id] = nil
+        if selectedWorkspace == id { setSelection(nil, in: nil) }
         if collapsed.remove(id) != nil { persistCollapsed() }
+    }
+
+    private func setSelection(_ worktree: URL?, in workspace: UUID?) {
+        selectedWorktree = worktree
+        selectedWorkspace = workspace
+        defaults.set(worktree?.path(percentEncoded: false), forKey: Self.selectedPathKey)
+        defaults.set(workspace?.uuidString, forKey: Self.selectedWorkspaceKey)
     }
 
     private func persistCollapsed() {

@@ -10,6 +10,13 @@ struct PreviewFileClient: FileClient {
     func read(_ path: String) async throws -> String { "" }
     func write(_ contents: String, to path: String) async throws {}
     func exists(_ path: String) async -> Bool { true }
+    func children(of url: URL) async throws -> [DirectoryEntry] {
+        [
+            DirectoryEntry(url: url.appending(path: "Sources"), isDirectory: true),
+            DirectoryEntry(url: url.appending(path: "Package.swift"), isDirectory: false),
+            DirectoryEntry(url: url.appending(path: "README.md"), isDirectory: false),
+        ]
+    }
 }
 
 /// Previews cannot link `ClientsTestSupport`, so they get their own throwaway

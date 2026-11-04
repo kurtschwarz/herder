@@ -40,7 +40,11 @@ let package = Package(
         .target(name: "Storage", dependencies: ["Models", "Clients"], swiftSettings: ui),
 
         // Shared views, styles, tokens.
-        .target(name: "DesignSystem", swiftSettings: ui),
+        .target(
+            name: "DesignSystem",
+            dependencies: [.product(name: "PhosphorSwift", package: "swift")],
+            swiftSettings: ui
+        ),
 
         // Root view and navigation. Add one target per feature alongside it under
         // `Sources/Features`, and depend on them from here: features never import
@@ -57,8 +61,21 @@ let package = Package(
         ),
 
         .target(
+            name: "ExplorerFeature",
+            dependencies: [
+                "Models", "Clients", "DesignSystem",
+                .product(name: "PhosphorSwift", package: "swift"),
+            ],
+            path: "Sources/Features/ExplorerFeature",
+            swiftSettings: ui
+        ),
+
+        .target(
             name: "AppFeature",
-            dependencies: ["Models", "Clients", "DesignSystem", "Storage", "WorkspacesFeature"],
+            dependencies: [
+                "Models", "Clients", "DesignSystem", "Storage",
+                "WorkspacesFeature", "ExplorerFeature",
+            ],
             path: "Sources/Features/AppFeature",
             swiftSettings: ui
         ),
@@ -77,6 +94,12 @@ let package = Package(
             name: "WorkspacesFeatureTests",
             dependencies: ["WorkspacesFeature", "Clients", "ClientsTestSupport", "Storage"],
             path: "Tests/Features/WorkspacesFeatureTests",
+            swiftSettings: ui
+        ),
+        .testTarget(
+            name: "ExplorerFeatureTests",
+            dependencies: ["ExplorerFeature", "Clients", "ClientsTestSupport"],
+            path: "Tests/Features/ExplorerFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(

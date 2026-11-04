@@ -35,6 +35,10 @@ public enum Theme {
         /// Width of the expand/collapse chevron's hit area. The worktree rows
         /// are indented from it so their icons line up with the workspace icon.
         public static let chevron: CGFloat = 20
+        /// How far each level of a file tree steps in. Also the width of the
+        /// chevron slot on a folder row, so a file's icon lines up with its
+        /// sibling folders'.
+        public static let treeIndent: CGFloat = 14
     }
 
     public enum Radius {

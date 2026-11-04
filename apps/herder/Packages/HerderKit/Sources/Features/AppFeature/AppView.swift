@@ -1,4 +1,5 @@
 import DesignSystem
+import ExplorerFeature
 import SwiftUI
 import WorkspacesFeature
 
@@ -22,12 +23,21 @@ public struct AppView: View {
 
             Detail()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            ExplorerView(model: model.explorer)
+                .frame(width: Theme.Size.sidebarWidth)
+                .glassPaneBackground()
+        }
+        // The sidebar owns the selection and the explorer must not import it,
+        // so the plain URL crosses here.
+        .task(id: model.workspaceList.selectedWorktree) {
+            await model.explorer.setRoot(model.workspaceList.selectedWorktree)
         }
         // The modal's scrim swallows clicks; this stops the keyboard reaching
         // what it covers.
         .disabled(model.workspaceList.isModalPresented)
         .padding(Theme.Spacing.windowPadding)
-        .frame(minWidth: 720, minHeight: 460)
+        .frame(minWidth: 960, minHeight: 460)
         .background { WindowGlass() }
         .background(WindowChrome())
         // The window draws no title bar, but SwiftUI still reserves a safe area

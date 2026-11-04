@@ -31,6 +31,34 @@ import Testing
         }
     }
 
+    @Test func listsWhatIsInsideAFolder() async throws {
+        try await client.write("x", to: path("a.txt"))
+        try FileManager.default.createDirectory(at: directory.appending(path: "sub"), withIntermediateDirectories: true)
+
+        let children = try await client.children(of: directory)
+
+        #expect(children.map(\.name).sorted() == ["a.txt", "sub"])
+        #expect(children.first { $0.name == "sub" }?.isDirectory == true)
+        #expect(children.first { $0.name == "a.txt" }?.isDirectory == false)
+    }
+
+    @Test func aLinkToAFolderReadsAsAFolder() async throws {
+        let target = directory.appending(path: "target")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: directory.appending(path: "link"), withDestinationURL: target)
+
+        let children = try await client.children(of: directory)
+
+        #expect(children.first { $0.name == "link" }?.isDirectory == true)
+    }
+
+    @Test func listingAMissingFolderThrows() async {
+        let missing = directory.appending(path: "nope")
+        await #expect(throws: FileClientError.unreadable(path: missing.path(percentEncoded: false))) {
+            try await client.children(of: missing)
+        }
+    }
+
     @Test func writeCreatesIntermediateDirectories() async throws {
         try await client.write("deep", to: path("one/two/three.txt"))
         #expect(try await client.read(path("one/two/three.txt")) == "deep")

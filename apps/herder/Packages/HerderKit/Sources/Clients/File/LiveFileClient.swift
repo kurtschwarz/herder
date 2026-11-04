@@ -33,4 +33,24 @@ public struct LiveFileClient: FileClient {
     public func exists(_ path: String) async -> Bool {
         FileManager.default.fileExists(atPath: path)
     }
+
+    public func children(of url: URL) async throws -> [DirectoryEntry] {
+        let keys: Set<URLResourceKey> = [.isDirectoryKey]
+        let urls: [URL]
+        do {
+            urls = try FileManager.default.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: Array(keys),
+                options: []
+            )
+        } catch {
+            throw FileClientError.unreadable(path: url.path(percentEncoded: false))
+        }
+        return urls.map { child in
+            // `.isDirectoryKey` does not follow symlinks, so resolve first.
+            let resolved = child.resolvingSymlinksInPath()
+            let isDirectory = (try? resolved.resourceValues(forKeys: keys).isDirectory) ?? false
+            return DirectoryEntry(url: child, isDirectory: isDirectory)
+        }
+    }
 }

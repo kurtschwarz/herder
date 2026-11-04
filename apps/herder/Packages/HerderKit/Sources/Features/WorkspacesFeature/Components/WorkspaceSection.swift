@@ -15,7 +15,12 @@ struct WorkspaceSection: View {
                 VStack(alignment: .leading, spacing: 0) {
                     switch model.listings[workspace.id] {
                     case .loaded(let worktrees):
-                        ForEach(worktrees) { WorktreeRow(worktree: $0) }
+                        ForEach(worktrees) { worktree in
+                            WorktreeRow(
+                                worktree: worktree,
+                                isSelected: model.selectedWorktree == worktree.path
+                            ) { model.select(worktree, in: workspace) }
+                        }
                     case .unreadable:
                         Text("Couldn't read worktrees")
                             .font(.callout)

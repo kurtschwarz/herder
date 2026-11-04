@@ -1,4 +1,6 @@
 import Clients
+import ExplorerFeature
+import Foundation
 import Observation
 import SwiftData
 import Storage
@@ -21,6 +23,9 @@ public final class AppModel {
     /// What the sidebar shows beside the list itself.
     public let workspaceList: WorkspacesModel
 
+    /// The file tree of the worktree selected in the sidebar.
+    public let explorer: ExplorerModel
+
     /// `context` is the app's `mainContext`, the same one `@Query` reads, so a
     /// change made here shows up in the sidebar without a round trip.
     public init(
@@ -34,6 +39,7 @@ public final class AppModel {
         let workspaces = WorkspaceStore(context: context, bookmarks: bookmarks, git: git)
         self.workspaces = workspaces
         self.workspaceList = WorkspacesModel(store: workspaces, git: git, picker: folderPicker)
+        self.explorer = ExplorerModel(files: files)
     }
 
     /// Opens the add-workspace modal. Here rather than on the sidebar because a

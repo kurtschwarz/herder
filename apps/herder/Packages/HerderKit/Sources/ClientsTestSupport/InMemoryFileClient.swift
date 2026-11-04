@@ -6,7 +6,14 @@ import Synchronization
 ///
 /// All state sits behind a lock because Swift Testing runs tests in parallel.
 public final class InMemoryFileClient: FileClient {
+    private struct Folders {
+        var children: [URL: [DirectoryEntry]] = [:]
+        var unreadable: Set<URL> = []
+        var reads: [URL] = []
+    }
+
     private let storage = Mutex<[String: String]>([:])
+    private let folders = Mutex(Folders())
 
     public init() {}
 
@@ -33,5 +40,33 @@ public final class InMemoryFileClient: FileClient {
 
     public func exists(_ path: String) async -> Bool {
         storage.withLock { $0[path] != nil }
+    }
+
+    /// Sets what `children(of:)` returns for `url`. Replaces any earlier seed.
+    public func seed(children: [DirectoryEntry], of url: URL) {
+        folders.withLock {
+            $0.children[url] = children
+            $0.unreadable.remove(url)
+        }
+    }
+
+    /// Makes `children(of:)` throw for `url`.
+    public func seedUnreadable(_ url: URL) {
+        folders.withLock { $0.unreadable.insert(url) }
+    }
+
+    /// Every folder `children(of:)` has been asked about, in order.
+    public var childReads: [URL] {
+        folders.withLock { $0.reads }
+    }
+
+    public func children(of url: URL) async throws -> [DirectoryEntry] {
+        try folders.withLock {
+            $0.reads.append(url)
+            guard !$0.unreadable.contains(url), let children = $0.children[url] else {
+                throw FileClientError.unreadable(path: url.path(percentEncoded: false))
+            }
+            return children
+        }
     }
 }
