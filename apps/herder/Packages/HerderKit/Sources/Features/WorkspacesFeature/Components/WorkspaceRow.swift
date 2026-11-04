@@ -52,6 +52,14 @@ struct WorkspaceRow: View {
             }
 
             Spacer(minLength: 0)
+
+            Button { model.beginNewSession(in: workspace) } label: {
+                PhIcon(Ph.plus.regular, size: 12)
+            }
+            .buttonStyle(.icon(size: 20))
+            .pointerStyle(isAvailable ? .link : nil)
+            .disabled(!isAvailable)
+            .help("New session")
         }
         .padding(.horizontal, Theme.Spacing.normal)
         .padding(.vertical, Theme.Spacing.tight)

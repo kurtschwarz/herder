@@ -25,7 +25,7 @@ public struct AppView: View {
         }
         // The modal's scrim swallows clicks; this stops the keyboard reaching
         // what it covers.
-        .disabled(model.workspaceList.adding != nil)
+        .disabled(model.workspaceList.isModalPresented)
         .padding(Theme.Spacing.windowPadding)
         .frame(minWidth: 720, minHeight: 460)
         .background { WindowGlass() }
@@ -37,6 +37,7 @@ public struct AppView: View {
         // After the safe area is ignored, so the scrim covers the whole window,
         // title bar included.
         .overlay { AddWorkspaceOverlay(model: model.workspaceList) }
+        .overlay { NewSessionOverlay(model: model.workspaceList) }
         .preferredColorScheme(.dark)
     }
 }

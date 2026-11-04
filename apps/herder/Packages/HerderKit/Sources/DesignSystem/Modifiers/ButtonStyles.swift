@@ -46,14 +46,19 @@ public struct SecondaryButtonStyle: ButtonStyle {
 ///
 /// The whole square responds, not just the strokes of the glyph.
 public struct IconButtonStyle: ButtonStyle {
-    public init() {}
+    private let size: CGFloat
+
+    public init(size: CGFloat = Theme.Size.iconButton) {
+        self.size = size
+    }
 
     public func makeBody(configuration: Configuration) -> some View {
-        Plate(configuration: configuration)
+        Plate(configuration: configuration, size: size)
     }
 
     private struct Plate: View {
         let configuration: ButtonStyleConfiguration
+        let size: CGFloat
 
         @Environment(\.isEnabled) private var isEnabled
         @State private var isHovering = false
@@ -61,7 +66,7 @@ public struct IconButtonStyle: ButtonStyle {
         var body: some View {
             configuration.label
                 .foregroundStyle(isHovering || configuration.isPressed ? Theme.Palette.text : Theme.Palette.secondaryText)
-                .frame(width: Theme.Size.iconButton, height: Theme.Size.iconButton)
+                .frame(width: size, height: size)
                 .background(
                     configuration.isPressed ? Theme.Palette.controlPressed : (isHovering ? Theme.Palette.control : .clear),
                     in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
@@ -80,6 +85,9 @@ extension ButtonStyle where Self == PrimaryButtonStyle {
 
 extension ButtonStyle where Self == IconButtonStyle {
     public static var icon: IconButtonStyle { IconButtonStyle() }
+
+    /// For a row too short for the standard plate.
+    public static func icon(size: CGFloat) -> IconButtonStyle { IconButtonStyle(size: size) }
 }
 
 extension ButtonStyle where Self == SecondaryButtonStyle {

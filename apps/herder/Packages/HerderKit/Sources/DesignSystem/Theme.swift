@@ -26,6 +26,8 @@ public enum Theme {
         public static let wolfMark = CGSize(width: 15, height: 19.5)
         /// Width of a centred modal card, measured off the add-workspace mockup.
         public static let modalWidth: CGFloat = 480
+        /// For a modal with a list in it.
+        public static let wideModalWidth: CGFloat = 560
         /// Height of a field or button inside a modal.
         public static let control: CGFloat = 32
         /// Square hit area and hover plate of a glyph-only button.

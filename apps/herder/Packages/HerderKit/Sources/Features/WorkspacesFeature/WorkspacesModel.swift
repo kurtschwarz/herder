@@ -36,6 +36,16 @@ public final class WorkspacesModel {
     /// The add-workspace modal's state while it is up, `nil` otherwise.
     public private(set) var adding: AddWorkspaceModel?
 
+    /// The new-session modal's state while it is up, `nil` otherwise.
+    public private(set) var newSession: NewSessionModel?
+
+    /// The workspace the new-session modal is open for, so its worktrees can be
+    /// re-read once one is created.
+    private var newSessionWorkspace: Workspace?
+
+    /// Whether a modal is covering the window.
+    public var isModalPresented: Bool { adding != nil || newSession != nil }
+
     public init(
         store: WorkspaceStore,
         git: any GitClient,
@@ -51,7 +61,7 @@ public final class WorkspacesModel {
     }
 
     public func beginAdding() {
-        guard adding == nil else { return }
+        guard !isModalPresented else { return }
         adding = AddWorkspaceModel(store: store, picker: picker)
     }
 
@@ -64,6 +74,31 @@ public final class WorkspacesModel {
     public func submitAdding() async {
         guard let adding, await adding.submit() else { return }
         self.adding = nil
+    }
+
+    public func beginNewSession(in workspace: Workspace) {
+        guard !isModalPresented, workspace.isAvailable else { return }
+        newSessionWorkspace = workspace
+        newSession = NewSessionModel(
+            workspaceName: workspace.name,
+            repository: URL(filePath: workspace.path),
+            git: git
+        )
+    }
+
+    public func cancelNewSession() {
+        newSession = nil
+        newSessionWorkspace = nil
+    }
+
+    /// Creates the worktree the modal describes, closes it, and shows the new
+    /// worktree under its workspace. A failure leaves the modal up with the
+    /// reason.
+    public func submitNewSession() async {
+        guard let newSession, await newSession.create() else { return }
+        let workspace = newSessionWorkspace
+        cancelNewSession()
+        if let workspace { await refresh(workspace) }
     }
 
     public func isExpanded(_ workspace: Workspace) -> Bool {

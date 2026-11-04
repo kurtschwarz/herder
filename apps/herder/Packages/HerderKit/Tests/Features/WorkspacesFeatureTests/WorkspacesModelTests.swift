@@ -168,4 +168,71 @@ import Testing
 
         #expect(model.adding?.refusal == .notARepository)
     }
+
+    // MARK: - New session
+
+    @Test func aNewSessionOpensForAnAvailableWorkspace() async throws {
+        let workspace = try await addWorkspace("/code/api")
+
+        model.beginNewSession(in: workspace)
+
+        #expect(model.newSession?.workspaceName == "api")
+        #expect(model.isModalPresented)
+    }
+
+    @Test func anUnavailableWorkspaceCannotStartASession() async throws {
+        let workspace = try await addWorkspace("/code/api")
+        workspace.isAvailable = false
+
+        model.beginNewSession(in: workspace)
+
+        #expect(model.newSession == nil)
+    }
+
+    @Test func onlyOneModalAtATime() async throws {
+        let workspace = try await addWorkspace("/code/api")
+        model.beginAdding()
+
+        model.beginNewSession(in: workspace)
+        #expect(model.newSession == nil)
+
+        model.cancelAdding()
+        model.beginNewSession(in: workspace)
+        model.beginAdding()
+        #expect(model.adding == nil)
+    }
+
+    @Test func creatingAWorktreeClosesTheModalAndShowsIt() async throws {
+        let workspace = try await addWorkspace("/code/api")
+        let url = URL(filePath: "/code/api")
+        git.seed(branches: ["main"], at: url)
+        model.beginNewSession(in: workspace)
+        let session = try #require(model.newSession)
+        await session.load()
+        session.editBranchName("fix")
+        // What git would now list, once the worktree exists.
+        let created = GitWorktree(path: url.appending(path: ".worktrees/fix"), checkout: .branch("fix"), isMainWorkingTree: false)
+
+        git.seed(worktrees: [created], at: url)
+        await model.submitNewSession()
+
+        #expect(model.newSession == nil)
+        #expect(git.addedWorktrees.count == 1)
+        #expect(model.listings[workspace.id] == .loaded([created]))
+    }
+
+    @Test func aRefusedCreateLeavesTheModalUp() async throws {
+        let workspace = try await addWorkspace("/code/api")
+        git.seed(branches: ["main"], at: URL(filePath: "/code/api"))
+        git.failAddingWorktrees(with: "no")
+        model.beginNewSession(in: workspace)
+        let session = try #require(model.newSession)
+        await session.load()
+        session.editBranchName("fix")
+
+        await model.submitNewSession()
+
+        #expect(model.newSession != nil)
+        #expect(session.failure == "no")
+    }
 }
