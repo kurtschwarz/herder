@@ -12,12 +12,16 @@ struct WindowChrome: NSViewRepresentable {
     /// Holds the resize observer for as long as the view is alive.
     final class Coordinator {
         var observer: NSObjectProtocol?
+        var doubleClickMonitor: Any?
 
         // Isolated so it can reach `observer`, which this module's default
         // `MainActor` isolation otherwise puts out of a nonisolated deinit's reach.
         isolated deinit {
             if let observer {
                 NotificationCenter.default.removeObserver(observer)
+            }
+            if let doubleClickMonitor {
+                NSEvent.removeMonitor(doubleClickMonitor)
             }
         }
     }
@@ -60,8 +64,30 @@ struct WindowChrome: NSViewRepresentable {
             }
         }
 
+        // The title bar accessory swallows clicks meant for SwiftUI content, and
+        // there is no real title bar to double-click, so watch for the gesture
+        // directly and zoom the window like a standard title bar would.
+        if coordinator.doubleClickMonitor == nil {
+            coordinator.doubleClickMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: .leftMouseDown
+            ) { [weak window] event in
+                guard let window,
+                      event.window === window,
+                      event.clickCount == 2,
+                      event.locationInWindow.y >= window.frame.height - Self.headerHeight
+                else { return event }
+                window.zoom(nil)
+                return event
+            }
+        }
+
         Self.growTitleBar(in: window)
         Self.positionTrafficLights(in: window)
+    }
+
+    /// Height of the strip along the window's top edge that acts as the title bar.
+    private static var headerHeight: CGFloat {
+        Theme.Spacing.windowPadding * 2 + Theme.Size.titleBar
     }
 
     /// Makes `NSTitlebarView` tall enough to contain the lowered traffic lights.
