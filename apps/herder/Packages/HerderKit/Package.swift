@@ -20,6 +20,7 @@ let package = Package(
     products: [
         .library(name: "AppFeature", targets: ["AppFeature"]),
         .library(name: "Clients", targets: ["Clients"]),
+        .library(name: "Storage", targets: ["Storage"]),
     ],
     targets: [
         // Plain Sendable value types. Never imports SwiftUI.
@@ -31,6 +32,10 @@ let package = Package(
         // Fakes for the above. Separate target so they never link into the app.
         .target(name: "ClientsTestSupport", dependencies: ["Clients"], swiftSettings: core),
 
+        // The one module that owns reference types: the SwiftData `@Model`
+        // classes, their schema versions and the container.
+        .target(name: "Storage", dependencies: ["Models", "Clients"], swiftSettings: ui),
+
         // Shared views, styles, tokens.
         .target(name: "DesignSystem", swiftSettings: ui),
 
@@ -38,7 +43,7 @@ let package = Package(
         // depend on them from here: features never import each other.
         .target(
             name: "AppFeature",
-            dependencies: ["Models", "Clients", "DesignSystem"],
+            dependencies: ["Models", "Clients", "DesignSystem", "Storage"],
             swiftSettings: ui
         ),
 
@@ -46,6 +51,11 @@ let package = Package(
             name: "ClientsTests",
             dependencies: ["Clients", "ClientsTestSupport"],
             swiftSettings: core
+        ),
+        .testTarget(
+            name: "StorageTests",
+            dependencies: ["Storage", "ClientsTestSupport"],
+            swiftSettings: ui
         ),
         .testTarget(
             name: "AppFeatureTests",

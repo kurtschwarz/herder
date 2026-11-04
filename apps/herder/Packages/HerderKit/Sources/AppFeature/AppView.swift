@@ -36,7 +36,7 @@ public struct AppView: View {
 
 #if DEBUG
 #Preview {
-    AppView(model: AppModel(files: PreviewFileClient()))
+    AppView(model: .preview)
         .frame(width: 980, height: 620)
 }
 #endif

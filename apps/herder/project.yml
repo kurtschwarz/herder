@@ -52,6 +52,8 @@ targets:
         product: AppFeature
       - package: HerderKit
         product: Clients
+      - package: HerderKit
+        product: Storage
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ar.schw.herder

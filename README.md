@@ -70,6 +70,7 @@ modules:
 | `Models` | Plain `Sendable` value types. No SwiftUI. | `nonisolated` |
 | `Clients` | Side effects behind protocols: disk, network, processes, clocks. | `nonisolated` |
 | `ClientsTestSupport` | Fakes for those protocols. Never linked into the app. | `nonisolated` |
+| `Storage` | SwiftData `@Model` classes, their schema versions and the container. The one module that owns reference types. | `MainActor` |
 | `DesignSystem` | Shared views, styles, tokens. | `MainActor` |
 | `AppFeature` | Root view, navigation, composes features. | `MainActor` |
 
@@ -110,9 +111,9 @@ and depend on it from `AppFeature`:
 ),
 ```
 
-The dependency graph only points downward. Features depend on `Clients`, `Models`
-and `DesignSystem`, never on each other. If two features need to talk, that goes
-through `AppFeature` or a shared model.
+The dependency graph only points downward. Features depend on `Clients`, `Models`,
+`Storage` and `DesignSystem`, never on each other. If two features need to talk,
+that goes through `AppFeature` or a shared model.
 
 ### Concurrency
 
@@ -126,6 +127,25 @@ Anything with side effects lives behind a protocol in `Clients`. Live
 implementations are injected from the app target in `Herder/HerderApp.swift`; tests
 pass fakes from `ClientsTestSupport`. Pass them via `init` into `@Observable`
 models, or through `@Environment` for views. No DI framework until it hurts.
+
+### Persistence
+
+`Storage` holds the SwiftData layer. Its schema is versioned from the first
+release (`WorkspaceSchemaV1`) with a `SchemaMigrationPlan` beside it, so the first
+migration is written against a schema that has a name.
+
+`WorkspaceContainer` is the only place that knows the schema, the migration plan
+and where the store lives. The app calls `.live()`, tests and previews call
+`.inMemory()`, and neither repeats the setup. CloudKit is off: a workspace carries
+a security-scoped bookmark, which only resolves on the Mac and account that made
+it.
+
+Reads go through `@Query` against the container the app target injects with
+`.modelContainer(_:)`. Writes go through `WorkspaceStore`, so the rules about
+which folders qualify, what they are called and how they are ordered live in one
+place. Tests build a real in-memory container rather than faking the store, which
+means they exercise the shipping schema, constraints and sort descriptors; only
+the two OS-touching clients, `BookmarkClient` and `GitClient`, are faked.
 
 ## Testing
 
