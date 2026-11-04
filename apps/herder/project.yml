@@ -1,0 +1,102 @@
+# Source of truth for Herder.xcodeproj. Regenerate with `make project` from the
+# repo root, or `xcodegen generate` from this directory.
+#
+# The project file is generated rather than hand-edited so adding files never
+# produces a .pbxproj merge conflict. Keep this target thin: entry point, assets,
+# entitlements and signing only. Everything else belongs in Packages/HerderKit.
+name: Herder
+
+options:
+  bundleIdPrefix: ar.schw
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+packages:
+  HerderKit:
+    path: Packages/HerderKit
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT: "YES"
+    SWIFT_APPROACHABLE_CONCURRENCY: "YES"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ALWAYS_SEARCH_USER_PATHS: "NO"
+    CLANG_ENABLE_OBJC_WEAK: "YES"
+    ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+    GCC_NO_COMMON_BLOCKS: "YES"
+  configs:
+    Debug:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      ONLY_ACTIVE_ARCH: "YES"
+    Release:
+      SWIFT_COMPILATION_MODE: wholemodule
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+
+targets:
+  Herder:
+    type: application
+    platform: macOS
+    sources:
+      - path: Herder
+    dependencies:
+      # The app target only ever links the top of the module graph plus the
+      # live clients it injects.
+      - package: HerderKit
+        product: AppFeature
+      - package: HerderKit
+        product: Clients
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ar.schw.herder
+        PRODUCT_NAME: Herder
+        INFOPLIST_FILE: Herder/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Herder/Herder.entitlements
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: "YES"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        COMBINE_HIDPI_IMAGES: "YES"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+
+  HerderUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: Herder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ar.schw.herder.uitests
+        TEST_TARGET_NAME: Herder
+
+schemes:
+  Herder:
+    build:
+      targets:
+        Herder: all
+        HerderUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - HerderUITests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

@@ -1,0 +1,28 @@
+# Generated Xcode projects. project.yml is the source of truth; run `make project`.
+*.xcodeproj/
+*.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+
+# Xcode
+xcuserdata/
+DerivedData/
+build/
+*.xcuserstate
+*.xcscmblueprint
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager. Package.resolved stays committed so builds are reproducible.
+.build/
+.swiftpm/
+
+# Tooling caches
+.xcodegen/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride

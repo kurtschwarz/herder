@@ -1,0 +1,85 @@
+set shell := ["zsh", "-cu"]
+
+# Recipes for the Herder macOS app. Callable from here, or from the repo root as
+# `just <recipe> apps/herder`.
+
+name := "Herder"
+proj := name + ".xcodeproj"
+kit := "Packages/HerderKit"
+
+# `platform=macOS` alone matches both arm64 and x86_64, which makes xcodebuild warn
+# that it picked one. Naming this machine's arch keeps the output clean.
+arch := `uname -m`
+xcodebuild := "xcodebuild -project " + proj + " -scheme " + name + " -destination 'platform=macOS,arch=" + arch + "'"
+
+# Show available recipes
+default:
+    @just --list --unsorted
+
+# Set up a fresh clone
+bootstrap: project
+    @echo "Ready. Open {{ proj }}"
+
+# Regenerate Herder.xcodeproj from project.yml
+project:
+    @command -v xcodegen >/dev/null || { print -u2 "xcodegen not found: brew install xcodegen"; exit 1; }
+    @xcodegen generate --quiet && echo "Generated {{ proj }}"
+
+# Run the fast Swift Testing suites (no app host)
+test *args:
+    cd {{ kit }} && swift test {{ args }}
+
+# Build the app
+build: project
+    @{{ xcodebuild }} -configuration Debug -quiet build
+
+# Build and run the app, with its output in this terminal
+dev: build
+    #!/usr/bin/env zsh
+    set -euo pipefail
+
+    settings=$({{ xcodebuild }} -configuration Debug -showBuildSettings 2>/dev/null)
+    products=$(print -r -- "${settings}" | awk -F' = ' '/ BUILT_PRODUCTS_DIR =/ {print $2; exit}')
+    executable=$(print -r -- "${settings}" | awk -F' = ' '/ EXECUTABLE_PATH =/ {print $2; exit}')
+    print -P "%F{cyan}==>%f ${executable:t} running. Ctrl-C or Cmd-Q to stop."
+
+    # Ctrl-C reaches this script as well as the app, so trap it, give the app a
+    # chance to shut down, and exit 0: ending a dev run is not a failure. The app
+    # runs in the background and is waited on so the trap gets a chance to run.
+    # `status` is read-only in zsh, hence `code`.
+    app_pid=0
+    quit() {
+        if (( app_pid )); then
+            kill -TERM ${app_pid} 2>/dev/null || true
+            wait ${app_pid} 2>/dev/null || true
+        fi
+        exit 0
+    }
+    trap quit INT TERM HUP
+
+    "${products}/${executable}" &
+    app_pid=$!
+
+    set +e
+    wait ${app_pid}
+    code=$?
+    set -e
+
+    # 128+n means the app was signalled rather than quitting on its own.
+    if (( code > 128 )); then
+        code=0
+    fi
+    exit ${code}
+
+# Run the XCTest UI suite (slow, launches the app)
+uitest: project
+    @{{ xcodebuild }} -configuration Debug test
+
+# Open the app in Xcode
+open: project
+    open {{ proj }}
+
+# Remove build artifacts
+clean:
+    rm -rf {{ kit }}/.build
+    @{{ xcodebuild }} clean >/dev/null 2>&1 || true
