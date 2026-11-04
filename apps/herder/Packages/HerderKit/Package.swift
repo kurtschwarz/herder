@@ -22,6 +22,9 @@ let package = Package(
         .library(name: "Clients", targets: ["Clients"]),
         .library(name: "Storage", targets: ["Storage"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/phosphor-icons/swift", from: "2.1.0"),
+    ],
     targets: [
         // Plain Sendable value types. Never imports SwiftUI.
         .target(name: "Models", swiftSettings: core),
@@ -45,7 +48,10 @@ let package = Package(
         // otherwise looks for them directly under `Sources`.
         .target(
             name: "WorkspacesFeature",
-            dependencies: ["Models", "Clients", "DesignSystem", "Storage"],
+            dependencies: [
+                "Models", "Clients", "DesignSystem", "Storage",
+                .product(name: "PhosphorSwift", package: "swift"),
+            ],
             path: "Sources/Features/WorkspacesFeature",
             swiftSettings: ui
         ),

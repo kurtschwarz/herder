@@ -25,9 +25,12 @@ project:
     @command -v xcodegen >/dev/null || { print -u2 "xcodegen not found: brew install xcodegen"; exit 1; }
     @xcodegen generate --quiet && echo "Generated {{ proj }}"
 
-# Run the fast Swift Testing suites (no app host)
+# Run the Swift Testing suites (no app host). Goes through xcodebuild rather
+# than `swift test`: PhosphorSwift ships its icons as an asset catalog without
+# declaring it as a resource, which only Xcode's build system can bundle.
+# Extra arguments go to xcodebuild, e.g. `-only-testing:ClientsTests`.
 test *args:
-    cd {{ kit }} && swift test {{ args }}
+    cd {{ kit }} && xcodebuild test -scheme HerderKit-Package -destination 'platform=macOS,arch={{ arch }}' {{ args }}
 
 # Build the app
 build: project

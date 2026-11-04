@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import PhosphorSwift
 import Storage
 import SwiftUI
 
@@ -16,8 +17,7 @@ struct WorkspaceRow: View {
             Button {
                 Task { await model.toggle(workspace) }
             } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
+                PhIcon(Ph.caretDown.bold, size: 10)
                     .foregroundStyle(Theme.Palette.secondaryText)
                     .rotationEffect(.degrees(model.isExpanded(workspace) ? 0 : -90))
                     .animation(.easeOut(duration: 0.15), value: model.isExpanded(workspace))
@@ -34,7 +34,7 @@ struct WorkspaceRow: View {
             .opacity(isAvailable ? 1 : 0)
             .disabled(!isAvailable)
 
-            Image(systemName: isAvailable ? "folder.fill" : "exclamationmark.triangle.fill")
+            PhIcon(isAvailable ? Ph.folderSimple.duotone : Ph.warning.fill, size: 16)
                 .foregroundStyle(isAvailable ? Theme.Palette.violet : Theme.Palette.warning)
 
             if model.renaming == workspace.id {

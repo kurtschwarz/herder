@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import PhosphorSwift
 import Storage
 import SwiftData
 import SwiftUI
@@ -54,14 +55,13 @@ private struct WorkspacesHeader: View {
                 .foregroundStyle(Theme.Palette.text)
             Spacer(minLength: 0)
             Button(action: add) {
-                Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 15))
+                PhIcon(Ph.folderSimplePlus.regular, size: 18)
             }
             .buttonStyle(.icon)
             .help("Add workspace")
             // The plate is wider than the glyph; pull it out so the glyph
             // stays where the header's inset puts it.
-            .padding(.trailing, -(Theme.Size.iconButton - 15) / 2)
+            .padding(.trailing, -(Theme.Size.iconButton - 18) / 2)
         }
         .padding(.horizontal, Theme.Spacing.paneInset)
         .padding(.bottom, Theme.Spacing.normal)

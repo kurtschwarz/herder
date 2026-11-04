@@ -40,7 +40,7 @@ repo as it grows:
 | Command | Does |
 | --- | --- |
 | `just build <dir>` | Build it |
-| `just test <dir>` | Run its tests. Extra arguments pass through: `just test apps/herder --filter FileClient` |
+| `just test <dir>` | Run its tests. Extra arguments pass through: `just test apps/herder -only-testing:ClientsTests` |
 | `just dev <dir>` | Build and run it, with its output in your terminal |
 | `just bootstrap <dir>` | Set it up in a fresh clone |
 | `just clean <dir>` | Remove its build artifacts |
@@ -75,12 +75,14 @@ modules:
 | `DesignSystem` | Shared views, styles, tokens. | `MainActor` |
 | `AppFeature` | Root view, navigation, composes features. | `MainActor` |
 
-This buys four things: `swift test` runs in seconds with no app host, module
+This buys four things: the tests run in seconds with no app host, module
 boundaries are enforced by the compiler instead of convention, previews work, and
 the project file stops being a merge battleground.
 
 Run the module tests with `just test`. It takes arguments, so
-`just test --filter FileClient` works too.
+`just test -only-testing:ClientsTests` works too. Tests run through `xcodebuild`, not
+`swift test`, because PhosphorSwift's icons are an asset catalog that only Xcode's
+build system bundles.
 
 ### Adding a feature
 

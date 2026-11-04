@@ -76,7 +76,7 @@ target `path: "Tests/Features/<Name>FeatureTests"`. SwiftPM looks directly under
 Run from this directory, or append `apps/herder` to the root `justfile` equivalents.
 
 ```sh
-just test          # Swift Testing suites, seconds, no app host
+just test          # Swift Testing suites via xcodebuild, no app host
 just build         # regenerates the project, then builds
 just dev           # build and run with output in the terminal
 just uitest        # XCTest UI suite; slow, launches the app

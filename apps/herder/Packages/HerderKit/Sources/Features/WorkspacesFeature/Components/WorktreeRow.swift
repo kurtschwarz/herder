@@ -1,5 +1,6 @@
 import Clients
 import DesignSystem
+import PhosphorSwift
 import SwiftUI
 
 struct WorktreeRow: View {
@@ -9,8 +10,7 @@ struct WorktreeRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.normal) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: 11, weight: .semibold))
+            PhIcon(Ph.gitBranch.bold, size: 12)
                 .foregroundStyle(Theme.Palette.violet)
 
             switch worktree.checkout {

@@ -1,4 +1,5 @@
 import DesignSystem
+import PhosphorSwift
 import SwiftUI
 
 /// The add-workspace modal, drawn over the whole window.
@@ -156,7 +157,7 @@ private struct RefusalMessage: View {
                 Text(message)
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
-                Image(systemName: "exclamationmark.triangle.fill")
+                PhIcon(Ph.warning.fill, size: 14)
             }
             .font(.callout)
             .foregroundStyle(Theme.Palette.warning)
