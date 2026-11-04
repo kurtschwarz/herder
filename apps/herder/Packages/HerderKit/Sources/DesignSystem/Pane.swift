@@ -44,6 +44,15 @@ extension View {
     public func paneBackground() -> some View {
         modifier(PaneBackground())
     }
+
+    /// Draws this view as a floating pane made of Liquid Glass, the same material
+    /// as the window backdrop, instead of the solid pane fill.
+    public func glassPaneBackground() -> some View {
+        glassEffect(
+            .regular.tint(Theme.Palette.windowTint),
+            in: RoundedRectangle(cornerRadius: Theme.Radius.pane, style: .continuous)
+        )
+    }
 }
 
 #if DEBUG

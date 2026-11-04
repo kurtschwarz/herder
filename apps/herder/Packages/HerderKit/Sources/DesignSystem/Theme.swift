@@ -39,6 +39,10 @@ public enum Theme {
         /// The window itself. Panes sit on top of this.
         public static let window = Color(red: 28 / 255, green: 28 / 255, blue: 31 / 255, opacity: 0.97)
 
+        /// Dark wash over the blurred desktop. Light enough that the wallpaper's
+        /// colour still reads through.
+        public static let windowTint = Color(red: 28 / 255, green: 28 / 255, blue: 31 / 255, opacity: 0.55)
+
         public static let paneTop = Color(red: 27 / 255, green: 27 / 255, blue: 30 / 255, opacity: 0.94)
         public static let paneBottom = Color(red: 23 / 255, green: 24 / 255, blue: 28 / 255, opacity: 0.94)
 

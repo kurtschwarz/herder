@@ -16,7 +16,7 @@ let core: [SwiftSetting] = [
 
 let package = Package(
     name: "HerderKit",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS(.v26)],
     products: [
         .library(name: "AppFeature", targets: ["AppFeature"]),
         .library(name: "Clients", targets: ["Clients"]),

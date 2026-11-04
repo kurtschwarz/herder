@@ -29,7 +29,7 @@ private struct SidebarHeader: View {
 #Preview {
     Sidebar()
         .frame(width: Theme.Size.sidebarWidth, height: 420)
-        .paneBackground()
+        .glassPaneBackground()
         .padding(Theme.Spacing.windowPadding)
         .background(Theme.Palette.window)
 }

@@ -17,14 +17,14 @@ public struct AppView: View {
         HStack(spacing: Theme.Spacing.paneGap) {
             Sidebar()
                 .frame(width: Theme.Size.sidebarWidth)
-                .paneBackground()
+                .glassPaneBackground()
 
             Detail()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(Theme.Spacing.windowPadding)
         .frame(minWidth: 720, minHeight: 460)
-        .background(Theme.Palette.window)
+        .background { WindowGlass() }
         .background(WindowChrome())
         // The window draws no title bar, but SwiftUI still reserves a safe area
         // the height of one. Without this the panes start below the traffic

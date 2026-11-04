@@ -48,6 +48,9 @@ struct WindowChrome: NSViewRepresentable {
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        // Lets the backdrop's blur sample the desktop behind the window.
+        window.isOpaque = false
+        window.backgroundColor = .clear
         // With no title bar left to grab, the background becomes the drag handle.
         window.isMovableByWindowBackground = true
 
