@@ -246,35 +246,8 @@ private struct NewWorktreeCard: View {
         .onTapGesture { model.selectNewWorktree() }
     }
 
-    /// The caret is drawn over the menu rather than inside its label: a menu
-    /// flattens its label into a native control that ignores a custom view's
-    /// frame, and a resizable image in there fills all the space it is offered.
     private var baseMenu: some View {
-        Menu {
-            ForEach(model.branches, id: \.self) { branch in
-                Button(branch) { model.baseBranch = branch }
-            }
-        } label: {
-            Text(model.baseBranch.isEmpty ? "—" : model.baseBranch)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(Theme.Palette.text)
-                .lineLimit(1)
-                .padding(.leading, Theme.Spacing.normal + Theme.Spacing.tight)
-                .padding(.trailing, Theme.Spacing.section + Theme.Spacing.tight)
-                .frame(minHeight: Theme.Size.control + 6)
-                .contentShape(Rectangle())
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .disabled(model.branches.isEmpty)
-        .fieldSurface()
-        .overlay(alignment: .trailing) {
-            PhIcon(Ph.caretUpDown.regular, size: 12)
-                .foregroundStyle(Theme.Palette.secondaryText)
-                .padding(.trailing, Theme.Spacing.normal + Theme.Spacing.tight)
-                .allowsHitTesting(false)
-        }
+        BaseBranchPicker(model: model)
     }
 
     private var message: String? {
@@ -283,6 +256,80 @@ private struct NewWorktreeCard: View {
         case .alreadyExists: "A branch called \(model.branchName) already exists."
         case nil: nil
         }
+    }
+}
+
+/// A button that opens a list of branches in a popover. Not a `Menu`: a menu
+/// flattens its label into a native control that drops padding and ignores a
+/// custom view's frame, which is what makes a field-styled menu impossible.
+private struct BaseBranchPicker: View {
+    let model: NewSessionModel
+
+    @State private var isOpen = false
+
+    var body: some View {
+        Button { isOpen.toggle() } label: {
+            HStack(spacing: Theme.Spacing.normal) {
+                Text(model.baseBranch.isEmpty ? "—" : model.baseBranch)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(Theme.Palette.text)
+                    .lineLimit(1)
+                PhIcon(Ph.caretUpDown.regular, size: 12)
+                    .foregroundStyle(Theme.Palette.secondaryText)
+            }
+            .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+            .frame(minHeight: Theme.Size.control + 6)
+            .fieldSurface()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .disabled(model.branches.isEmpty)
+        .popover(isPresented: $isOpen, arrowEdge: .bottom) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(model.branches, id: \.self) { branch in
+                        BranchOption(branch: branch, isSelected: branch == model.baseBranch) {
+                            model.baseBranch = branch
+                            isOpen = false
+                        }
+                    }
+                }
+                .padding(Theme.Spacing.tight)
+            }
+            .frame(minWidth: 200, maxHeight: 240)
+        }
+    }
+}
+
+private struct BranchOption: View {
+    let branch: String
+    let isSelected: Bool
+    let choose: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: choose) {
+            HStack {
+                Text(branch)
+                    .font(.system(.body, design: .monospaced))
+                    .lineLimit(1)
+                Spacer(minLength: Theme.Spacing.loose)
+                if isSelected {
+                    PhIcon(Ph.check.bold, size: 12)
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.normal)
+            .frame(minHeight: 26)
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovering ? Theme.Palette.control : .clear)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 
