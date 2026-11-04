@@ -39,6 +39,10 @@ struct WorkspaceRow: View {
                     .foregroundStyle(isAvailable ? Theme.Palette.text : Theme.Palette.tertiaryText)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    // On the name alone: a double-click gesture on the whole
+                    // row makes every click on the chevron wait out the
+                    // double-click interval before it fires.
+                    .onTapGesture(count: 2) { model.renaming = workspace.id }
             }
 
             Spacer(minLength: 0)
@@ -51,7 +55,6 @@ struct WorkspaceRow: View {
         }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
-        .onTapGesture(count: 2) { model.renaming = workspace.id }
         .help(isAvailable ? workspace.path : "\(workspace.path) can't be reached")
         .contextMenu {
             Button("Reveal in Finder") {
