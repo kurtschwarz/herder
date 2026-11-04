@@ -28,6 +28,7 @@ struct WorkspaceRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .pointerStyle(isAvailable ? .link : nil)
             // An unavailable workspace has nothing to show, so there is
             // nothing to fold.
             .opacity(isAvailable ? 1 : 0)

@@ -68,6 +68,7 @@ public struct IconButtonStyle: ButtonStyle {
                 )
                 .contentShape(Rectangle())
                 .onHover { isHovering = $0 }
+                .pointerStyle(isEnabled ? .link : nil)
                 .opacity(isEnabled ? 1 : 0.4)
         }
     }
