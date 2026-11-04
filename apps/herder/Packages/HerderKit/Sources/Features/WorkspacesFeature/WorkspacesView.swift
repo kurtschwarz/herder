@@ -56,10 +56,12 @@ private struct WorkspacesHeader: View {
             Button(action: add) {
                 Image(systemName: "folder.badge.plus")
                     .font(.system(size: 15))
-                    .foregroundStyle(Theme.Palette.secondaryText)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.icon)
             .help("Add workspace")
+            // The plate is wider than the glyph; pull it out so the glyph
+            // stays where the header's inset puts it.
+            .padding(.trailing, -(Theme.Size.iconButton - 15) / 2)
         }
         .padding(.horizontal, Theme.Spacing.paneInset)
         .padding(.bottom, Theme.Spacing.normal)

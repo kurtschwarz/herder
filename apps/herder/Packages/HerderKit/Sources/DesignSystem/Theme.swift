@@ -28,6 +28,8 @@ public enum Theme {
         public static let modalWidth: CGFloat = 480
         /// Height of a field or button inside a modal.
         public static let control: CGFloat = 32
+        /// Square hit area and hover plate of a glyph-only button.
+        public static let iconButton: CGFloat = 28
     }
 
     public enum Radius {

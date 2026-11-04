@@ -42,8 +42,43 @@ public struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
+/// A glyph on its own, with a rounded plate that appears on hover and press.
+///
+/// The whole square responds, not just the strokes of the glyph.
+public struct IconButtonStyle: ButtonStyle {
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        Plate(configuration: configuration)
+    }
+
+    private struct Plate: View {
+        let configuration: ButtonStyleConfiguration
+
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(isHovering || configuration.isPressed ? Theme.Palette.text : Theme.Palette.secondaryText)
+                .frame(width: Theme.Size.iconButton, height: Theme.Size.iconButton)
+                .background(
+                    configuration.isPressed ? Theme.Palette.controlPressed : (isHovering ? Theme.Palette.control : .clear),
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                )
+                .contentShape(Rectangle())
+                .onHover { isHovering = $0 }
+                .opacity(isEnabled ? 1 : 0.4)
+        }
+    }
+}
+
 extension ButtonStyle where Self == PrimaryButtonStyle {
     public static var primary: PrimaryButtonStyle { PrimaryButtonStyle() }
+}
+
+extension ButtonStyle where Self == IconButtonStyle {
+    public static var icon: IconButtonStyle { IconButtonStyle() }
 }
 
 extension ButtonStyle where Self == SecondaryButtonStyle {
