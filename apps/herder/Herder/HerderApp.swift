@@ -1,64 +1,45 @@
 import AppFeature
-import Services
-import Storage
-import SwiftData
 import SwiftUI
 
-/// Entry point and glue, nothing else.
+/// Entry point, nothing else.
 ///
-/// This target's whole job is to declare scenes and inject live implementations of
-/// the clients. All behaviour lives in `Packages/HerderKit`.
+/// This target's whole job is to declare scenes. Every service, every model and
+/// every line of behaviour lives in `Packages/HerderKit`, and `AppEnvironment`
+/// is what builds them — including the live services, which used to be
+/// constructed here. The project file is generated from `project.yml`, so the
+/// fewer files this target has, the less often it has to be regenerated.
 @main
 struct HerderApp: App {
-    private let container = Self.makeContainer()
-    @State private var model: AppModel
+    @State private var environment: AppEnvironment
 
     init() {
-        let model = AppModel(
-            files: LiveFileClient(),
-            bookmarks: LiveBookmarkClient(),
-            git: LiveGitClient(),
-            folderPicker: LiveFolderPickerClient(),
-            watcher: LiveFileWatcherClient(),
-            clock: LiveClockClient(),
-            context: container.mainContext
-        )
+        let environment = AppEnvironment()
         // Before any scene exists: a view must never render a workspace the
         // sandbox has not been asked for yet.
-        model.start()
-        _model = State(initialValue: model)
+        environment.start()
+        _environment = State(initialValue: environment)
     }
 
     var body: some Scene {
         WindowGroup {
-            AppView(model: model)
+            AppView(environment: environment)
                 // Quitting is the only way out, so this is where the sandbox
                 // gets its folder access handed back.
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-                    model.stop()
+                    environment.stop()
                 }
         }
         .defaultSize(width: 1180, height: 760)
         // The design puts the traffic lights inside the sidebar's header rather
         // than in a title bar of their own.
         .windowStyle(.hiddenTitleBar)
-        .modelContainer(container)
+        .modelContainer(environment.container)
         .commands {
             // ⌘N already opens a new window.
             CommandGroup(after: .newItem) {
-                Button("Add Workspace…") { model.beginAddingWorkspace() }
+                Button("Add Workspace…") { environment.beginAddingWorkspace() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
             }
-        }
-    }
-
-    /// There is no app without its workspaces, and nothing useful to fall back
-    /// to: an in-memory store would silently throw away everything the user adds.
-    private static func makeContainer() -> ModelContainer {
-        do {
-            return try WorkspaceContainer.live()
-        } catch {
-            fatalError("Could not open the workspace store: \(error)")
         }
     }
 }

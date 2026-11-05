@@ -9,16 +9,26 @@ import SwiftData
 import WorkspacesFeature
 import Worktrees
 
-/// Composition root for the feature graph.
+/// Composition root.
 ///
-/// The app target builds this with live clients; tests build it with fakes. As
-/// features arrive, construct their models here and hand them to `AppView`.
+/// The only place in the codebase that names a concrete service type: ``init()``
+/// builds the live ones, and the designated initializer takes whatever it is
+/// given so tests and previews can pass fakes. As features arrive, construct
+/// their models here and hand them to `AppView`.
+///
+/// This is why the app target is one file: everything that would otherwise be
+/// wired up in `@main` is wired up here instead, where SwiftPM picks up new
+/// files without the Xcode project having to be regenerated.
 ///
 /// `@MainActor` is implicit: this target's default isolation is `MainActor`.
 @Observable
-public final class AppModel {
+public final class AppEnvironment {
+    /// The SwiftData container the whole app shares. Held so the scene can hand
+    /// it to `.modelContainer(_:)`, which is what puts it in reach of `@Query`.
+    public let container: ModelContainer
+
     /// Every change to the workspace list goes through here. Views read the list
-    /// itself with `@Query` against the injected container.
+    /// itself with `@Query` against the same container.
     public let workspaces: WorkspaceStore
 
     /// The authoritative file and git state of the worktrees being watched.
@@ -35,8 +45,35 @@ public final class AppModel {
     /// The file open in the middle pane.
     public let editor: EditorModel
 
-    /// `context` is the app's `mainContext`, the same one `@Query` reads, so a
-    /// change made here shows up in the sidebar without a round trip.
+    /// The live app: every service is the real one.
+    ///
+    /// There is no app without its workspaces, and nothing useful to fall back
+    /// to, so a container that cannot be opened is fatal: an in-memory store
+    /// would silently throw away everything the user adds.
+    public convenience init() {
+        let container: ModelContainer
+        do {
+            container = try WorkspaceContainer.live()
+        } catch {
+            fatalError("Could not open the workspace store: \(error)")
+        }
+
+        self.init(
+            files: LiveFileClient(),
+            bookmarks: LiveBookmarkClient(),
+            git: LiveGitClient(),
+            folderPicker: LiveFolderPickerClient(),
+            watcher: LiveFileWatcherClient(),
+            clock: LiveClockClient(),
+            container: container
+        )
+    }
+
+    /// Takes every service, so tests and previews can pass fakes.
+    ///
+    /// The store writes through `container.mainContext`, the same context
+    /// `@Query` reads, so a change made here shows up in the sidebar without a
+    /// round trip.
     ///
     /// `highlighter` is named here rather than defaulted inside the editor
     /// because this is the only module allowed to know a concrete service type.
@@ -47,10 +84,11 @@ public final class AppModel {
         folderPicker: any FolderPickerClient,
         watcher: any FileWatcherClient,
         clock: any ClockClient,
-        context: ModelContext,
+        container: ModelContainer,
         highlighter: any SyntaxHighlighter = TreeSitterHighlighter()
     ) {
-        let workspaces = WorkspaceStore(context: context, bookmarks: bookmarks, git: git)
+        self.container = container
+        let workspaces = WorkspaceStore(context: container.mainContext, bookmarks: bookmarks, git: git)
         self.workspaces = workspaces
         self.workspaceList = WorkspacesModel(store: workspaces, git: git, picker: folderPicker)
         let worktrees = WorktreeStateStore(files: files, git: git, watcher: watcher, clock: clock)

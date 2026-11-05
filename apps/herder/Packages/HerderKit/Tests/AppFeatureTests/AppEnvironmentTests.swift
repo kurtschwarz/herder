@@ -1,5 +1,4 @@
 import Storage
-import SwiftData
 import TestSupport
 import Testing
 
@@ -7,21 +6,21 @@ import Testing
 
 /// A struct suite gives every test a fresh instance, so state can't leak between
 /// tests and there's no `setUp`/`tearDown` to keep in sync.
-@Suite struct AppModelTests {
+@Suite struct AppEnvironmentTests {
     let files = InMemoryFileClient()
     let bookmarks = InMemoryBookmarkClient()
     let git = StubGitClient()
-    let model: AppModel
+    let environment: AppEnvironment
 
     init() throws {
-        model = AppModel(
+        environment = AppEnvironment(
             files: files,
             bookmarks: bookmarks,
             git: git,
             folderPicker: StubFolderPickerClient(),
             watcher: StubFileWatcherClient(),
             clock: VirtualClockClient(),
-            context: ModelContext(try WorkspaceContainer.inMemory())
+            container: try WorkspaceContainer.inMemory()
         )
     }
 
@@ -30,7 +29,7 @@ import Testing
     }
 
     @Test func startsWithNoWorkspaces() throws {
-        model.start()
-        #expect(try model.workspaces.workspaces().isEmpty)
+        environment.start()
+        #expect(try environment.workspaces.workspaces().isEmpty)
     }
 }

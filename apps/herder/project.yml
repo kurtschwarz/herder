@@ -46,15 +46,10 @@ targets:
     sources:
       - path: Herder
     dependencies:
-      # The app target only ever links the top of the module graph plus the
-      # live services it injects. Phase 2 of the realignment moves that
-      # injection into AppEnvironment, after which AppFeature is the only one.
+      # One product. AppEnvironment in HerderKit builds the live services, so
+      # this target has nothing concrete to link and nothing to inject.
       - package: HerderKit
         product: AppFeature
-      - package: HerderKit
-        product: Services
-      - package: HerderKit
-        product: Storage
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ar.schw.herder

@@ -64,7 +64,7 @@ struct PreviewFileWatcherClient: FileWatcherClient {
     }
 }
 
-extension AppModel {
+extension AppEnvironment {
     /// Two workspaces in an in-memory store. One container for every preview,
     /// because a context outlives nothing: its container has to stay alive for
     /// as long as a view queries it. Traps rather than returning an optional: a
@@ -86,15 +86,15 @@ extension AppModel {
     }()
 
     /// An app model over the seeded preview store.
-    @MainActor static var preview: AppModel {
-        AppModel(
+    @MainActor static var preview: AppEnvironment {
+        AppEnvironment(
             files: PreviewFileClient(),
             bookmarks: PreviewBookmarkClient(),
             git: PreviewGitClient(),
             folderPicker: PreviewFolderPickerClient(),
             watcher: PreviewFileWatcherClient(),
             clock: LiveClockClient(),
-            context: previewContainer.mainContext
+            container: previewContainer
         )
     }
 }

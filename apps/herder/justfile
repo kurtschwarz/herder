@@ -54,9 +54,14 @@ project:
 # Run the Swift Testing suites (no app host). Goes through xcodebuild rather
 # than `swift test`: PhosphorSwift ships its icons as an asset catalog without
 # declaring it as a resource, which only Xcode's build system can bundle.
-# Extra arguments go to xcodebuild, e.g. `-only-testing:ClientsTests`.
+# Extra arguments go to xcodebuild, e.g. `-only-testing:CoreTests`.
+#
+# `HerderKit` is the scheme Xcode generates for the package, and the name
+# depends on how many products the package exports: with several it is
+# `HerderKit-Package` instead. If this starts failing with "does not contain a
+# scheme", run `xcodebuild -list` in {{ kit }} and use what it prints.
 test *args: syntax
-    cd {{ kit }} && xcodebuild test -scheme HerderKit-Package -destination 'platform=macOS,arch={{ arch }}' {{ args }}
+    cd {{ kit }} && xcodebuild test -scheme HerderKit -destination 'platform=macOS,arch={{ arch }}' {{ args }}
 
 # Build the app
 build: project syntax

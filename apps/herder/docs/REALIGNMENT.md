@@ -343,9 +343,9 @@ added to docs/realignment/notes.md.
 
 - [x] **P0** Survey
 - [x] **P1** Swift 6 language mode *(already done; nothing to change)*
-- [ ] **P2** Core, Services, TestSupport, boundary script, `AppFeature` move
+- [x] **P2** Core, Services, TestSupport, boundary script, `AppFeature` move
   - [x] 2a module split: `Core`, `Services`, `TestSupport`, boundary script, `just check`
-  - [ ] 2b `AppFeature` → `Sources/App/`, single product, `AppEnvironment`
+  - [x] 2b `AppFeature` → `Sources/App/`, single product, `AppEnvironment`
 - [ ] **P3** Service protocols
   - [ ] Audit the seven existing protocols
   - [ ] Split `Clients/Git` into values and parsers

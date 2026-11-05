@@ -51,3 +51,19 @@ as D1–D10 in the plan.
   `WorkspacesFeature` depends on `Storage`, so SwiftData is one hop from a
   feature. That is what Phase 3 task 4 (`RepositoryStore`) and Phase 4e exist to
   fix; the boundary check for it stays commented out until then.
+
+## From Phase 2b (composition root)
+
+- **The test scheme's name depends on the product count.** Reducing the package
+  to one product renamed Xcode's generated scheme from `HerderKit-Package` to
+  `HerderKit`, and `just test` failed with "does not contain a scheme". The
+  justfile now says so at the recipe. A shared scheme checked into
+  `.swiftpm/xcode/xcshareddata/xcschemes/` would make the name ours rather than
+  Xcode's, at the cost of a chunk of version-coupled XML. Worth reconsidering if
+  it bites again.
+- **`AppEnvironment` takes a `ModelContainer` where `AppModel` took a
+  `ModelContext`.** The scene needs the container for `.modelContainer(_:)`, and
+  having both the app and the environment build their own would have been two
+  sources of truth for the store. Tests that passed `ModelContext(container)`
+  now pass the container and get `mainContext`, which is what the app always
+  used.

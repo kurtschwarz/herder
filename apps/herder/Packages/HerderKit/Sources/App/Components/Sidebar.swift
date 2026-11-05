@@ -34,8 +34,8 @@ private struct SidebarHeader: View {
 
 #if DEBUG
 #Preview {
-    Sidebar(workspaces: AppModel.preview.workspaceList)
-        .modelContainer(AppModel.previewContainer)
+    Sidebar(workspaces: AppEnvironment.preview.workspaceList)
+        .modelContainer(AppEnvironment.previewContainer)
         .frame(width: Theme.Size.sidebarWidth, height: 420)
         .glassPaneBackground()
         .padding(Theme.Spacing.windowPadding)

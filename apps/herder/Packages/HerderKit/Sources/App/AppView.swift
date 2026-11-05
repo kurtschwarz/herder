@@ -10,41 +10,41 @@ import WorkspacesFeature
 /// `NavigationSplitView`, because the design has no divider and gives each pane its
 /// own rounded surface.
 public struct AppView: View {
-    @State private var model: AppModel
+    @State private var environment: AppEnvironment
 
-    public init(model: AppModel) {
-        _model = State(initialValue: model)
+    public init(environment: AppEnvironment) {
+        _environment = State(initialValue: environment)
     }
 
     public var body: some View {
         HStack(spacing: Theme.Spacing.paneGap) {
-            Sidebar(workspaces: model.workspaceList)
+            Sidebar(workspaces: environment.workspaceList)
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
 
-            EditorView(model: model.editor, rootName: model.workspaceList.selectedWorkspaceName)
+            EditorView(model: environment.editor, rootName: environment.workspaceList.selectedWorkspaceName)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            ExplorerView(model: model.explorer, rootName: model.workspaceList.selectedWorkspaceName)
+            ExplorerView(model: environment.explorer, rootName: environment.workspaceList.selectedWorkspaceName)
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
         }
         // The sidebar owns the selection and the explorer must not import it,
         // so the plain URL crosses here.
-        .task(id: model.workspaceList.selectedWorktree) {
+        .task(id: environment.workspaceList.selectedWorktree) {
             // A file from the worktree before is stale, not preserved.
-            model.editor.close()
-            await model.explorer.setRoot(model.workspaceList.selectedWorktree)
+            environment.editor.close()
+            await environment.explorer.setRoot(environment.workspaceList.selectedWorktree)
         }
         // Selection only ever opens. A file that goes from disk loses its
         // selection but not its pane: the editor keeps it, struck through.
-        .task(id: model.explorer.selected) {
-            guard let file = model.explorer.selected else { return }
-            await model.editor.open(file)
+        .task(id: environment.explorer.selected) {
+            guard let file = environment.explorer.selected else { return }
+            await environment.editor.open(file)
         }
         // The modal's scrim swallows clicks; this stops the keyboard reaching
         // what it covers.
-        .disabled(model.workspaceList.isModalPresented)
+        .disabled(environment.workspaceList.isModalPresented)
         .padding(Theme.Spacing.windowPadding)
         .frame(minWidth: 960, minHeight: 460)
         .background { WindowGlass() }
@@ -55,16 +55,16 @@ public struct AppView: View {
         .ignoresSafeArea()
         // After the safe area is ignored, so the scrim covers the whole window,
         // title bar included.
-        .overlay { AddWorkspaceOverlay(model: model.workspaceList) }
-        .overlay { NewSessionOverlay(model: model.workspaceList) }
+        .overlay { AddWorkspaceOverlay(model: environment.workspaceList) }
+        .overlay { NewSessionOverlay(model: environment.workspaceList) }
         .preferredColorScheme(.dark)
     }
 }
 
 #if DEBUG
 #Preview {
-    AppView(model: .preview)
+    AppView(environment: .preview)
         .frame(width: 980, height: 620)
-        .modelContainer(AppModel.previewContainer)
+        .modelContainer(AppEnvironment.previewContainer)
 }
 #endif

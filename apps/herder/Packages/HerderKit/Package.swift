@@ -20,9 +20,10 @@ let package = Package(
     name: "HerderKit",
     platforms: [.macOS(.v26)],
     products: [
+        // One product. The app target links the composition root and nothing
+        // else: `AppEnvironment` is what builds the live services, so there is
+        // no longer anything for `@main` to inject.
         .library(name: "AppFeature", targets: ["AppFeature"]),
-        .library(name: "Services", targets: ["Services"]),
-        .library(name: "Storage", targets: ["Storage"]),
     ],
     dependencies: [
         .package(url: "https://github.com/phosphor-icons/swift", from: "2.1.0"),
@@ -96,15 +97,16 @@ let package = Package(
         ),
 
         // Composition root, not a feature: the one module that names concrete
-        // service types, and so the one that may import `Services`. Moves to
-        // `Sources/App/` in the second half of Phase 2.
+        // service types, and so the one that may import `Services`. It lives
+        // outside `Sources/Features/` because it is not one, and keeps the
+        // `AppFeature` module name because `project.yml` names the product.
         .target(
             name: "AppFeature",
             dependencies: [
                 "Core", "Services", "DesignSystem", "TestSupport", "Storage", "Worktrees",
                 "WorkspacesFeature", "ExplorerFeature", "EditorFeature",
             ],
-            path: "Sources/Features/AppFeature",
+            path: "Sources/App",
             swiftSettings: ui
         ),
 
@@ -152,7 +154,7 @@ let package = Package(
         .testTarget(
             name: "AppFeatureTests",
             dependencies: ["AppFeature", "TestSupport"],
-            path: "Tests/Features/AppFeatureTests",
+            path: "Tests/AppFeatureTests",
             swiftSettings: ui
         ),
     ]

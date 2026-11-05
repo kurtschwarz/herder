@@ -52,8 +52,10 @@ each one. Don't file new code in them without reading the plan:
 - **`Worktrees/`** — `WorktreeState` and `WorktreeStateStore`. Become `Workspace`
   and `WorkspaceRegistry` in `Core/Workspace/` in Phase 4.
 
-`AppFeature` is still at `Sources/Features/AppFeature/` and moves to `Sources/App/`
-in the second half of Phase 2. It is the composition root, not a feature.
+`AppFeature` sits at `Sources/App/`, outside `Sources/Features/`, because it is
+the composition root rather than a feature. `AppEnvironment` there is the only
+place in the codebase that names a concrete service type, and the one HerderKit
+module that may import `Services`. Keep `Herder/` to scenes alone.
 
 ## Commands
 
