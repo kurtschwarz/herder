@@ -65,4 +65,18 @@ public struct LiveFileClient: FileClient {
         }
         try FileManager.default.moveItem(at: source, to: destination)
     }
+
+    public func create(_ url: URL, isDirectory: Bool) async throws {
+        let path = url.path(percentEncoded: false)
+        guard !FileManager.default.fileExists(atPath: path) else {
+            throw FileClientError.alreadyExists(path: path)
+        }
+        if isDirectory {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        } else {
+            guard FileManager.default.createFile(atPath: path, contents: Data()) else {
+                throw FileClientError.unreadable(path: path)
+            }
+        }
+    }
 }

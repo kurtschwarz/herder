@@ -8,17 +8,31 @@ public struct ExplorerRow: Identifiable, Equatable {
         case entry(DirectoryEntry)
         /// Stands in for the contents of a folder that could not be read.
         case unreadable
+        /// The name field of a file or folder that is about to be made.
+        case creating(isDirectory: Bool)
     }
 
     public var kind: Kind
     public var depth: Int
     public var parent: URL
 
+    /// Tells one name field from the next. Without it a second field in the
+    /// same folder reuses the first's view state, including its "already
+    /// finished" flag, and never commits.
+    var creation: UUID?
+
     public var id: String {
         switch kind {
         case .entry(let entry): entry.url.absoluteString
         case .unreadable: parent.absoluteString + "#unreadable"
+        case .creating: parent.absoluteString + "#creating-" + (creation?.uuidString ?? "")
         }
+    }
+}
+
+private extension ExplorerRow {
+    var isDirectoryField: Bool {
+        if case .creating(let isDirectory) = kind { isDirectory } else { false }
     }
 }
 
@@ -55,9 +69,22 @@ public final class ExplorerModel {
     /// The item whose name is being edited in place.
     public private(set) var renaming: URL?
 
+    /// A new file or folder being named, before anything exists on disk.
+    public struct Creation: Equatable {
+        public var parent: URL
+        public var isDirectory: Bool
+        var id = UUID()
+    }
+
+    public private(set) var creating: Creation?
+
     public init(files: any FileClient) {
         self.files = files
     }
+
+    /// Whether a name field is open. Return belongs to that field, not to the
+    /// tree behind it.
+    public var isEditingName: Bool { renaming != nil || creating != nil }
 
     public var canCollapse: Bool { !expanded.isEmpty }
 
@@ -95,7 +122,43 @@ public final class ExplorerModel {
     }
 
     public func beginRenaming(_ url: URL) {
+        creating = nil
         renaming = url
+    }
+
+    /// Opens a name field inside `folder`, opening the folder if it is closed.
+    /// Nothing is made until the name is committed.
+    public func beginCreating(in folder: URL, isDirectory: Bool) async {
+        renaming = nil
+        if folder != root { expanded.insert(folder) }
+        if listings[folder] == nil { await read(folder) }
+        creating = Creation(parent: folder, isDirectory: isDirectory)
+    }
+
+    public func cancelCreating() {
+        creating = nil
+    }
+
+    /// Makes what the name field describes and shows it. A blank or unusable
+    /// name, or a refusal from the disk (the name is taken, say), makes
+    /// nothing. A new file is selected; a new folder is left closed.
+    public func commitCreating(named name: String) async {
+        guard let creation = creating else { return }
+        creating = nil
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !name.contains("/") else { return }
+
+        let url = creation.parent.appending(
+            path: name,
+            directoryHint: creation.isDirectory ? .isDirectory : .notDirectory
+        )
+        do {
+            try await files.create(url, isDirectory: creation.isDirectory)
+        } catch {
+            return
+        }
+        if !creation.isDirectory { selected = url }
+        await refresh()
     }
 
     public func cancelRenaming() {
@@ -175,11 +238,25 @@ public final class ExplorerModel {
     private func rows(in folder: URL, depth: Int) -> [ExplorerRow] {
         switch listings[folder] {
         case .loaded(let entries):
-            return entries.flatMap { entry -> [ExplorerRow] in
-                let row = ExplorerRow(kind: .entry(entry), depth: depth, parent: folder)
-                guard entry.isDirectory, expanded.contains(entry.url) else { return [row] }
-                return [row] + rows(in: entry.url, depth: depth + 1)
+            let field = creating.flatMap { $0.parent == folder ? $0 : nil }
+                .map {
+                    ExplorerRow(kind: .creating(isDirectory: $0.isDirectory), depth: depth, parent: folder, creation: $0.id)
+                }
+            var result: [ExplorerRow] = []
+            var placed = field == nil
+            for entry in entries {
+                // A new folder leads the folders, a new file leads the files.
+                if !placed, let field, field.isDirectoryField || !entry.isDirectory {
+                    result.append(field)
+                    placed = true
+                }
+                result.append(ExplorerRow(kind: .entry(entry), depth: depth, parent: folder))
+                if entry.isDirectory, expanded.contains(entry.url) {
+                    result += rows(in: entry.url, depth: depth + 1)
+                }
             }
+            if !placed, let field { result.append(field) }
+            return result
         case .unreadable:
             return [ExplorerRow(kind: .unreadable, depth: depth, parent: folder)]
         case nil:

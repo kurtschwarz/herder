@@ -87,6 +87,24 @@ import Testing
         #expect(names == ["A.txt"])
     }
 
+    @Test func createsAnEmptyFileAndAFolder() async throws {
+        try await client.create(directory.appending(path: "a.txt"), isDirectory: false)
+        try await client.create(directory.appending(path: "sub"), isDirectory: true)
+
+        #expect(try await client.read(path("a.txt")) == "")
+        let children = try await client.children(of: directory)
+        #expect(children.first { $0.name == "sub" }?.isDirectory == true)
+    }
+
+    @Test func creatingOverAnExistingNameThrowsAndKeepsIt() async throws {
+        try await client.write("keep", to: path("a.txt"))
+
+        await #expect(throws: FileClientError.alreadyExists(path: path("a.txt"))) {
+            try await client.create(directory.appending(path: "a.txt"), isDirectory: false)
+        }
+        #expect(try await client.read(path("a.txt")) == "keep")
+    }
+
     @Test func writeCreatesIntermediateDirectories() async throws {
         try await client.write("deep", to: path("one/two/three.txt"))
         #expect(try await client.read(path("one/two/three.txt")) == "deep")

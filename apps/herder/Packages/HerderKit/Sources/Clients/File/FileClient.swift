@@ -17,6 +17,10 @@ public protocol FileClient: Sendable {
     /// Moves the file or folder at `source` to `destination`. Throws
     /// `alreadyExists` rather than replacing what is there.
     func move(_ source: URL, to destination: URL) async throws
+
+    /// Makes an empty file, or a folder, at `url`. Throws `alreadyExists`
+    /// rather than replacing what is there.
+    func create(_ url: URL, isDirectory: Bool) async throws
 }
 
 /// One item inside a folder.

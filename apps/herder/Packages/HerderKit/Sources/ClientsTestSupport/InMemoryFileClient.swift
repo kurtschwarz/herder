@@ -11,6 +11,7 @@ public final class InMemoryFileClient: FileClient {
         var unreadable: Set<URL> = []
         var reads: [URL] = []
         var moves: [Move] = []
+        var creations: [DirectoryEntry] = []
     }
 
     private let storage = Mutex<[String: String]>([:])
@@ -109,5 +110,25 @@ public final class InMemoryFileClient: FileClient {
             self.source = source
             self.destination = destination
         }
+    }
+
+    public func create(_ url: URL, isDirectory: Bool) async throws {
+        let parent = url.deletingLastPathComponent()
+        try folders.withLock { state in
+            let parentKey = state.children.keys.first { $0.path == parent.path } ?? parent
+            var siblings = state.children[parentKey] ?? []
+            guard !siblings.contains(where: { $0.url.path == url.path }) else {
+                throw FileClientError.alreadyExists(path: url.path(percentEncoded: false))
+            }
+            siblings.append(DirectoryEntry(url: url, isDirectory: isDirectory))
+            state.children[parentKey] = siblings
+            if isDirectory { state.children[url] = [] }
+            state.creations.append(DirectoryEntry(url: url, isDirectory: isDirectory))
+        }
+    }
+
+    /// Every file and folder made, in order.
+    public var creations: [DirectoryEntry] {
+        folders.withLock { $0.creations }
     }
 }

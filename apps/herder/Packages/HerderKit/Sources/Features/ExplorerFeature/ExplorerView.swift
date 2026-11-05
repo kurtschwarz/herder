@@ -6,11 +6,19 @@ import SwiftUI
 
 /// The explorer pane's content: a header over the file tree of the selected
 /// worktree.
+/// What can hold keyboard focus in the explorer.
+enum ExplorerFocus: Hashable {
+    case tree
+    case nameField
+}
+
 public struct ExplorerView: View {
     private let model: ExplorerModel
 
-    /// The tree itself, so Return reaches it once a file has been clicked.
-    @FocusState private var isTreeFocused: Bool
+    /// Where keyboard focus is: the tree, so Return reaches it once a file has
+    /// been clicked, or a name field. One value for both, so the two can never
+    /// hold focus at once.
+    @FocusState private var focus: ExplorerFocus?
 
     public init(model: ExplorerModel) {
         self.model = model
@@ -26,20 +34,25 @@ public struct ExplorerView: View {
             if let root = model.root {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        RootLabel(url: root)
+                        RootLabel(url: root, model: model)
                         ForEach(model.rows) { row in
-                            ExplorerRowView(row: row, model: model, focusTree: { isTreeFocused = true })
+                            ExplorerRowView(row: row, model: model, focus: $focus)
                         }
                     }
                     .padding(.horizontal, Theme.Spacing.tight)
                     .padding(.bottom, Theme.Spacing.loose)
                 }
                 .scrollIndicators(.hidden)
+                // Empty space below the rows. A row's own menu wins over this one.
+                .contextMenu { NewItemMenu(model: model, folder: root) }
                 .focusable()
-                .focused($isTreeFocused)
+                .focused($focus, equals: .tree)
                 .focusEffectDisabled()
                 .onKeyPress(.return) {
-                    guard let selected = model.selected, model.renaming == nil else { return .ignored }
+                    // Return in a name field also reaches here, and the file
+                    // just created is selected: without this it would start
+                    // renaming that file and drop the folder being named.
+                    guard let selected = model.selected, !model.isEditingName else { return .ignored }
                     model.beginRenaming(selected)
                     return .handled
                 }
@@ -91,6 +104,7 @@ private struct ExplorerHeader: View {
 /// its children are always showing.
 private struct RootLabel: View {
     let url: URL
+    let model: ExplorerModel
 
     var body: some View {
         Text(url.lastPathComponent)
@@ -103,7 +117,22 @@ private struct RootLabel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .help(url.path(percentEncoded: false))
-            .contextMenu { RevealInFinder(url: url) }
+            .contextMenu {
+                NewItemMenu(model: model, folder: url)
+                Divider()
+                RevealInFinder(url: url)
+            }
+    }
+}
+
+/// New File and New Folder, creating inside `folder`.
+struct NewItemMenu: View {
+    let model: ExplorerModel
+    let folder: URL
+
+    var body: some View {
+        Button("New File") { Task { await model.beginCreating(in: folder, isDirectory: false) } }
+        Button("New Folder") { Task { await model.beginCreating(in: folder, isDirectory: true) } }
     }
 }
 
@@ -132,5 +161,6 @@ private struct PreviewFiles: FileClient {
     func exists(_ path: String) async -> Bool { true }
     func children(of url: URL) async throws -> [DirectoryEntry] { [] }
     func move(_ source: URL, to destination: URL) async throws {}
+    func create(_ url: URL, isDirectory: Bool) async throws {}
 }
 #endif

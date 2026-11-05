@@ -245,4 +245,111 @@ import Testing
         #expect(model.renaming == nil)
         #expect(files.moves.isEmpty)
     }
+
+    @Test func aNameFieldAppearsAtTheTopOfTheFoldersForANewFolder() async {
+        files.seed(children: [dir("Sources"), file("a.txt")], of: root)
+        await model.setRoot(root)
+
+        await model.beginCreating(in: root, isDirectory: true)
+
+        #expect(model.rows.map(\.kind) == [
+            .creating(isDirectory: true), .entry(dir("Sources")), .entry(file("a.txt")),
+        ])
+    }
+
+    @Test func aNameFieldAppearsAmongTheFilesForANewFile() async {
+        files.seed(children: [dir("Sources"), file("a.txt")], of: root)
+        await model.setRoot(root)
+
+        await model.beginCreating(in: root, isDirectory: false)
+
+        #expect(model.rows.map(\.kind) == [
+            .entry(dir("Sources")), .creating(isDirectory: false), .entry(file("a.txt")),
+        ])
+    }
+
+    @Test func creatingInAClosedFolderOpensItAndIndentsTheField() async {
+        let sources = dir("Sources")
+        files.seed(children: [sources], of: root)
+        files.seed(children: [file("App.swift", in: sources.url)], of: sources.url)
+        await model.setRoot(root)
+
+        await model.beginCreating(in: sources.url, isDirectory: false)
+
+        #expect(model.isExpanded(sources.url))
+        #expect(model.rows.map(\.depth) == [0, 1, 1])
+    }
+
+    @Test func committingMakesTheFileAndSelectsIt() async {
+        files.seed(children: [file("a.txt")], of: root)
+        await model.setRoot(root)
+        await model.beginCreating(in: root, isDirectory: false)
+
+        await model.commitCreating(named: "b.txt")
+
+        #expect(files.creations == [file("b.txt")])
+        #expect(names(model) == ["a.txt", "b.txt"])
+        #expect(model.selected == file("b.txt").url)
+        #expect(model.creating == nil)
+    }
+
+    @Test func committingMakesTheFolder() async {
+        files.seed(children: [file("a.txt")], of: root)
+        await model.setRoot(root)
+        await model.beginCreating(in: root, isDirectory: true)
+
+        await model.commitCreating(named: "Lib")
+
+        #expect(files.creations.map(\.name) == ["Lib"])
+        #expect(files.creations.map(\.isDirectory) == [true])
+        #expect(names(model) == ["Lib", "a.txt"])
+    }
+
+    @Test(arguments: ["", "   ", "x/y"])
+    func aBlankOrUnusableNewNameMakesNothing(name: String) async {
+        files.seed(children: [], of: root)
+        await model.setRoot(root)
+        await model.beginCreating(in: root, isDirectory: false)
+
+        await model.commitCreating(named: name)
+
+        #expect(files.creations.isEmpty)
+        #expect(model.creating == nil)
+        #expect(model.rows.isEmpty)
+    }
+
+    @Test func aNewNameAlreadyTakenMakesNothing() async {
+        files.seed(children: [file("a.txt")], of: root)
+        await model.setRoot(root)
+        await model.beginCreating(in: root, isDirectory: false)
+
+        await model.commitCreating(named: "a.txt")
+
+        #expect(files.creations.isEmpty)
+        #expect(names(model) == ["a.txt"])
+    }
+
+    @Test func aNameFieldCountsAsEditing() async {
+        files.seed(children: [file("a.txt")], of: root)
+        await model.setRoot(root)
+        #expect(!model.isEditingName)
+
+        await model.beginCreating(in: root, isDirectory: true)
+        #expect(model.isEditingName)
+
+        model.cancelCreating()
+        model.beginRenaming(file("a.txt").url)
+        #expect(model.isEditingName)
+    }
+
+    @Test func cancellingRemovesTheNameField() async {
+        files.seed(children: [], of: root)
+        await model.setRoot(root)
+        await model.beginCreating(in: root, isDirectory: false)
+
+        model.cancelCreating()
+
+        #expect(model.rows.isEmpty)
+        #expect(files.creations.isEmpty)
+    }
 }
