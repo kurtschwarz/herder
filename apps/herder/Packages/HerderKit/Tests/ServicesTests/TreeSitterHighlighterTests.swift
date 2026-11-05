@@ -26,22 +26,22 @@ import Testing
         #expect(tokens.contains { $0.kind == .string })
     }
 
-    @Test func aTokenCoversExactlyTheTextItStyles() async {
+    @Test func aTokenCoversExactlyTheTextItStyles() async throws {
         let source = "let name = \"Herder\"\n"
         let tokens = await highlighter.tokens(in: source, ofFileNamed: "A.swift")
 
-        let string = try? #require(tokens.first { $0.kind == .string })
-        #expect(string.map { text($0, of: source) } == "\"Herder\"")
+        let string = try #require(tokens.first(where: { $0.kind == .string }))
+        #expect(text(string, of: source) == "\"Herder\"")
     }
 
     /// The reason the crate converts offsets before handing them over. Byte
     /// offsets would put this string two units to the right of where it is.
-    @Test func offsetsAreUTF16SoTextAfterAnEmojiIsStillRight() async {
+    @Test func offsetsAreUTF16SoTextAfterAnEmojiIsStillRight() async throws {
         let source = "// 🐺🐺\nlet name = \"Herder\"\n"
         let tokens = await highlighter.tokens(in: source, ofFileNamed: "A.swift")
 
-        let string = try? #require(tokens.first { $0.kind == .string })
-        #expect(string.map { text($0, of: source) } == "\"Herder\"")
+        let string = try #require(tokens.first(where: { $0.kind == .string }))
+        #expect(text(string, of: source) == "\"Herder\"")
     }
 
     @Test func aFileNoGrammarClaimsComesBackEmpty() async {

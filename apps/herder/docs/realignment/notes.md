@@ -67,3 +67,24 @@ as D1–D10 in the plan.
   sources of truth for the store. Tests that passed `ModelContext(container)`
   now pass the container and get `mainContext`, which is what the app always
   used.
+
+## From Phase 3 (StateStore)
+
+- **`BookmarkClient` does disk I/O synchronously**, on the main actor:
+  `makeBookmark` and `resolve` both call through to `URL`'s bookmark APIs. Making
+  them `async` cascades into `WorkspaceStore.open()` and then
+  `AppEnvironment.start()`, which is how launch is sequenced. Phase 4f rewrites
+  launch sequencing, so that is where this belongs. Recorded in the plan's Phase
+  3 audit too, so it cannot be mistaken for an oversight.
+- **A pre-existing `#require` warning surfaced** in
+  `TreeSitterHighlighterTests` once the file was recompiled from scratch:
+  `try? #require(tokens.first { ... })` followed by `.map`. Rewritten as
+  `try #require(tokens.first(where:))` with the test marked `throws`, which is
+  what it meant anyway. The code was byte-identical to before the realignment
+  started, so the "zero warnings" baseline in the survey was measured against a
+  cached build and was slightly optimistic. Both warnings are now gone.
+- **Snapshot types must be `nonisolated`.** `StorageTests` defaults to
+  `MainActor`, which isolates a nested struct's synthesized `Codable`
+  conformance and leaves it unable to satisfy `StateStore`'s `Sendable`
+  requirement. Harmless for the real snapshots, which live in `Core` with no
+  such default, but worth knowing before writing a fixture in a `ui` target.

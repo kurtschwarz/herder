@@ -61,12 +61,7 @@ public enum WorkspaceSchemaV1: VersionedSchema {
     }
 }
 
-/// The current version, so callers never name a version they don't care about.
+/// The current version of this model, so callers never name a version they
+/// don't care about. `Workspace` is unchanged in V2, which carries it over
+/// rather than redeclaring it.
 public typealias Workspace = WorkspaceSchemaV1.Workspace
-
-/// No migrations yet. New versions are appended here with a stage apiece.
-public enum WorkspaceMigrationPlan: SchemaMigrationPlan {
-    public static var schemas: [any VersionedSchema.Type] { [WorkspaceSchemaV1.self] }
-
-    public static var stages: [MigrationStage] { [] }
-}

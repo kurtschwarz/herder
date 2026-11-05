@@ -195,13 +195,20 @@ The singleton check is enabled from the start, because the survey found nothing 
 
 **Goal:** every external dependency sits behind a protocol in `Core`, with its implementation in `Services` and a fake in `TestSupport`.
 
-Phase 2 did the moving. What's left is the gaps the survey found, one task each:
+Phase 2 did the moving. What's left is the gaps the survey found, one task each.
 
-1. **Audit.** Confirm each of the seven protocols (`FileClient`, `GitClient`, `FileWatcherClient`, `BookmarkClient`, `FolderPickerClient`, `ClockClient`, `SyntaxHighlighter`) is `Sendable`, uses Core types only, and is `async` wherever it does I/O. Rename `*Client` to the architecture's vocabulary only if it reads better; note the decision either way.
+**Two of the five tasks moved to Phase 4.** `WorkspacesFeature` imports `Storage` in five files and passes the SwiftData `Workspace` objects themselves around — `@Query` in the view, `Workspace` as a parameter in `WorkspaceRow`, `WorkspaceSection` and `beginNewSession(in:)`. So `Storage` cannot become `Services/Persistence/` yet: a feature would then import `Services`, which is the one rule Phase 2 existed to make enforceable. Weaning the feature off SwiftData types is Phase 4a and 4e, and `RepositoryStore` and `WorkspaceAccess` go with it. `Storage` keeps its name and its place until then, which `Package.swift` and `AGENTS.md` both say at the target.
+
+1. **Audit.** Done. Findings:
+   - All seven protocols (`FileClient`, `GitClient`, `FileWatcherClient`, `BookmarkClient`, `FolderPickerClient`, `ClockClient`, `SyntaxHighlighter`) are `Sendable` and use Core types only.
+   - **`*Client` stays.** The names are consistent and read fine, and renaming seven protocols, seven implementations, seven fakes and every call site buys no boundary that `Package.swift` isn't already enforcing. Substitute `*Client` wherever `ARCHITECTURE.md` says `*Service`.
+   - **The `Live` prefix stays, and is now load-bearing.** It used to separate an implementation from its protocol inside one target; now it stops `Services.GitClient` colliding with `Core.GitClient` at every site that imports both.
+   - **`BookmarkClient` is synchronous and does I/O**, which `ARCHITECTURE.md` says it shouldn't be: `makeBookmark` and `resolve` hit the disk, on the main actor. Making them `async` forces `WorkspaceStore.open()` async, which forces `AppEnvironment.start()` async, which changes how launch is sequenced — and Phase 4f rewrites launch sequencing anyway. Deferred to 4f deliberately, not overlooked.
+   - **`FileWatcherClient.watch` is not `async`** and should not be: it returns an `AsyncStream`, so the suspension is in the iteration.
 2. ~~**Split `Clients/Git`.**~~ Done in Phase 2. `GitStatus`, `GitChange`, `GitWorktreeStatus`, `GitWorktree`, `GitRepositoryKind` and `GitClientError` went to `Core/Models/`, and so did `GitRefName` and `GitWorktreeLocation`: they are pure string and URL arithmetic, and `NewSessionModel` needs them to refuse a branch name as it is typed, which a feature cannot do through `Services`.
-3. **`WorkspaceAccess`** (sandbox access counting) moves to `Services/FileSystem/` behind a protocol in `Core/Services/`.
-4. **`RepositoryStore`.** Define the protocol in `Core/Services/` for what `WorkspaceStore` does today — validate, add, open, relocate, rename, delete, reorder, list. Implement it in `Services/Persistence/`. This is what gets `@Query` out of the feature in Phase 4.
-5. **Persistence.** Define `StateStore` in `Core/Persistence/`. Implement `SwiftDataStateStore` in `Services/Persistence/`, storing Codable snapshots as JSON blobs in a single new model:
+3. ~~**`WorkspaceAccess`**~~ → Phase 4. It counts security-scoped folder access per `Workspace.id`, so it cannot be separated from the `Repository` rename, and an `actor` version of it pulls the same `async` cascade as `BookmarkClient`.
+4. ~~**`RepositoryStore`**~~ → Phase 4a and 4e, for the reason above: the protocol has to return a Core value type, and that means the `Repository` rename and the `@Query` replacement happen together or not at all.
+5. **Persistence.** Done. `StateStore` in `Core/Persistence/`, `SwiftDataStateStore` in `Storage/` — not `Services/Persistence/` yet — storing Codable snapshots as JSON blobs in a single new model:
 
 ```swift
 @Model final class StoredState {
@@ -211,13 +218,17 @@ Phase 2 did the moving. What's left is the gaps the survey found, one task each:
 }
 ```
 
-Add `StoredState` to the existing container's schema as a new schema version. **Leave `Repository` alone.** Views keep using it until Phase 4.
+`StoredState` arrived as schema **V2**, with a `lightweight` migration stage from V1. V2 carries `Workspace` over rather than redeclaring it: a version that redeclares an unaltered model gives two classes one table. **The `Workspace` table is untouched**, which is the point — it holds the one thing in the app that cannot be rebuilt from disk (D6).
 
-The blob approach is deliberate: it makes the Phase 7 swap to JSON files trivial.
+The blob approach is deliberate: it makes the Phase 7 swap to JSON files trivial, because the bytes in a row are already what a file would hold.
+
+`SwiftDataStateStore` is an `actor` that makes a fresh `ModelContext` per call. A `ModelContext` is not `Sendable`, so it has to stay in one isolation domain; holding one would also be a second place keeping unsaved changes to a store the app's `mainContext` writes to.
+
+`AppEnvironment` builds it and holds it as `state`. Nothing reads it until Phase 4 — built now so that the construction is proven before anything depends on it.
 
 **Not in scope:** Process/PTY, Agents, Search and Settings services. Nothing in the app uses them yet, and a protocol with no caller and no implementation is a guess. They arrive with their features.
 
-**Done when:** features and `AppFeature` touch the disk, processes, git and Rust only through protocols from `Core`.
+**Done when:** features and `AppFeature` touch the disk, processes, git and Rust only through protocols from `Core`. Still outstanding at the end of this phase: `WorkspacesFeature` reaches SwiftData through `Storage`. That is Phase 4's first job.
 
 ---
 
@@ -346,14 +357,14 @@ added to docs/realignment/notes.md.
 - [x] **P2** Core, Services, TestSupport, boundary script, `AppFeature` move
   - [x] 2a module split: `Core`, `Services`, `TestSupport`, boundary script, `just check`
   - [x] 2b `AppFeature` → `Sources/App/`, single product, `AppEnvironment`
-- [ ] **P3** Service protocols
+- [x] **P3** Service protocols *(two tasks moved to P4; see the phase)*
   - [ ] Audit the seven existing protocols
   - [ ] Split `Clients/Git` into values and parsers
   - [ ] `WorkspaceAccess` behind a protocol
   - [ ] `RepositoryStore`
   - [ ] `StateStore` (SwiftData-backed)
 - [ ] **P4** Workspace state *(gate: smoke test)*
-  - [ ] 4a rename to `Workspace` / `WorkspaceRegistry` / `Repository`
+  - [ ] 4a rename to `Workspace` / `WorkspaceRegistry` / `Repository`, plus `RepositoryStore` and `WorkspaceAccess` behind protocols
   - [ ] 4b snapshot and UI-state types + tests
   - [ ] 4c `WindowModel` and per-window active workspace
   - [ ] 4d feature UI state onto the workspace

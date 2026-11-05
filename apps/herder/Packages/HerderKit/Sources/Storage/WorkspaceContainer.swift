@@ -32,7 +32,7 @@ public enum WorkspaceContainer {
 
     private static func container(for configuration: ModelConfiguration) throws -> ModelContainer {
         try ModelContainer(
-            for: Schema(versionedSchema: WorkspaceSchemaV1.self),
+            for: Schema(versionedSchema: WorkspaceSchemaV2.self),
             migrationPlan: WorkspaceMigrationPlan.self,
             configurations: configuration
         )

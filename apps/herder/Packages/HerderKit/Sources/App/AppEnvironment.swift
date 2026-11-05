@@ -27,6 +27,14 @@ public final class AppEnvironment {
     /// it to `.modelContainer(_:)`, which is what puts it in reach of `@Query`.
     public let container: ModelContainer
 
+    /// Where the app keeps its own state: open workspaces, tabs, expanded
+    /// folders. App-scoped, because one store serves every window.
+    ///
+    /// Nothing reads it yet. It is built here from Phase 3 so that Phase 4 has
+    /// something to restore from, and so the construction is proven before
+    /// anything depends on it.
+    public let state: any StateStore
+
     /// Every change to the workspace list goes through here. Views read the list
     /// itself with `@Query` against the same container.
     public let workspaces: WorkspaceStore
@@ -88,6 +96,7 @@ public final class AppEnvironment {
         highlighter: any SyntaxHighlighter = TreeSitterHighlighter()
     ) {
         self.container = container
+        self.state = SwiftDataStateStore(container: container)
         let workspaces = WorkspaceStore(context: container.mainContext, bookmarks: bookmarks, git: git)
         self.workspaces = workspaces
         self.workspaceList = WorkspacesModel(store: workspaces, git: git, picker: folderPicker)

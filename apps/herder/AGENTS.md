@@ -31,7 +31,8 @@ rationale.
 | A design token | `DesignSystem/Theme.swift` |
 | A colour for a token kind | `DesignSystem/Theme.swift`, paired in `EditorFeature/Platform/SyntaxAttributes.swift` |
 | Anything that constructs a concrete service | `AppFeature` — nowhere else |
-| A persisted type | `Storage/` for now, versioned in `WorkspaceSchemaV1`. Becomes `Services/Persistence/` in Phase 3. |
+| Something the app persists about itself | nothing — encode it to a snapshot and put it through `StateStore`. No schema version, no migration. |
+| A new SwiftData model (rare; prefer the above) | `Storage/`, in a new `WorkspaceSchemaV<n>` with a migration stage |
 | Live state two features both read | `Worktrees/` for now, not whichever feature needed it first. Becomes `Core/Workspace/` in Phase 4. |
 | A language for the editor to highlight | `../../packages/syntax-highlighter`, not here. See its `AGENTS.md`. |
 
@@ -47,8 +48,11 @@ A new feature target needs `path: "Sources/Features/<Name>"` and its test target
 Two modules still sit outside the target layout, and `Package.swift` says so at
 each one. Don't file new code in them without reading the plan:
 
-- **`Storage/`** — SwiftData models, schema and container. Goes to
-  `Services/Persistence/` in Phase 3, behind a `StateStore` protocol.
+- **`Storage/`** — SwiftData models, schema, container, and `SwiftDataStateStore`.
+  Goes to `Services/Persistence/` in Phase 4, once `WorkspacesFeature` stops
+  passing `@Model` objects around and can drop `import Storage`. Until then a
+  feature still reaches SwiftData through it, which is why the boundary check
+  for that is the one still commented out.
 - **`Worktrees/`** — `WorktreeState` and `WorktreeStateStore`. Become `Workspace`
   and `WorkspaceRegistry` in `Core/Workspace/` in Phase 4.
 
