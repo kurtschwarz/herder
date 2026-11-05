@@ -174,4 +174,75 @@ import Testing
 
         #expect(model.selected == file("a.txt").url)
     }
+
+    @Test func renamingMovesTheFileAndShowsTheNewName() async {
+        let old = file("a.txt")
+        files.seed(children: [old, file("z.txt")], of: root)
+        await model.setRoot(root)
+        model.beginRenaming(old.url)
+
+        await model.commitRename(old, to: "b.txt")
+
+        #expect(files.moves == [.init(source: old.url, destination: file("b.txt").url)])
+        #expect(names(model) == ["b.txt", "z.txt"])
+        #expect(model.renaming == nil)
+    }
+
+    @Test func renamingAFolderKeepsItOpen() async {
+        let sources = dir("Sources")
+        files.seed(children: [sources], of: root)
+        files.seed(children: [file("App.swift", in: sources.url)], of: sources.url)
+        await model.setRoot(root)
+        await model.toggle(sources.url)
+
+        await model.commitRename(sources, to: "Lib")
+
+        #expect(names(model) == ["Lib", "App.swift"])
+    }
+
+    @Test func renamingTheSelectedFileKeepsItSelected() async {
+        let old = file("a.txt")
+        files.seed(children: [old], of: root)
+        await model.setRoot(root)
+        model.select(old.url)
+
+        await model.commitRename(old, to: "b.txt")
+
+        #expect(model.selected == file("b.txt").url)
+    }
+
+    @Test(arguments: ["", "   ", "a.txt", "x/y"])
+    func aNameThatChangesNothingOrCannotBeUsedTouchesNoDisk(name: String) async {
+        let old = file("a.txt")
+        files.seed(children: [old], of: root)
+        await model.setRoot(root)
+
+        await model.commitRename(old, to: name)
+
+        #expect(files.moves.isEmpty)
+        #expect(names(model) == ["a.txt"])
+    }
+
+    @Test func aNameAlreadyTakenLeavesTheTreeAsItWas() async {
+        let old = file("a.txt")
+        files.seed(children: [old, file("b.txt")], of: root)
+        await model.setRoot(root)
+
+        await model.commitRename(old, to: "b.txt")
+
+        #expect(names(model) == ["a.txt", "b.txt"])
+        #expect(model.renaming == nil)
+    }
+
+    @Test func cancellingEndsTheEditWithoutRenaming() async {
+        let old = file("a.txt")
+        files.seed(children: [old], of: root)
+        await model.setRoot(root)
+        model.beginRenaming(old.url)
+
+        model.cancelRenaming()
+
+        #expect(model.renaming == nil)
+        #expect(files.moves.isEmpty)
+    }
 }

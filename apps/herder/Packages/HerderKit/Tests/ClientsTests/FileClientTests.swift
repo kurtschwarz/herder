@@ -59,6 +59,34 @@ import Testing
         }
     }
 
+    @Test func movingRenamesOnDisk() async throws {
+        try await client.write("x", to: path("a.txt"))
+
+        try await client.move(directory.appending(path: "a.txt"), to: directory.appending(path: "b.txt"))
+
+        #expect(await !client.exists(path("a.txt")))
+        #expect(try await client.read(path("b.txt")) == "x")
+    }
+
+    @Test func movingOntoAnExistingNameThrowsAndKeepsBoth() async throws {
+        try await client.write("a", to: path("a.txt"))
+        try await client.write("b", to: path("b.txt"))
+
+        await #expect(throws: FileClientError.alreadyExists(path: path("b.txt"))) {
+            try await client.move(directory.appending(path: "a.txt"), to: directory.appending(path: "b.txt"))
+        }
+        #expect(try await client.read(path("b.txt")) == "b")
+    }
+
+    @Test func movingCanOnlyChangeCase() async throws {
+        try await client.write("x", to: path("a.txt"))
+
+        try await client.move(directory.appending(path: "a.txt"), to: directory.appending(path: "A.txt"))
+
+        let names = try await client.children(of: directory).map(\.name)
+        #expect(names == ["A.txt"])
+    }
+
     @Test func writeCreatesIntermediateDirectories() async throws {
         try await client.write("deep", to: path("one/two/three.txt"))
         #expect(try await client.read(path("one/two/three.txt")) == "deep")

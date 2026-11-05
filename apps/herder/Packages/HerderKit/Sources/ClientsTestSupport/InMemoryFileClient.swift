@@ -10,6 +10,7 @@ public final class InMemoryFileClient: FileClient {
         var children: [URL: [DirectoryEntry]] = [:]
         var unreadable: Set<URL> = []
         var reads: [URL] = []
+        var moves: [Move] = []
     }
 
     private let storage = Mutex<[String: String]>([:])
@@ -67,6 +68,46 @@ public final class InMemoryFileClient: FileClient {
                 throw FileClientError.unreadable(path: url.path(percentEncoded: false))
             }
             return children
+        }
+    }
+
+    public func move(_ source: URL, to destination: URL) async throws {
+        let parent = source.deletingLastPathComponent()
+        let path = destination.path(percentEncoded: false)
+        try folders.withLock { state in
+            // Seeded and asked-for URLs may differ by a trailing slash.
+            func key(_ url: URL) -> URL {
+                state.children.keys.first { $0.path == url.path } ?? url
+            }
+            let parentKey = key(parent)
+            var siblings = state.children[parentKey] ?? []
+            guard siblings.contains(where: { $0.url.path == source.path }) else {
+                throw FileClientError.notFound(path: source.path(percentEncoded: false))
+            }
+            guard !siblings.contains(where: { $0.url.path == destination.path }) else {
+                throw FileClientError.alreadyExists(path: path)
+            }
+            siblings = siblings.map {
+                $0.url.path == source.path ? DirectoryEntry(url: destination, isDirectory: $0.isDirectory) : $0
+            }
+            state.children[parentKey] = siblings
+            state.children[destination] = state.children.removeValue(forKey: key(source))
+            state.moves.append(Move(source: source, destination: destination))
+        }
+    }
+
+    /// Every move made, in order.
+    public var moves: [Move] {
+        folders.withLock { $0.moves }
+    }
+
+    public struct Move: Equatable, Sendable {
+        public var source: URL
+        public var destination: URL
+
+        public init(source: URL, destination: URL) {
+            self.source = source
+            self.destination = destination
         }
     }
 }

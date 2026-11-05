@@ -13,6 +13,10 @@ public protocol FileClient: Sendable {
     /// What is directly inside the folder at `url`, in no particular order.
     /// Throws for a folder that is missing or cannot be read.
     func children(of url: URL) async throws -> [DirectoryEntry]
+
+    /// Moves the file or folder at `source` to `destination`. Throws
+    /// `alreadyExists` rather than replacing what is there.
+    func move(_ source: URL, to destination: URL) async throws
 }
 
 /// One item inside a folder.
@@ -35,4 +39,5 @@ public enum FileClientError: Error, Equatable {
     case notFound(path: String)
     case notUTF8(path: String)
     case unreadable(path: String)
+    case alreadyExists(path: String)
 }

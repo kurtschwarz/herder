@@ -53,4 +53,16 @@ public struct LiveFileClient: FileClient {
             return DirectoryEntry(url: child, isDirectory: isDirectory)
         }
     }
+
+    public func move(_ source: URL, to destination: URL) async throws {
+        // A rename that only changes case finds "something" at the destination:
+        // the source itself, on a case-insensitive volume.
+        let isCaseChange = source.deletingLastPathComponent() == destination.deletingLastPathComponent()
+            && source.lastPathComponent.lowercased() == destination.lastPathComponent.lowercased()
+        let path = destination.path(percentEncoded: false)
+        if !isCaseChange, FileManager.default.fileExists(atPath: path) {
+            throw FileClientError.alreadyExists(path: path)
+        }
+        try FileManager.default.moveItem(at: source, to: destination)
+    }
 }

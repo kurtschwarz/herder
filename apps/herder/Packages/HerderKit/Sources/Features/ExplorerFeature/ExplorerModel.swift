@@ -52,6 +52,9 @@ public final class ExplorerModel {
     /// The file the user last clicked.
     public private(set) var selected: URL?
 
+    /// The item whose name is being edited in place.
+    public private(set) var renaming: URL?
+
     public init(files: any FileClient) {
         self.files = files
     }
@@ -89,6 +92,52 @@ public final class ExplorerModel {
 
     public func select(_ file: URL) {
         selected = file
+    }
+
+    public func beginRenaming(_ url: URL) {
+        renaming = url
+    }
+
+    public func cancelRenaming() {
+        renaming = nil
+    }
+
+    /// Renames `entry` on disk, then re-reads so the tree shows the result. A
+    /// blank, unchanged or unusable name, or a refusal from the disk (the name
+    /// is taken, say), leaves everything as it was.
+    public func commitRename(_ entry: DirectoryEntry, to name: String) async {
+        renaming = nil
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != entry.name, !name.contains("/") else { return }
+
+        let destination = entry.url.deletingLastPathComponent()
+            .appending(path: name, directoryHint: entry.isDirectory ? .isDirectory : .notDirectory)
+        do {
+            try await files.move(entry.url, to: destination)
+        } catch {
+            return
+        }
+
+        // What was open under a renamed folder is still open under its new name.
+        expanded = Set(expanded.map { Self.moved($0, from: entry.url, to: destination) })
+        listings = Dictionary(
+            listings.map { (Self.moved($0.key, from: entry.url, to: destination), $0.value) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        if let selected { self.selected = Self.moved(selected, from: entry.url, to: destination) }
+        await refresh()
+    }
+
+    /// `url` rebased onto `new` if it is `old` or lies inside it.
+    private static func moved(_ url: URL, from old: URL, to new: URL) -> URL {
+        let oldPath = old.path(percentEncoded: false)
+        let path = url.path(percentEncoded: false)
+        if path == oldPath { return new }
+        guard path.hasPrefix(oldPath + "/") else { return url }
+        return new.appending(
+            path: String(path.dropFirst(oldPath.count + 1)),
+            directoryHint: url.hasDirectoryPath ? .isDirectory : .notDirectory
+        )
     }
 
     /// Closes every folder below the root.
