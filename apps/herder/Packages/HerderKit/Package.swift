@@ -82,12 +82,10 @@ let package = Package(
             swiftSettings: ui
         ),
 
-        // The module name is already right; the folder still repeats the
-        // suffix. It becomes `Sources/Features/Editor` in Phase 5.
         .target(
             name: "EditorFeature",
             dependencies: ["Core", "DesignSystem", "TestSupport"],
-            path: "Sources/Features/EditorFeature",
+            path: "Sources/Features/Editor",
             swiftSettings: ui
         ),
 

@@ -342,3 +342,33 @@ whatever the code currently says and pass.
   `toggle`, the renaming and creating methods, `setWatching` — is internal,
   because `FileTreeView` lives in the same module and `AppView` never touched
   them. `FileTreeRow` went internal with them.
+
+## From Phase 5, Editor
+
+- **Highlighting still goes into text storage attributes**, not into
+  `NSTextLayoutManager` rendering attributes. `ARCHITECTURE.md` asks for the
+  move — it is faster and keeps colour out of the undo stack — but it changes
+  how the pane paints, which is behaviour, and this phase was a rename. It is a
+  follow-up, and the natural time for it is whenever the editor stops being
+  read-only, because the undo-stack half of the argument only starts to matter
+  then.
+- **The editor's preview cannot show colour.** The real highlighter lives in
+  `Services` and a feature may not import it, so the preview runs
+  `NoSyntaxHighlighter` and shows the breadcrumb, the gutter and the layout.
+  Colour is covered by `SyntaxAttributesTests` and by `EditorModelTests`, which
+  is the one feature test target that depends on `Services` for exactly this
+  reason. Not a gap, but worth knowing before someone "fixes" the preview.
+- **`SyntaxAttributes`' doc comment named the `Syntax` target**, which Phase 2
+  dissolved into `Core` and `Services`. Corrected in passing. Phase 6 should
+  check for others like it.
+
+## After Phase 5
+
+- **Three features, three naming conventions resolved into one.** Every feature
+  is now `Sources/Features/<Name>/` with module `<Name>Feature`, and no feature
+  exports more than a model and a view or two. The next feature has a shape to
+  copy.
+- **Two pieces of user-facing copy still use the old vocabulary**: the sidebar
+  header and modal say "workspace" where they mean repository, and the file
+  tree's header says "Explorer". Both were left under rule 3 and both want the
+  same small copy decision from Kurt.

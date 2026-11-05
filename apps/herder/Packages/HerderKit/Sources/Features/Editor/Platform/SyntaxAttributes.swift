@@ -6,7 +6,7 @@ import SwiftUI
 /// Turns token kinds into text attributes.
 ///
 /// The one place that knows both what a token means and what it should look
-/// like. `Syntax` emits kinds and no colours; `DesignSystem` holds colours and
+/// like. `Core` emits kinds and no colours; `DesignSystem` holds colours and
 /// no kinds. Keeping the pairing here means a grammar can be added without
 /// touching either.
 ///

@@ -359,7 +359,7 @@ Order if running serially: Repositories, FileTree, Editor.
 - **FileTree. Done.** `FileTreeFeature` at `Sources/Features/FileTree/`, with `FileTreeModel`, `FileTreeView`, `FileTreeRow`, `FileTreeRowView`, `FileTreeFocus` and `FileTreeUIState`. The entry view is `FileTreeView`, not the `FileTreePanel` this phase's step 3 names in passing: every other pane in the app is `<Name>View`, and one odd name out is worse than matching the parenthetical.
 
   **Two strings are deliberately untouched.** The pane header still reads "Explorer" — a behaviour change under rule 3, like the sidebar's "Workspaces". And `FileTreeUIState.persistenceKey` is still `"explorer.expanded"`, which is not cosmetic: it is the key the saved blobs are under, so changing it would close every folder the user had open. It is renamed with a migration or not at all, and the type says so.
-- **Editor**. Largest surface per file but least coupled. `SyntaxAttributes` is the one place kinds meet colours and stays here by design.
+- **Editor. Done.** The module name was already right; the folder moved to `Sources/Features/Editor/`. `SyntaxAttributes` stays, as the one place kinds meet colours. The model exports four members — `init`, `open(_:)`, `close()` and the class — and `Content`, `Reason`, `file`, `content`, `isDeleted`, `session` and `breadcrumb` went internal, because `EditorView` is in the same module and `AppView` only ever opened and closed. A `#Preview` arrived with `NoSyntaxHighlighter`: it shows the pane rather than the theme, which is as far as a feature can go without importing `Services`.
 - **AppFeature** is not a feature and is not extracted. It moved in Phase 2 step 6.
 
 Don't change editor rendering (for example moving highlighting to `NSTextLayoutManager` rendering attributes) in this phase. `ARCHITECTURE.md` asks for it, but it is a behavior change; log it in `notes.md` as a follow-up.
@@ -457,10 +457,10 @@ added to docs/realignment/notes.md.
   - [x] 4e persistence off `@Query`, `Storage` → `Services/Persistence/`
   - [x] 4f restoration *(`openWorkspaces` moved to 4g)*
   - [x] 4g several live workspaces at once, and restoring them from `AppSnapshot`
-- [ ] **P5** Features
+- [x] **P5** Features
   - [x] Repositories
   - [x] FileTree
-  - [ ] Editor
+  - [x] Editor
 - [ ] **P6** Syntax highlighter boundary
 - [ ] **P7** Persistence swap *(optional)*
 - [ ] **P8** Cleanup

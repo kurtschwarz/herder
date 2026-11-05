@@ -1,6 +1,8 @@
+import Core
 import DesignSystem
 import PhosphorSwift
 import SwiftUI
+import TestSupport
 
 /// The editor pane's content: a breadcrumb over the open file's text. Has no
 /// surface of its own: it sits straight on the window, and the file tree is the
@@ -92,3 +94,44 @@ private struct Breadcrumb: View {
         .padding(.vertical, Theme.Spacing.normal)
     }
 }
+
+#if DEBUG
+#Preview {
+    let files = InMemoryFileClient()
+    let registry = WorkspaceRegistry(
+        files: files,
+        git: StubGitClient(),
+        watcher: StubFileWatcherClient(),
+        clock: VirtualClockClient(),
+        state: InMemoryStateStore()
+    )
+    let model = EditorModel(store: registry, files: files, highlighter: NoSyntaxHighlighter())
+
+    EditorView(model: model, rootName: "herder")
+        .frame(width: 720, height: 420)
+        .padding(Theme.Spacing.windowPadding)
+        .background(Theme.Palette.window)
+        // Without colour, deliberately: the real highlighter is in `Services`
+        // and a feature may not import it, so what this shows is the pane —
+        // breadcrumb, gutter, layout — rather than the theme. `SyntaxAttributes`
+        // has the tests for the pairing.
+        .task {
+            let root = URL(filePath: "/preview/herder")
+            let file = root.appending(path: "Herder.swift")
+            files.seed(file.path(percentEncoded: false), """
+                struct Workspace {
+                    let root: PathKey
+
+                    // One checkout: a repository's worktree, or a plain folder.
+                    func components(of path: PathKey) -> [String] {
+                        path.components(below: root)
+                    }
+                }
+                """)
+            files.seed(children: [DirectoryEntry(url: file, isDirectory: false)], of: root)
+            guard let workspace = await registry.open(WorkspaceID(root)) else { return }
+            await workspace.refresh()
+            await model.open(file)
+        }
+}
+#endif

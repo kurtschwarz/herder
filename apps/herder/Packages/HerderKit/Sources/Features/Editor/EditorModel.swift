@@ -16,14 +16,14 @@ public final class EditorModel {
     /// would spend its life laying it out.
     static let maxBytes = 1_000_000
 
-    public enum Content: Equatable {
+    enum Content: Equatable {
         /// The text and the tokens found in it, as one value: see `SourceText`.
         case text(SourceText)
         case unavailable(Reason)
     }
 
     /// Why a file is not shown.
-    public enum Reason: Equatable {
+    enum Reason: Equatable {
         case notText
         case tooLarge
         case unreadable
@@ -42,18 +42,18 @@ public final class EditorModel {
     private var generation = 0
 
     /// The file open, or `nil` when none is.
-    public private(set) var file: URL?
+    private(set) var file: URL?
 
     /// What was last read from it. `nil` until the first read finishes.
-    public private(set) var content: Content?
+    private(set) var content: Content?
 
     /// The file has gone from disk. Its last contents stay up.
-    public private(set) var isDeleted = false
+    private(set) var isDeleted = false
 
     /// Changes whenever a different file is opened, and not when the open file
     /// is renamed or rewritten. The view uses it to know when to go back to
     /// the top.
-    public private(set) var session = 0
+    private(set) var session = 0
 
     /// `highlighter` is injected rather than defaulted, even though it is pure —
     /// the same text gives the same tokens — because the real one lives in
@@ -71,7 +71,7 @@ public final class EditorModel {
     }
 
     /// The worktree's folder name, then each folder down to the file.
-    public var breadcrumb: [String] {
+    var breadcrumb: [String] {
         guard let worktree, let fileKey else { return [] }
         return worktree.components(of: fileKey)
     }

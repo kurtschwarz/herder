@@ -29,7 +29,7 @@ rationale.
 | AppKit bridging | that feature's `Platform/` |
 | A view, modifier or shape used by two features | `DesignSystem/Views`, `/Modifiers`, `/Shapes` |
 | A design token | `DesignSystem/Theme.swift` |
-| A colour for a token kind | `DesignSystem/Theme.swift`, paired in `EditorFeature/Platform/SyntaxAttributes.swift` |
+| A colour for a token kind | `DesignSystem/Theme.swift`, paired in `Features/Editor/Platform/SyntaxAttributes.swift` |
 | Anything that constructs a concrete service | `AppFeature` — nowhere else |
 | Something the app persists about itself | nothing — encode it to a snapshot and put it through `StateStore`. No schema version, no migration. |
 | A new SwiftData model (rare; prefer the above) | `Services/Persistence/`, in a new `WorkspaceSchemaV<n>` with a migration stage. **Never rename an existing `@Model` class** — the class name is the stored entity name. |
@@ -42,14 +42,6 @@ Name files after the single type they hold.
 A new feature target needs `path: "Sources/Features/<Name>"` and its test target
 `path: "Tests/Features/<Name>FeatureTests"`. SwiftPM looks directly under
 `Sources` and `Tests` by default, so without those the build cannot find the files.
-
-## Not yet moved
-
-One feature folder still carries its old name, and `Package.swift` says so at
-the target. Phase 5 renames it; don't rename it as part of other work:
-
-- **`Sources/Features/EditorFeature/`** — the module name is right, the folder
-  repeats the suffix. Becomes `Sources/Features/Editor/`.
 
 `AppFeature` sits at `Sources/App/`, outside `Sources/Features/`, because it is
 the composition root rather than a feature. `AppEnvironment` there is the only
