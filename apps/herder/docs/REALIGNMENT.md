@@ -374,12 +374,12 @@ The four features in `ARCHITECTURE.md`'s list that don't exist — `AgentSession
 
 The highlighter stays in `packages/syntax-highlighter`. This phase changes how Swift consumes it, not the highlighter itself. Most of it is already true — the survey found exactly one Swift file importing `HerderSyntaxFFI` — so this is mainly finishing the split Phase 2 started and locking it in.
 
-1. Confirm the only Swift code importing `HerderSyntaxFFI` is `Services/Highlighting/`. Everything else goes through the `SyntaxHighlighter` protocol in `Core`.
-2. Confirm no FFI type (`HdrToken`, `HDR_LANGUAGE_NONE`) appears in `Core`, a feature, or `AppFeature`. The `HdrToken` → `SyntaxToken` conversion stays in `Services/Highlighting/`.
-3. **Offsets: nothing to do.** The crate already converts UTF-8 byte offsets to UTF-16 before handing tokens over, so there is no conversion on the Swift side and there must not be a second one. Recorded in `ARCHITECTURE.md` and the survey, §7.
-4. Delete the `Syntax` target once it is empty.
-5. Uncomment the "Rust module imported outside Services" check in `check-boundaries.sh`.
-6. If any of this needs a change inside `packages/syntax-highlighter`, stop and ask. It becomes its own task.
+1. **Confirmed.** `Services/Highlighting/TreeSitterHighlighter.swift` is the only Swift file that names the module, and it is the only one that names `hdr_*` anything.
+2. **Confirmed.** No `HdrToken` and no `HDR_LANGUAGE_NONE` outside that file. The `HdrToken` → `SyntaxToken` conversion is an `extension SyntaxToken` at the bottom of it: extending a Core type inside `Services` is the boundary working, not crossing.
+3. **Offsets: nothing to do, and now said where it would be undone.** The crate converts UTF-8 byte offsets to UTF-16 before handing tokens over. `SyntaxToken` in `Core` documented that; the conversion site did not, which is the one place someone would add a second conversion. It does now.
+4. **Already gone.** Phase 2 split the `Syntax` target into `Core` and `Services/Highlighting/` and deleted it; there was nothing left to empty.
+5. **Enabled**, and it is the only check that covers the app target as well as the package. Two other things went with it: the `--glob '!**/AppFeature/**'` escape hatch on the feature check, which stopped meaning anything when 2b moved `AppFeature` to `Sources/App/`, and three doc comments naming the `SyntaxTests` target that Phase 2 removed.
+6. Nothing needed a change inside `packages/syntax-highlighter`. Its tests and clippy pass untouched.
 
 **Done when:** the highlighter's tests pass, `just check` passes with the Rust-module check enabled, and the app highlights as before.
 
@@ -461,6 +461,6 @@ added to docs/realignment/notes.md.
   - [x] Repositories
   - [x] FileTree
   - [x] Editor
-- [ ] **P6** Syntax highlighter boundary
+- [x] **P6** Syntax highlighter boundary
 - [ ] **P7** Persistence swap *(optional)*
 - [ ] **P8** Cleanup

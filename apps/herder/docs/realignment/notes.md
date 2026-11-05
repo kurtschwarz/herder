@@ -372,3 +372,32 @@ whatever the code currently says and pass.
   header and modal say "workspace" where they mean repository, and the file
   tree's header says "Explorer". Both were left under rule 3 and both want the
   same small copy decision from Kurt.
+
+## From Phase 6 (highlighter boundary)
+
+- **Phase 6 was already true, and that is the finding.** Steps 1, 2 and 4 needed
+  no code: the `Syntax` target went in Phase 2, one Swift file imports
+  `HerderSyntaxFFI`, and no FFI type leaves it. The survey predicted this at §7.
+  What was left was turning a held convention into an enforced one.
+- **The new check is the only one that covers the app target.** "Core imports
+  Rust" looks at `Sources/Core`, "Feature imports Services or the Rust module"
+  at `Sources/Features`; neither sees `Herder/`. Verified by planting a probe
+  import in `Core`, in a feature and in `Herder/` and watching each fail, which
+  is worth doing to any check that passes the day it is written — a check that
+  has never failed has not been tested.
+- **One escape hatch retired.** The feature check carried
+  `--glob '!**/AppFeature/**'` from when `AppFeature` lived under
+  `Sources/Features/`. 2b moved it to `Sources/App/`, so the glob had been
+  excluding nothing while still reading as permission. Removed.
+- **Three doc comments named the dead `SyntaxTests` target**, in
+  `SyntaxTokenKind`, in `TreeSitterHighlighter` and in `ARCHITECTURE.md`. The
+  first two now say `TreeSitterHighlighterTests`, which is where the kind-count
+  assertion actually lives.
+- **Two stale target names left in `ARCHITECTURE.md`**, deliberately not edited:
+  line 412 says `SyntaxTests` asserts the kind count (it is
+  `TreeSitterHighlighterTests` in `ServicesTests`), and line 369 says
+  `StorageTests` keeps the committed V1 fixture (it is `WorkspaceMigrationTests`,
+  also in `ServicesTests`, and `Package.swift` and `AppEnvironment`'s
+  `fatalError` already say so). Both are wrong names rather than wrong rules, so
+  they are Phase 8 step 5's job rather than a quiet edit to the rulebook. An
+  agent looking for either test today looks in a target that does not exist.

@@ -24,20 +24,19 @@ check() {  # usage: check "description" <rg args...>
 check "Core imports UI, persistence, or Rust" \
   -e "^import (SwiftUI|AppKit|SwiftData|$RUST_MODULE)" --type swift "$SRC/Core"
 
-# AppFeature lives under Sources/Features until the second half of Phase 2, and
-# it is the composition root rather than a feature, so it is excluded here.
 check "Feature imports Services or the Rust module" \
-  -e "^import (Services|$RUST_MODULE)" --type swift \
-  --glob '!**/AppFeature/**' "$SRC/Features"
+  -e "^import (Services|$RUST_MODULE)" --type swift "$SRC/Features"
 
 # Passes today, and the survey found nothing to fix. Keep it that way.
 check "Singleton in HerderKit" \
   -e 'static (let|var) shared' --type swift "$SRC"
 
-# Enable in Phase 6, once the Syntax target is gone and the app no longer links
-# Services directly:
-# check "Rust module imported outside Services" \
-#   -e "^import $RUST_MODULE\$" --type swift --glob '!**/Services/**' "$SRC" "$APP_DIR"
+# The FFI's types never leave the module that links it: `Services/Highlighting`
+# turns an `HdrToken` into a `SyntaxToken` and nothing above it knows there is a
+# C ABI under the colour. The import is what a grep can see; the types crossing
+# is review's job.
+check "Rust module imported outside Services" \
+  -e "^import $RUST_MODULE\$" --type swift --glob '!**/Services/**' "$SRC" "$APP_DIR"
 
 check "SwiftData imported outside Services/Persistence" \
   -e '^import SwiftData' --type swift --glob '!**/Services/Persistence/**' "$SRC" "$APP_DIR"

@@ -9,7 +9,7 @@
 /// names tree-sitter grammars use between them.
 ///
 /// Raw values match `Kind` in `packages/syntax-highlighter/src/kind.rs`, and
-/// `SyntaxTests` asserts the two have the same number of cases.
+/// `TreeSitterHighlighterTests` asserts the two have the same number of cases.
 public enum SyntaxTokenKind: UInt32, Sendable, CaseIterable {
     case comment = 0
     case keyword = 1

@@ -60,7 +60,7 @@ extension TreeSitterHighlighter {
         hdr_warm()
     }
 
-    /// How many kinds the crate defines. `SyntaxTests` checks it against
+    /// How many kinds the crate defines. `TreeSitterHighlighterTests` checks it against
     /// `SyntaxTokenKind`, so a kind added on one side and not the other fails a
     /// test rather than painting an unknown colour.
     public static var engineKindCount: Int { Int(hdr_kind_count()) }
@@ -73,6 +73,12 @@ extension SyntaxToken {
     /// `nil` for a kind this build of the app does not know, which means the
     /// crate and `SyntaxTokenKind` have drifted apart. Dropping the token
     /// leaves that span plain rather than crashing a reader's editor over it.
+    ///
+    /// **`start` and `end` are already UTF-16 code units**, which is what
+    /// `NSRange` wants, so they are copied across untouched. Tree-sitter counts
+    /// bytes and the crate converts before handing a token over — a conversion
+    /// here would be the second one, and would misplace every token in a file
+    /// with a character outside ASCII.
     init?(_ raw: HdrToken) {
         guard let kind = SyntaxTokenKind(rawValue: raw.kind), raw.start < raw.end else { return nil }
         self.init(
