@@ -9,11 +9,24 @@ import SwiftData
 public enum WorkspaceSchemaV1: VersionedSchema {
     public static var versionIdentifier: Schema.Version { Schema.Version(1, 0, 0) }
 
-    public static var models: [any PersistentModel.Type] { [Repository.self] }
+    public static var models: [any PersistentModel.Type] { [Workspace.self] }
 
     /// A folder on disk the user has adopted, one to one.
+    ///
+    /// **The rest of the codebase calls this `Repository`**, through the
+    /// typealias below. The class keeps the name `Workspace` because the class
+    /// name *is* the stored entity name: SwiftData derives the SQLite table from
+    /// it, and the store on disk has a `ZWORKSPACE` table recorded against a
+    /// schema that says `Workspace`. Renaming the class renames the entity,
+    /// which makes the existing store an unknown model version and leaves the
+    /// user's adopted folders — and their security-scoped bookmarks, which
+    /// cannot be regenerated — unreadable.
+    ///
+    /// So the persisted name stays until the model is retired for snapshots in
+    /// Phase 4e, at which point the question disappears with it. Do not rename
+    /// this class to match the vocabulary; rename nothing here at all.
     @Model
-    public final class Repository {
+    public final class Workspace {
         /// Stable for the lifetime of the row. Folders move and get renamed, so
         /// nothing downstream — ordering, selection, sessions — keys off the path.
         @Attribute(.unique) public var id: UUID
@@ -61,7 +74,9 @@ public enum WorkspaceSchemaV1: VersionedSchema {
     }
 }
 
-/// The current version of this model, so callers never name a version they
-/// don't care about. `Repository` is unchanged in V2, which carries it over
+/// What everything outside this file calls it.
+///
+/// The name the architecture uses, over the name the store recorded. See the
+/// class above for why the two differ. Unchanged in V2, which carries it over
 /// rather than redeclaring it.
-public typealias Repository = WorkspaceSchemaV1.Repository
+public typealias Repository = WorkspaceSchemaV1.Workspace

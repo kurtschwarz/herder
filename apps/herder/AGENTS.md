@@ -32,7 +32,7 @@ rationale.
 | A colour for a token kind | `DesignSystem/Theme.swift`, paired in `EditorFeature/Platform/SyntaxAttributes.swift` |
 | Anything that constructs a concrete service | `AppFeature` — nowhere else |
 | Something the app persists about itself | nothing — encode it to a snapshot and put it through `StateStore`. No schema version, no migration. |
-| A new SwiftData model (rare; prefer the above) | `Storage/`, in a new `WorkspaceSchemaV<n>` with a migration stage |
+| A new SwiftData model (rare; prefer the above) | `Storage/`, in a new `WorkspaceSchemaV<n>` with a migration stage. **Never rename an existing `@Model` class** — the class name is the stored entity name. |
 | Live state two features both read | `Core/Workspace/`, on the `Workspace`, not whichever feature needed it first |
 | A language for the editor to highlight | `../../packages/syntax-highlighter`, not here. See its `AGENTS.md`. |
 

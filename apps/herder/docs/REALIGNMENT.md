@@ -19,8 +19,9 @@ Herder lives at `apps/herder/` in a monorepo. Paths here follow the same convent
 9. Commit messages: `realign(p<N>): <what changed>`.
 10. **Leave `packages/syntax-highlighter` where it is.** Don't move, rename, or restructure it. Tasks in this plan only change how Swift consumes it.
 11. **Stay inside `apps/herder/`.** The only thing outside it you may read is `packages/syntax-highlighter`, and you don't change it. Don't touch other apps, other packages, or repo-root config (root CI, workspace files, root `justfile`, root `README.md`). If a task seems to need that, stop and ask.
-12. **`Herder.xcodeproj` is generated.** Run `just project` after changing anything under `Herder/` or `UITests/`. Files under `Packages/HerderKit` need no regeneration.
-13. **Keep `AGENTS.md` true.** `apps/herder/AGENTS.md` describes the structure as it is today. Any task that invalidates part of it updates it in the same PR.
+12. **Never rename a `@Model` class, and never change a schema without running `just test`.** The class name is the stored entity name, so a rename makes the user's store an unknown model version and every row unreachable. `StorageTests` opens a committed V1 fixture store for this; it is the only test that can catch it. See `ARCHITECTURE.md`, "Never rename a `@Model` class".
+13. **`Herder.xcodeproj` is generated.** Run `just project` after changing anything under `Herder/` or `UITests/`. Files under `Packages/HerderKit` need no regeneration.
+14. **Keep `AGENTS.md` true.** `apps/herder/AGENTS.md` describes the structure as it is today. Any task that invalidates part of it updates it in the same PR.
 
 ## Stop and ask Kurt when
 
@@ -239,7 +240,8 @@ The riskiest phase, because it changes the app's shape. Each sub-step is its own
 
 Scoped per D9: this moves the state that exists. `DocumentStore`, `AgentSessionStore`, tabs, dirty state and saving are **not** here — the editor is one read-only file and there is no agent runtime. They arrive with their features.
 
-**4a. The rename (no behavior change). Done.** `WorktreeState` → `Workspace` and `WorktreeStateStore` → `WorkspaceRegistry`, moved into `Core/Workspace/` with explicit `@MainActor`, since `Core` keeps the nonisolated default. The SwiftData `@Model Workspace` → `Repository`, and with it `WorkspaceStore` → `SwiftDataRepositoryStore` (named for its backing now, so `RepositoryStore` is free for the protocol in 4e), `WorkspaceStoreError` → `RepositoryStoreError`, `WorkspaceAccess` → `RepositoryAccess`. The `Worktrees` target is gone.
+**4a. The rename. Done — but not behaviour-neutral, and that was the mistake.** Renaming the `@Model` class renamed the stored entity and stranded the existing store. Fixed by keeping the persisted class as `Workspace` with `Repository` as a typealias over it, and guarded by a committed V1 fixture in `StorageTests`. Full account in `realignment/notes.md`.
+ `WorktreeState` → `Workspace` and `WorktreeStateStore` → `WorkspaceRegistry`, moved into `Core/Workspace/` with explicit `@MainActor`, since `Core` keeps the nonisolated default. The SwiftData `@Model Workspace` → `Repository`, and with it `WorkspaceStore` → `SwiftDataRepositoryStore` (named for its backing now, so `RepositoryStore` is free for the protocol in 4e), `WorkspaceStoreError` → `RepositoryStoreError`, `WorkspaceAccess` → `RepositoryAccess`. The `Worktrees` target is gone.
 
 Three things deliberately *not* renamed:
 

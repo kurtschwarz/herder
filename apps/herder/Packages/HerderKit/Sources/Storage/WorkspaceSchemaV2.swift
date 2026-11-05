@@ -12,7 +12,7 @@ public enum WorkspaceSchemaV2: VersionedSchema {
     public static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
 
     public static var models: [any PersistentModel.Type] {
-        [WorkspaceSchemaV1.Repository.self, StoredState.self]
+        [WorkspaceSchemaV1.Workspace.self, StoredState.self]
     }
 
     /// One blob of the app's own state, keyed by a string.

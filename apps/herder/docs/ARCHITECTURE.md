@@ -337,6 +337,17 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 - Secrets go in the Keychain, never a file.
 - Searchable indexes and history, when needed, use SQLite on the Rust side.
 
+### Never rename a `@Model` class
+
+**The class name is the stored entity name.** SwiftData derives the SQLite table from it, and the store records the schema it was written against. Renaming the class renames the entity, so the existing store becomes a version the migration plan has never heard of — SwiftData refuses it with "Cannot use staged migration with an unknown model version" and every row is unreachable. The data is still in the file; nothing in the app can read it.
+
+This has already happened once: see `realignment/notes.md`. The repository model is therefore still the class `Workspace` inside `WorkspaceSchemaV1`, with `Repository` as a typealias over it — the vocabulary the architecture wants, over the name the store recorded.
+
+Two rules follow:
+
+- A `@Model` is renamed only with a `custom` migration stage that copies the rows, and never as part of other work.
+- **Schema changes are tested against a store this build did not write.** An in-memory container is created at the current version every time, so it cannot catch a change that strands what is already on the user's disk. `StorageTests` keeps a committed V1 store as a fixture for exactly this; a test that builds its "old" store from today's schema proves nothing, because both sides move together.
+
 ### A `Repository` cannot be recreated from disk
 
 `Repository` holds a **security-scoped bookmark**, plus a user-chosen name and sidebar order. None of that is recoverable from disk or git: the bookmark cannot be regenerated without the user re-picking the folder in an `NSOpenPanel`. So the repository list is the one piece of Herder's state where losing the store costs the user real work, and it gets a migration rather than a fresh start whenever its storage changes. Where the bookmark lives once `FileStateStore` lands is still open — see `REALIGNMENT.md`.

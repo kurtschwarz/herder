@@ -54,15 +54,38 @@ public final class AppEnvironment {
 
     /// The live app: every service is the real one.
     ///
-    /// There is no app without its workspaces, and nothing useful to fall back
+    /// There is no app without its repositories, and nothing useful to fall back
     /// to, so a container that cannot be opened is fatal: an in-memory store
-    /// would silently throw away everything the user adds.
+    /// would silently throw away everything the user adds, and carrying on
+    /// would invite them to add folders to a store that is not there.
+    ///
+    /// The store is never deleted to recover. It holds security-scoped
+    /// bookmarks, which cannot be regenerated without the user re-picking every
+    /// folder, so a store that will not open is a bug to fix rather than state
+    /// to discard — hence the message naming the file and saying so.
     public convenience init() {
         let container: ModelContainer
         do {
             container = try WorkspaceContainer.live()
         } catch {
-            fatalError("Could not open the workspace store: \(error)")
+            let path = (try? WorkspaceContainer.storeURL().path(percentEncoded: false)) ?? "unknown"
+            fatalError(
+                """
+                Could not open the repository store, so Herder has nothing to \
+                show and will not start.
+
+                  store: \(path)
+                  error: \(error)
+
+                The data in that file is intact. This is a schema problem, not a \
+                corrupt store: the most likely cause is a change to a @Model \
+                type or to WorkspaceMigrationPlan that no longer describes what \
+                is on disk. Do not delete the store to recover — it holds the \
+                security-scoped bookmarks, and they cannot be regenerated \
+                without re-picking every folder. Fix the schema instead, and see \
+                WorkspaceMigrationTests.
+                """
+            )
         }
 
         self.init(
