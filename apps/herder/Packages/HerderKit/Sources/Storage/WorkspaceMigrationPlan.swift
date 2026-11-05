@@ -7,7 +7,7 @@ import SwiftData
 /// when SwiftData can work the change out on its own — adding a model, adding
 /// an optional property — and `custom` when data has to be rewritten.
 ///
-/// Nothing here may lose a ``Workspace``. Its name, its sidebar order and above
+/// Nothing here may lose a ``Repository``. Its name, its sidebar order and above
 /// all its security-scoped bookmark cannot be rebuilt from disk: the bookmark is
 /// the sandbox's standing permission to reopen a folder, and regenerating one
 /// means asking the user to find the folder again in an open panel.
@@ -17,7 +17,7 @@ public enum WorkspaceMigrationPlan: SchemaMigrationPlan {
     }
 
     public static var stages: [MigrationStage] {
-        // V2 only adds `StoredState`. The `Workspace` table is untouched, so
+        // V2 only adds `StoredState`. The `Repository` table is untouched, so
         // there is nothing to rewrite and nothing to lose.
         [.lightweight(fromVersion: WorkspaceSchemaV1.self, toVersion: WorkspaceSchemaV2.self)]
     }

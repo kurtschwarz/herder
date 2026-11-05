@@ -1,7 +1,6 @@
 import Core
 import Foundation
 import Observation
-import Worktrees
 
 /// One line of the flattened tree.
 public struct ExplorerRow: Identifiable, Equatable {
@@ -48,16 +47,16 @@ private extension ExplorerRow {
 ///
 /// Owns what the pane does — which folders are open, what is selected, what is
 /// being named — and reads the files and the git state from the worktree's
-/// ``WorktreeState``, which is shared and kept fresh by a watcher. Expansion
+/// ``Workspace``, which is shared and kept fresh by a watcher. Expansion
 /// lives here and is dropped with the root.
 @Observable
 public final class ExplorerModel {
-    private let store: WorktreeStateStore
+    private let store: WorkspaceRegistry
 
     /// The worktree being shown, or `nil` when none is selected.
-    public private(set) var worktree: WorktreeState?
+    public private(set) var worktree: Workspace?
 
-    private var registration: WorktreeState.Registration?
+    private var registration: Workspace.Registration?
 
     /// The folder the tree is rooted at. Always open; `nil` shows nothing.
     public var root: URL? { worktree?.root.url }
@@ -83,7 +82,7 @@ public final class ExplorerModel {
     /// What git says about the whole worktree, however much of it is open.
     public var status: WorktreeStatus { worktree?.status ?? .empty }
 
-    public init(store: WorktreeStateStore) {
+    public init(store: WorkspaceRegistry) {
         self.store = store
     }
 
@@ -100,7 +99,7 @@ public final class ExplorerModel {
         return rows(in: worktree.root, depth: 0)
     }
 
-    public func listing(of url: URL) -> WorktreeState.Listing? {
+    public func listing(of url: URL) -> Workspace.Listing? {
         worktree?.listing(of: Self.key(url))
     }
 
@@ -217,8 +216,8 @@ public final class ExplorerModel {
         let new = Self.key(destination)
         let openBefore = expanded
         let selectedBefore = selected
-        expanded = Set(expanded.map { WorktreeState.moved($0, from: old, to: new) })
-        if let selected { self.selected = WorktreeState.moved(Self.key(selected), from: old, to: new).url }
+        expanded = Set(expanded.map { Workspace.moved($0, from: old, to: new) })
+        if let selected { self.selected = Workspace.moved(Self.key(selected), from: old, to: new).url }
 
         do {
             try await worktree.move(entry.url, to: destination)

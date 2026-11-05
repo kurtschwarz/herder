@@ -3,7 +3,6 @@ import Core
 import DesignSystem
 import PhosphorSwift
 import SwiftUI
-import Worktrees
 
 /// One line of the tree: a folder that opens and closes, a file that selects, or
 /// the note standing in for a folder that could not be read.

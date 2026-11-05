@@ -76,7 +76,7 @@ extension AppEnvironment {
             for (index, name) in ["agent-editor", "herder"].enumerated() {
                 let path = "/preview/\(name)"
                 container.mainContext.insert(
-                    Workspace(name: name, path: path, bookmark: Data(path.utf8), order: index)
+                    Repository(name: name, path: path, bookmark: Data(path.utf8), order: index)
                 )
             }
             return container

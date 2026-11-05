@@ -8,7 +8,7 @@ import Foundation
 /// future caller, so it is taken once when a workspace opens and released when it
 /// is removed or the app quits. One object owns the count, so there is one place
 /// for it to be wrong.
-public final class WorkspaceAccess {
+public final class RepositoryAccess {
     private let bookmarks: any BookmarkClient
     private var urls: [UUID: URL] = [:]
 

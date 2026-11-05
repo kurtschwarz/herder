@@ -4,7 +4,7 @@ import SwiftUI
 
 /// A workspace row and, while it is open, the worktrees beneath it.
 struct WorkspaceSection: View {
-    let workspace: Workspace
+    let workspace: Repository
     let model: WorkspacesModel
 
     var body: some View {

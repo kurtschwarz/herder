@@ -21,7 +21,7 @@ public final class WorkspacesModel {
     private static let selectedPathKey = "selectedWorktreePath"
     private static let selectedWorkspaceKey = "selectedWorktreeWorkspace"
 
-    private let store: WorkspaceStore
+    private let store: SwiftDataRepositoryStore
     private let git: any GitClient
     private let picker: any FolderPickerClient
     private let defaults: UserDefaults
@@ -43,7 +43,7 @@ public final class WorkspacesModel {
     /// The workspace itself, found the first time its name is asked for. Held
     /// rather than looked up each time so reading the name from a view does not
     /// fetch; the name is still read off it live, so a rename shows.
-    @ObservationIgnored private var selectedWorkspaceRecord: Workspace?
+    @ObservationIgnored private var selectedWorkspaceRecord: Repository?
 
     /// What the selected worktree's workspace is called. A worktree's own
     /// folder is often `main`, which says nothing about what it belongs to.
@@ -65,13 +65,13 @@ public final class WorkspacesModel {
 
     /// The workspace the new-session modal is open for, so its worktrees can be
     /// re-read once one is created.
-    private var newSessionWorkspace: Workspace?
+    private var newSessionWorkspace: Repository?
 
     /// Whether a modal is covering the window.
     public var isModalPresented: Bool { adding != nil || newSession != nil }
 
     public init(
-        store: WorkspaceStore,
+        store: SwiftDataRepositoryStore,
         git: any GitClient,
         picker: any FolderPickerClient,
         defaults: UserDefaults = .standard
@@ -90,7 +90,7 @@ public final class WorkspacesModel {
     }
 
     /// Selecting what is already selected changes nothing.
-    public func select(_ worktree: GitWorktree, in workspace: Workspace) {
+    public func select(_ worktree: GitWorktree, in workspace: Repository) {
         guard worktree.path != selectedWorktree else { return }
         setSelection(worktree.path, in: workspace.id)
     }
@@ -111,7 +111,7 @@ public final class WorkspacesModel {
         self.adding = nil
     }
 
-    public func beginNewSession(in workspace: Workspace) {
+    public func beginNewSession(in workspace: Repository) {
         guard !isModalPresented, workspace.isAvailable else { return }
         newSessionWorkspace = workspace
         newSession = NewSessionModel(
@@ -136,11 +136,11 @@ public final class WorkspacesModel {
         if let workspace { await refresh(workspace) }
     }
 
-    public func isExpanded(_ workspace: Workspace) -> Bool {
+    public func isExpanded(_ workspace: Repository) -> Bool {
         workspace.isAvailable && !collapsed.contains(workspace.id)
     }
 
-    public func toggle(_ workspace: Workspace) async {
+    public func toggle(_ workspace: Repository) async {
         if collapsed.remove(workspace.id) == nil {
             collapsed.insert(workspace.id)
         }
@@ -150,13 +150,13 @@ public final class WorkspacesModel {
 
     /// Re-reads the worktrees of every workspace that is showing them. A
     /// collapsed or unavailable workspace costs nothing: nobody is looking.
-    public func refresh(_ workspaces: [Workspace]) async {
+    public func refresh(_ workspaces: [Repository]) async {
         for workspace in workspaces {
             await refresh(workspace)
         }
     }
 
-    public func refresh(_ workspace: Workspace) async {
+    public func refresh(_ workspace: Repository) async {
         guard isExpanded(workspace) else { return }
         let id = workspace.id
 
@@ -174,7 +174,7 @@ public final class WorkspacesModel {
         }
     }
 
-    public func commitRename(_ workspace: Workspace, to name: String) {
+    public func commitRename(_ workspace: Repository, to name: String) {
         renaming = nil
         do {
             try store.rename(workspace, to: name)
@@ -183,7 +183,7 @@ public final class WorkspacesModel {
         }
     }
 
-    public func remove(_ workspace: Workspace) {
+    public func remove(_ workspace: Repository) {
         let id = workspace.id
         do {
             try store.delete(workspace)

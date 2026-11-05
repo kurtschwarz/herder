@@ -5,7 +5,7 @@ import Storage
 import SwiftUI
 
 struct WorkspaceRow: View {
-    let workspace: Workspace
+    let workspace: Repository
     let model: WorkspacesModel
 
     @State private var isHovering = false

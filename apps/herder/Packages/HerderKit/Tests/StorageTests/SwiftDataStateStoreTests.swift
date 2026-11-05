@@ -118,10 +118,10 @@ private nonisolated struct Snapshot: Codable, Sendable, Equatable {
         try await store.save(Snapshot(openTabs: ["a"]), forKey: "workspace")
 
         let context = ModelContext(container)
-        context.insert(Workspace(name: "herder", path: "/herder", bookmark: Data(), order: 0))
+        context.insert(Repository(name: "herder", path: "/herder", bookmark: Data(), order: 0))
         try context.save()
 
-        #expect(try context.fetch(FetchDescriptor<Workspace>()).count == 1)
+        #expect(try context.fetch(FetchDescriptor<Repository>()).count == 1)
         #expect(try await store.load(Snapshot.self, forKey: "workspace")?.openTabs == ["a"])
     }
 }

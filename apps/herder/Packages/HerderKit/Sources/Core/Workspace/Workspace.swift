@@ -1,4 +1,3 @@
-import Core
 import Foundation
 import Observation
 
@@ -10,10 +9,14 @@ import Observation
 /// growing a reader of its own, which is what makes a second one — a status
 /// gutter, a dirty marker in the sidebar — cost nothing extra.
 ///
-/// Isolated to the main actor like every other model here, not an `actor`: the
-/// state is read on every redraw, and an `actor` would put an `await` in front
-/// of each of those. What must not block the main thread is the disk and
-/// subprocess work, and that is `@concurrent` inside the clients.
+/// Isolated to the main actor, not an `actor`: the state is read on every
+/// redraw, and an `actor` would put an `await` in front of each of those. What
+/// must not block the main thread is the disk and subprocess work, and that is
+/// `@concurrent` inside the clients.
+///
+/// The annotation is explicit because `Core` keeps the nonisolated default: the
+/// value types beside it must stay free of the main actor, so the stores say so
+/// for themselves.
 ///
 /// ## Surviving an event storm
 ///
@@ -32,8 +35,9 @@ import Observation
 /// 5. A drain asks git once, for the whole repository. That is the structural
 ///    one: it is a hard ceiling of about one subprocess a second whatever the
 ///    file system is doing.
+@MainActor
 @Observable
-public final class WorktreeState {
+public final class Workspace {
     /// What reading a folder came to. A failed read is its own state because an
     /// empty list would claim the folder has nothing in it.
     public enum Listing: Equatable {
@@ -81,11 +85,15 @@ public final class WorktreeState {
 
     /// Held by whoever is listening, and cancelled when they stop. Cancelling
     /// is explicit: nothing here is told when its holder goes away.
+    ///
+    /// `@MainActor` of its own accord: a nested type does not inherit the
+    /// enclosing one's isolation, and `cancel()` touches the workspace.
+    @MainActor
     public final class Registration {
-        private weak var state: WorktreeState?
+        private weak var state: Workspace?
         private let id: UUID
 
-        fileprivate init(state: WorktreeState, id: UUID) {
+        fileprivate init(state: Workspace, id: UUID) {
             self.state = state
             self.id = id
         }

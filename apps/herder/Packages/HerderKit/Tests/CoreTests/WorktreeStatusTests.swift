@@ -1,7 +1,6 @@
 import Core
 import Foundation
 import Testing
-import Worktrees
 
 @Suite struct WorktreeStatusTests {
     let root = PathKey(canonical: "/code/api")

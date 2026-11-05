@@ -4,7 +4,6 @@ import DesignSystem
 import PhosphorSwift
 import SwiftUI
 import TestSupport
-import Worktrees
 
 /// The explorer pane's content: a header over the file tree of the selected
 /// worktree.
@@ -160,7 +159,7 @@ struct RevealInFinder: View {
 
 #if DEBUG
 #Preview {
-    ExplorerView(model: ExplorerModel(store: WorktreeStateStore(
+    ExplorerView(model: ExplorerModel(store: WorkspaceRegistry(
         files: PreviewFiles(),
         git: PreviewGit(),
         watcher: PreviewWatcher(),

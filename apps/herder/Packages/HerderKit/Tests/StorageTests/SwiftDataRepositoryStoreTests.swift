@@ -9,20 +9,20 @@ import Testing
 /// Runs against a real in-memory `ModelContainer`, so the schema, the unique
 /// constraint and the sort descriptors are the ones the app ships. Only the two
 /// OS-touching clients are faked.
-@Suite struct WorkspaceStoreTests {
+@Suite struct SwiftDataRepositoryStoreTests {
     let bookmarks = InMemoryBookmarkClient()
     let git = StubGitClient()
     let container: ModelContainer
-    let store: WorkspaceStore
+    let store: SwiftDataRepositoryStore
 
     init() throws {
         container = try WorkspaceContainer.inMemory()
-        store = WorkspaceStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
+        store = SwiftDataRepositoryStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
     }
 
     /// A second store over the same data, standing in for the next launch.
-    func relaunch() -> WorkspaceStore {
-        WorkspaceStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
+    func relaunch() -> SwiftDataRepositoryStore {
+        SwiftDataRepositoryStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
     }
 
     func url(_ path: String) -> URL { URL(filePath: path) }
@@ -61,7 +61,7 @@ import Testing
     }
 
     @Test func refusesAFolderThatIsNotARepository() async throws {
-        await #expect(throws: WorkspaceStoreError.notAGitRepository(url("/code/notes"))) {
+        await #expect(throws: RepositoryStoreError.notAGitRepository(url("/code/notes"))) {
             _ = try await store.add(url: url("/code/notes"))
         }
         #expect(try store.workspaces().isEmpty)
@@ -71,7 +71,7 @@ import Testing
         let main = url("/code/api")
         let worktree = repository("/code/feature", kind: .linkedWorktree(mainRepository: main))
 
-        await #expect(throws: WorkspaceStoreError.isLinkedWorktree(mainRepository: main)) {
+        await #expect(throws: RepositoryStoreError.isLinkedWorktree(mainRepository: main)) {
             _ = try await store.add(url: worktree)
         }
     }
@@ -80,7 +80,7 @@ import Testing
         let url = repository("/code/api")
         try await store.add(url: url)
 
-        await #expect(throws: WorkspaceStoreError.alreadyOpen(url)) {
+        await #expect(throws: RepositoryStoreError.alreadyOpen(url)) {
             _ = try await store.add(url: url)
         }
         #expect(try store.workspaces().count == 1)
@@ -94,7 +94,7 @@ import Testing
         let moved = repository("/elsewhere/api")
         bookmarks.redirect(workspace.bookmark, to: moved)
 
-        await #expect(throws: WorkspaceStoreError.alreadyOpen(moved)) {
+        await #expect(throws: RepositoryStoreError.alreadyOpen(moved)) {
             _ = try await store.add(url: moved)
         }
     }
@@ -120,21 +120,21 @@ import Testing
         let open = repository("/code/web")
         try await store.add(url: open)
 
-        await #expect(throws: WorkspaceStoreError.notAGitRepository(url("/code/notes"))) {
+        await #expect(throws: RepositoryStoreError.notAGitRepository(url("/code/notes"))) {
             try await store.validate(url: url("/code/notes"))
         }
-        await #expect(throws: WorkspaceStoreError.isLinkedWorktree(mainRepository: main)) {
+        await #expect(throws: RepositoryStoreError.isLinkedWorktree(mainRepository: main)) {
             try await store.validate(url: worktree)
         }
-        await #expect(throws: WorkspaceStoreError.alreadyOpen(open)) {
+        await #expect(throws: RepositoryStoreError.alreadyOpen(open)) {
             try await store.validate(url: open)
         }
     }
 
     @Test func theDefaultNameIsWhatAddingWouldUse() async throws {
         let url = url("/code/api.git")
-        #expect(WorkspaceStore.defaultName(for: url, kind: .bare) == "api")
-        #expect(WorkspaceStore.defaultName(for: url, kind: .mainWorkingTree) == "api.git")
+        #expect(SwiftDataRepositoryStore.defaultName(for: url, kind: .bare) == "api")
+        #expect(SwiftDataRepositoryStore.defaultName(for: url, kind: .mainWorkingTree) == "api.git")
     }
 
     // MARK: - Renaming
@@ -314,7 +314,7 @@ import Testing
     @Test func relocatingRefusesAFolderThatIsNotARepository() async throws {
         let workspace = try await store.add(url: repository("/code/api"))
 
-        await #expect(throws: WorkspaceStoreError.notAGitRepository(url("/code/notes"))) {
+        await #expect(throws: RepositoryStoreError.notAGitRepository(url("/code/notes"))) {
             try await store.relocate(workspace, to: url("/code/notes"))
         }
         #expect(workspace.path == "/code/api")

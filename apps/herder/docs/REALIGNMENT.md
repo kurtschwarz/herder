@@ -238,7 +238,17 @@ The riskiest phase, because it changes the app's shape. Each sub-step is its own
 
 Scoped per D9: this moves the state that exists. `DocumentStore`, `AgentSessionStore`, tabs, dirty state and saving are **not** here — the editor is one read-only file and there is no agent runtime. They arrive with their features.
 
-**4a. The rename (no behavior change).** `WorktreeState` → `Workspace` and `WorktreeStateStore` → `WorkspaceRegistry`, moved into `Core/Workspace/`. The SwiftData `@Model Workspace` → `Repository`, staying in `Services/Persistence/`. `WorktreeStatus` → `Core/Models/`. Add explicit `@MainActor` to both stores, since `Core` is nonisolated by default. Pure rename; the tests should need nothing but new names.
+**4a. The rename (no behavior change). Done.** `WorktreeState` → `Workspace` and `WorktreeStateStore` → `WorkspaceRegistry`, moved into `Core/Workspace/` with explicit `@MainActor`, since `Core` keeps the nonisolated default. The SwiftData `@Model Workspace` → `Repository`, and with it `WorkspaceStore` → `SwiftDataRepositoryStore` (named for its backing now, so `RepositoryStore` is free for the protocol in 4e), `WorkspaceStoreError` → `RepositoryStoreError`, `WorkspaceAccess` → `RepositoryAccess`. The `Worktrees` target is gone.
+
+Three things deliberately *not* renamed:
+
+- **`WorktreeStatus` and `GitWorktreeStatus`** keep their names. "Worktree" is git's word and these are git's view of one; `ARCHITECTURE.md` already keeps that vocabulary separate for `GitWorktree`.
+- **`WorkspaceSchemaV1`, `WorkspaceSchemaV2`, `WorkspaceContainer`, `WorkspaceMigrationPlan`** keep theirs. They name the store as a whole rather than the model in it, they move to `Services/Persistence/` later in this phase, and Phase 7 deletes them. Renaming twice is waste.
+- **`Workspaces.store` on disk must not be renamed at all.** The user's repository list lives in that file.
+
+The feature's own types (`WorkspacesModel`, `AddWorkspaceModel`, `WorkspaceRow`) are the Repositories feature and get renamed in Phase 5, per D5.
+
+`RepositoryStore` as a protocol is **not** here, for the reason Phase 3 found: it has to return a Core value type, so it cannot land before `@Query` goes. That is 4e.
 
 **4b. Add the types, unused.** In `Core/Workspace/`: `WorkspaceID`, `WorkspaceUIState`, `PersistedWorkspaceUIState`, `AppSnapshot`, `WorkspaceSnapshot`, and the `WorkspaceServicesFactory` protocol (implementation in `Services/Workspace/`). Give `WorkspaceRegistry` `open(_:)` and `close(_:)`. Write tests for open, close and switch behavior using fakes.
 
@@ -364,7 +374,8 @@ added to docs/realignment/notes.md.
   - [ ] `RepositoryStore`
   - [ ] `StateStore` (SwiftData-backed)
 - [ ] **P4** Workspace state *(gate: smoke test)*
-  - [ ] 4a rename to `Workspace` / `WorkspaceRegistry` / `Repository`, plus `RepositoryStore` and `WorkspaceAccess` behind protocols
+  - [x] 4a rename to `Workspace` / `WorkspaceRegistry` / `Repository`
+  - [ ] 4a′ `RepositoryStore` and `RepositoryAccess` behind protocols *(with 4e)*
   - [ ] 4b snapshot and UI-state types + tests
   - [ ] 4c `WindowModel` and per-window active workspace
   - [ ] 4d feature UI state onto the workspace

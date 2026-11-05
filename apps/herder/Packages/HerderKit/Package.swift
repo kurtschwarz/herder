@@ -29,7 +29,7 @@ let package = Package(
         .package(url: "https://github.com/phosphor-icons/swift", from: "2.1.0"),
     ],
     targets: [
-        // Models, service protocols and — from Phase 4 — workspace state.
+        // Models, service protocols and workspace state.
         // Imports only Foundation and Observation: never SwiftUI, AppKit,
         // SwiftData or the FFI. `scripts/check-boundaries.sh` enforces that.
         //
@@ -62,12 +62,6 @@ let package = Package(
         // `Services/Persistence/` in Phase 3.
         .target(name: "Storage", dependencies: ["Core"], swiftSettings: ui),
 
-        // The authoritative file and git state of a worktree, watched and kept
-        // fresh. Above the services and below the features, because more than
-        // one feature reads it and features never import each other. Becomes
-        // `Core/Workspace/` in Phase 4.
-        .target(name: "Worktrees", dependencies: ["Core"], swiftSettings: ui),
-
         // Shared views, styles, tokens.
         .target(name: "DesignSystem", dependencies: [icons], swiftSettings: ui),
 
@@ -84,14 +78,14 @@ let package = Package(
 
         .target(
             name: "ExplorerFeature",
-            dependencies: ["Core", "DesignSystem", "TestSupport", "Worktrees", icons],
+            dependencies: ["Core", "DesignSystem", "TestSupport", icons],
             path: "Sources/Features/ExplorerFeature",
             swiftSettings: ui
         ),
 
         .target(
             name: "EditorFeature",
-            dependencies: ["Core", "DesignSystem", "TestSupport", "Worktrees"],
+            dependencies: ["Core", "DesignSystem", "TestSupport"],
             path: "Sources/Features/EditorFeature",
             swiftSettings: ui
         ),
@@ -103,7 +97,7 @@ let package = Package(
         .target(
             name: "AppFeature",
             dependencies: [
-                "Core", "Services", "DesignSystem", "TestSupport", "Storage", "Worktrees",
+                "Core", "Services", "DesignSystem", "TestSupport", "Storage",
                 "WorkspacesFeature", "ExplorerFeature", "EditorFeature",
             ],
             path: "Sources/App",
@@ -126,11 +120,6 @@ let package = Package(
             swiftSettings: ui
         ),
         .testTarget(
-            name: "WorktreesTests",
-            dependencies: ["Worktrees", "Core", "TestSupport"],
-            swiftSettings: ui
-        ),
-        .testTarget(
             name: "WorkspacesFeatureTests",
             dependencies: ["WorkspacesFeature", "Core", "TestSupport", "Storage"],
             path: "Tests/Features/WorkspacesFeatureTests",
@@ -138,7 +127,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ExplorerFeatureTests",
-            dependencies: ["ExplorerFeature", "Core", "TestSupport", "Worktrees"],
+            dependencies: ["ExplorerFeature", "Core", "TestSupport"],
             path: "Tests/Features/ExplorerFeatureTests",
             swiftSettings: ui
         ),
@@ -147,7 +136,7 @@ let package = Package(
             // tree-sitter engine: what colour a span gets is part of what the
             // pane promises, and a fake highlighter cannot check it.
             name: "EditorFeatureTests",
-            dependencies: ["EditorFeature", "Core", "Services", "TestSupport", "Worktrees"],
+            dependencies: ["EditorFeature", "Core", "Services", "TestSupport"],
             path: "Tests/Features/EditorFeatureTests",
             swiftSettings: ui
         ),

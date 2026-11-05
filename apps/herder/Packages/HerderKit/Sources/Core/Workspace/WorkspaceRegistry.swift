@@ -1,4 +1,3 @@
-import Core
 import Foundation
 import Observation
 
@@ -10,14 +9,15 @@ import Observation
 /// adding entries instead of turning the design inside out. Each entry costs a
 /// watcher and a status call, so widening it is a deliberate step and not a
 /// side effect of switching worktrees.
+@MainActor
 @Observable
-public final class WorktreeStateStore {
+public final class WorkspaceRegistry {
     private let files: any FileClient
     private let git: any GitClient
     private let watcher: any FileWatcherClient
     private let clock: any ClockClient
 
-    private var states: [PathKey: WorktreeState] = [:]
+    private var states: [PathKey: Workspace] = [:]
 
     /// Where each worktree's watcher had got to, kept after its state is
     /// dropped. Coming back to a worktree then replays what changed while
@@ -36,12 +36,12 @@ public final class WorktreeStateStore {
         self.clock = clock
     }
 
-    public func state(for worktree: URL) -> WorktreeState? {
+    public func state(for worktree: URL) -> Workspace? {
         states[PathKey(worktree)]
     }
 
     /// The state of whichever held worktree `path` lies inside.
-    public func state(containing path: PathKey) -> WorktreeState? {
+    public func state(containing path: PathKey) -> Workspace? {
         states.values.first { path.isInside($0.root) }
     }
 
@@ -55,7 +55,7 @@ public final class WorktreeStateStore {
     /// the state and then refresh it, so the folders show as they are read
     /// rather than all at once after git has also answered.
     @discardableResult
-    public func select(_ worktree: URL?) async -> WorktreeState? {
+    public func select(_ worktree: URL?) async -> Workspace? {
         // Canonicalised here, at the edge of the module, so the listings, the
         // status map and the watcher's own event paths are all the one spelling
         // and compare by construction rather than by luck.
@@ -72,7 +72,7 @@ public final class WorktreeStateStore {
         // A folder that is not a working tree has no index to watch, which is
         // not a failure: the working tree alone is still worth watching.
         let gitDirectory = try? await git.gitDirectory(of: key.url).map(PathKey.init)
-        let state = WorktreeState(
+        let state = Workspace(
             root: key,
             gitDirectory: gitDirectory ?? nil,
             from: positions[key],

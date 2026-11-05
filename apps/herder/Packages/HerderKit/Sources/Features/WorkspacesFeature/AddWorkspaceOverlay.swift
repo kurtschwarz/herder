@@ -100,7 +100,7 @@ private struct AddWorkspaceCard: View {
                 TextField(
                     "Name",
                     text: Binding(get: { model.name }, set: { model.editName($0) }),
-                    prompt: Text("Workspace name").foregroundStyle(Theme.Palette.tertiaryText)
+                    prompt: Text("Repository name").foregroundStyle(Theme.Palette.tertiaryText)
                 )
                 .textFieldStyle(.plain)
                 .foregroundStyle(Theme.Palette.text)

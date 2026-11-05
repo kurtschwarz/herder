@@ -11,7 +11,7 @@ import Testing
     let bookmarks = InMemoryBookmarkClient()
     let git = StubGitClient()
     let container: ModelContainer
-    let store: WorkspaceStore
+    let store: SwiftDataRepositoryStore
     let picker = StubFolderPickerClient()
     let defaults: UserDefaults
     let suite: String
@@ -19,13 +19,13 @@ import Testing
 
     init() throws {
         container = try WorkspaceContainer.inMemory()
-        store = WorkspaceStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
+        store = SwiftDataRepositoryStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
         suite = "WorkspacesModelTests-\(UUID().uuidString)"
         defaults = try #require(UserDefaults(suiteName: suite))
         model = WorkspacesModel(store: store, git: git, picker: picker, defaults: defaults)
     }
 
-    func addWorkspace(_ path: String) async throws -> Workspace {
+    func addWorkspace(_ path: String) async throws -> Repository {
         let url = URL(filePath: path)
         git.seed(url, .mainWorkingTree)
         git.seed(worktrees: [GitWorktree(path: url, checkout: .branch("main"), isMainWorkingTree: true)], at: url)

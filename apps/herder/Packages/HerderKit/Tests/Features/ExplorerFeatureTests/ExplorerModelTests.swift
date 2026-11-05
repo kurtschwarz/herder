@@ -2,7 +2,6 @@ import Core
 import Foundation
 import TestSupport
 import Testing
-import Worktrees
 
 @testable import ExplorerFeature
 
@@ -15,7 +14,7 @@ import Worktrees
     let root = URL(filePath: "/code/api")
 
     init() {
-        model = ExplorerModel(store: WorktreeStateStore(
+        model = ExplorerModel(store: WorkspaceRegistry(
             files: files,
             git: git,
             watcher: watcher,

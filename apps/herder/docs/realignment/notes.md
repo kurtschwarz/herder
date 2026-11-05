@@ -88,3 +88,18 @@ as D1–D10 in the plan.
   conformance and leaves it unable to satisfy `StateStore`'s `Sendable`
   requirement. Harmless for the real snapshots, which live in `Core` with no
   such default, but worth knowing before writing a fixture in a `ui` target.
+
+## From Phase 4a (the Workspace rename)
+
+- **A `@MainActor` store in `Core` makes its test suite opt in.** Moving
+  `WorktreeStateTests` from the `Worktrees` target (MainActor by default) into
+  `CoreTests` (nonisolated by default) broke 28 call sites until the two suites
+  were marked `@MainActor`. Worth knowing for 4b: every test that touches
+  `Workspace` or `WorkspaceRegistry` from `CoreTests` needs it.
+- **`Core` now holds both kinds of code**, nonisolated value types and two
+  main-actor stores. That is what `ARCHITECTURE.md` asks for, but it means the
+  module's isolation is no longer uniform and `swiftSettings: core` no longer
+  tells the whole story. The annotations on `Workspace` and `WorkspaceRegistry`
+  carry a note saying why they are explicit.
+- **`WorkspaceRegistry` still holds exactly one live workspace** and stops every
+  other on `select`. Unchanged by the rename, and the thing 4g changes.

@@ -2,20 +2,23 @@ import Core
 import Foundation
 import TestSupport
 import Testing
-import Worktrees
 
 /// What the watcher must guarantee, driven by synthetic events so no test waits
 /// for a real file system to settle.
-@Suite struct WorktreeStateTests {
+/// `@MainActor` on the suite, not on the type under test by accident: `Workspace`
+/// and `WorkspaceRegistry` are the two main-actor stores in a module that is
+/// otherwise nonisolated, so a test target with `Core`'s settings has to opt in
+/// where it touches them.
+@Suite @MainActor struct WorkspaceTests {
     let files = InMemoryFileClient()
     let git = StubGitClient()
     let watcher = StubFileWatcherClient()
     let clock = VirtualClockClient()
-    let store: WorktreeStateStore
+    let store: WorkspaceRegistry
     let root = URL(filePath: "/code/api")
 
     init() {
-        store = WorktreeStateStore(files: files, git: git, watcher: watcher, clock: clock)
+        store = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock)
     }
 
     func dir(_ name: String, in parent: URL? = nil) -> DirectoryEntry {
@@ -28,7 +31,7 @@ import Worktrees
 
     /// Opens `root` with `children` in it and reads it, the starting point for
     /// every test here.
-    func start(with children: [DirectoryEntry] = []) async throws -> WorktreeState {
+    func start(with children: [DirectoryEntry] = []) async throws -> Workspace {
         files.seed(children: children, of: root)
         let state = try #require(await store.select(root))
         await state.refresh()
@@ -302,18 +305,18 @@ import Worktrees
     }
 }
 
-private extension WorktreeState {
+private extension Workspace {
     /// Reads a listing by key without the test having to spell out the type.
     func listing(_ key: PathKey) -> Listing? { listing(of: key) }
 }
 
-@Suite struct WorktreeStateObserverTests {
+@Suite @MainActor struct WorkspaceObserverTests {
     let files = InMemoryFileClient()
-    let store: WorktreeStateStore
+    let store: WorkspaceRegistry
     let root = URL(filePath: "/code/api")
 
     init() {
-        store = WorktreeStateStore(
+        store = WorkspaceRegistry(
             files: files,
             git: StubGitClient(),
             watcher: StubFileWatcherClient(),
@@ -321,7 +324,7 @@ private extension WorktreeState {
         )
     }
 
-    func start() async throws -> WorktreeState {
+    func start() async throws -> Workspace {
         files.seed(children: [DirectoryEntry(url: root.appending(path: "a.txt"), isDirectory: false)], of: root)
         let state = try #require(await store.select(root))
         await state.refresh()

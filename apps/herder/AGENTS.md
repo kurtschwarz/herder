@@ -33,7 +33,7 @@ rationale.
 | Anything that constructs a concrete service | `AppFeature` — nowhere else |
 | Something the app persists about itself | nothing — encode it to a snapshot and put it through `StateStore`. No schema version, no migration. |
 | A new SwiftData model (rare; prefer the above) | `Storage/`, in a new `WorkspaceSchemaV<n>` with a migration stage |
-| Live state two features both read | `Worktrees/` for now, not whichever feature needed it first. Becomes `Core/Workspace/` in Phase 4. |
+| Live state two features both read | `Core/Workspace/`, on the `Workspace`, not whichever feature needed it first |
 | A language for the editor to highlight | `../../packages/syntax-highlighter`, not here. See its `AGENTS.md`. |
 
 Organise by feature, not by type: a feature's view, model and subviews sit together.
@@ -45,17 +45,14 @@ A new feature target needs `path: "Sources/Features/<Name>"` and its test target
 
 ## Not yet moved
 
-Two modules still sit outside the target layout, and `Package.swift` says so at
-each one. Don't file new code in them without reading the plan:
+One module still sits outside the target layout, and `Package.swift` says so at
+the target. Don't file new code in it without reading the plan:
 
 - **`Storage/`** — SwiftData models, schema, container, and `SwiftDataStateStore`.
   Goes to `Services/Persistence/` in Phase 4, once `WorkspacesFeature` stops
   passing `@Model` objects around and can drop `import Storage`. Until then a
   feature still reaches SwiftData through it, which is why the boundary check
   for that is the one still commented out.
-- **`Worktrees/`** — `WorktreeState` and `WorktreeStateStore`. Become `Workspace`
-  and `WorkspaceRegistry` in `Core/Workspace/` in Phase 4.
-
 `AppFeature` sits at `Sources/App/`, outside `Sources/Features/`, because it is
 the composition root rather than a feature. `AppEnvironment` there is the only
 place in the codebase that names a concrete service type, and the one HerderKit

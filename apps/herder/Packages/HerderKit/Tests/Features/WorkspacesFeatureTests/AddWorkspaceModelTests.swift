@@ -11,12 +11,12 @@ import Testing
     let bookmarks = InMemoryBookmarkClient()
     let git = StubGitClient()
     let picker = StubFolderPickerClient()
-    let store: WorkspaceStore
+    let store: SwiftDataRepositoryStore
     let model: AddWorkspaceModel
 
     init() throws {
         let container = try WorkspaceContainer.inMemory()
-        store = WorkspaceStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
+        store = SwiftDataRepositoryStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
         model = AddWorkspaceModel(store: store, picker: picker)
     }
 

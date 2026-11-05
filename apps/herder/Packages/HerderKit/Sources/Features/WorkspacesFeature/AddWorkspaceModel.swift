@@ -21,7 +21,7 @@ public final class AddWorkspaceModel {
         case failed(String)
 
         init(_ error: any Error) {
-            switch error as? WorkspaceStoreError {
+            switch error as? RepositoryStoreError {
             case .notAGitRepository: self = .notARepository
             case .isLinkedWorktree(let main): self = .linkedWorktree(mainRepository: main)
             case .alreadyOpen: self = .alreadyOpen
@@ -30,7 +30,7 @@ public final class AddWorkspaceModel {
         }
     }
 
-    private let store: WorkspaceStore
+    private let store: SwiftDataRepositoryStore
     private let picker: any FolderPickerClient
 
     /// What git made of `folder`, set only once the store has accepted it.
@@ -46,7 +46,7 @@ public final class AddWorkspaceModel {
 
     public var canAdd: Bool { kind != nil && refusal == nil && !isSubmitting }
 
-    public init(store: WorkspaceStore, picker: any FolderPickerClient) {
+    public init(store: SwiftDataRepositoryStore, picker: any FolderPickerClient) {
         self.store = store
         self.picker = picker
     }
@@ -100,7 +100,7 @@ public final class AddWorkspaceModel {
             guard folder == url else { return }
             self.kind = kind
             if !isNameEdited {
-                name = WorkspaceStore.defaultName(for: url.standardizedFileURL, kind: kind)
+                name = SwiftDataRepositoryStore.defaultName(for: url.standardizedFileURL, kind: kind)
             }
         } catch {
             guard folder == url else { return }

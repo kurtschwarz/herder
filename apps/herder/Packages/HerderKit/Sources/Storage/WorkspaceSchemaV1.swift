@@ -9,11 +9,11 @@ import SwiftData
 public enum WorkspaceSchemaV1: VersionedSchema {
     public static var versionIdentifier: Schema.Version { Schema.Version(1, 0, 0) }
 
-    public static var models: [any PersistentModel.Type] { [Workspace.self] }
+    public static var models: [any PersistentModel.Type] { [Repository.self] }
 
     /// A folder on disk the user has adopted, one to one.
     @Model
-    public final class Workspace {
+    public final class Repository {
         /// Stable for the lifetime of the row. Folders move and get renamed, so
         /// nothing downstream — ordering, selection, sessions — keys off the path.
         @Attribute(.unique) public var id: UUID
@@ -62,6 +62,6 @@ public enum WorkspaceSchemaV1: VersionedSchema {
 }
 
 /// The current version of this model, so callers never name a version they
-/// don't care about. `Workspace` is unchanged in V2, which carries it over
+/// don't care about. `Repository` is unchanged in V2, which carries it over
 /// rather than redeclaring it.
-public typealias Workspace = WorkspaceSchemaV1.Workspace
+public typealias Repository = WorkspaceSchemaV1.Repository

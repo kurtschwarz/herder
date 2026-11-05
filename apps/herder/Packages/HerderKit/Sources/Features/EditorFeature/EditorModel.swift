@@ -1,7 +1,6 @@
 import Core
 import Foundation
 import Observation
-import Worktrees
 
 /// The file shown in the editor pane.
 ///
@@ -30,12 +29,12 @@ public final class EditorModel {
         case unreadable
     }
 
-    private let store: WorktreeStateStore
+    private let store: WorkspaceRegistry
     private let files: any FileClient
     private let highlighter: any SyntaxHighlighter
 
-    private var worktree: WorktreeState?
-    private var registration: WorktreeState.Registration?
+    private var worktree: Workspace?
+    private var registration: Workspace.Registration?
     private var fileKey: PathKey?
 
     /// Counts each read, so one that comes back after a newer one started is
@@ -62,7 +61,7 @@ public final class EditorModel {
     /// it; `NoSyntaxHighlighter` is there for a test that wants the editor
     /// without the colour.
     public init(
-        store: WorktreeStateStore,
+        store: WorkspaceRegistry,
         files: any FileClient,
         highlighter: any SyntaxHighlighter
     ) {
@@ -199,7 +198,7 @@ public final class EditorModel {
     /// along instead of leaving it looking at a path that is no longer there.
     private func follow(from old: PathKey, to new: PathKey) {
         guard let fileKey, fileKey.isInside(old) else { return }
-        let moved = WorktreeState.moved(fileKey, from: old, to: new)
+        let moved = Workspace.moved(fileKey, from: old, to: new)
         self.fileKey = moved
         file = moved.url
     }

@@ -7,25 +7,25 @@ import SwiftData
 /// Views read workspaces with `@Query`; every change goes through here, so the
 /// rules about eligibility, naming, ordering and folder access live in one place
 /// instead of being re-derived at each call site.
-public struct WorkspaceStore {
+public struct SwiftDataRepositoryStore {
     private let context: ModelContext
     private let bookmarks: any BookmarkClient
     private let git: any GitClient
 
     /// The folder access held open on behalf of these workspaces.
-    public let access: WorkspaceAccess
+    public let access: RepositoryAccess
 
     public init(context: ModelContext, bookmarks: any BookmarkClient, git: any GitClient) {
         self.context = context
         self.bookmarks = bookmarks
         self.git = git
-        self.access = WorkspaceAccess(bookmarks: bookmarks)
+        self.access = RepositoryAccess(bookmarks: bookmarks)
     }
 
     /// Every workspace in sidebar order.
-    public func workspaces() throws -> [Workspace] {
+    public func workspaces() throws -> [Repository] {
         try context.fetch(
-            FetchDescriptor<Workspace>(
+            FetchDescriptor<Repository>(
                 sortBy: [SortDescriptor(\.order), SortDescriptor(\.addedAt)]
             )
         )
@@ -41,7 +41,7 @@ public struct WorkspaceStore {
     public func validate(url: URL) async throws -> GitRepositoryKind {
         let url = url.standardizedFileURL
         let kind = try await repositoryKind(of: url)
-        guard try !isAlreadyAWorkspace(url) else { throw WorkspaceStoreError.alreadyOpen(url) }
+        guard try !isAlreadyAWorkspace(url) else { throw RepositoryStoreError.alreadyOpen(url) }
         return kind
     }
 
@@ -51,11 +51,11 @@ public struct WorkspaceStore {
     /// until the user renames it. Validates again rather than trusting an
     /// earlier `validate`: the folder may have changed since it was picked.
     @discardableResult
-    public func add(url: URL, name: String? = nil) async throws -> Workspace {
+    public func add(url: URL, name: String? = nil) async throws -> Repository {
         let url = url.standardizedFileURL
         let kind = try await validate(url: url)
 
-        let workspace = Workspace(
+        let workspace = Repository(
             name: name ?? Self.defaultName(for: url, kind: kind),
             path: url.path(percentEncoded: false),
             bookmark: try bookmarks.makeBookmark(for: url),
@@ -75,7 +75,7 @@ public struct WorkspaceStore {
     /// would be data loss from the user's side for something as ordinary as an
     /// external drive being unplugged.
     @discardableResult
-    public func open() throws -> [Workspace] {
+    public func open() throws -> [Repository] {
         let workspaces = try workspaces()
 
         for workspace in workspaces {
@@ -104,7 +104,7 @@ public struct WorkspaceStore {
     /// Points an existing workspace at a folder the user found again, after its
     /// own went missing. Keeps the workspace's name, order and identity: this is
     /// the same workspace, somewhere else.
-    public func relocate(_ workspace: Workspace, to url: URL) async throws {
+    public func relocate(_ workspace: Repository, to url: URL) async throws {
         let url = url.standardizedFileURL
         try await repositoryKind(of: url)
 
@@ -118,7 +118,7 @@ public struct WorkspaceStore {
     /// already chosen something, and an empty row in the sidebar is never what
     /// they meant. Duplicates are fine, since two checkouts of one repository
     /// legitimately share a name and identity is the `id`.
-    public func rename(_ workspace: Workspace, to name: String) throws {
+    public func rename(_ workspace: Repository, to name: String) throws {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name != workspace.name else { return }
         workspace.name = name
@@ -132,7 +132,7 @@ public struct WorkspaceStore {
     /// user never moved, and an undone delete would then land on a number a
     /// sibling had taken. A gap in the sequence costs nothing: the sort only
     /// cares about the relative order.
-    public func delete(_ workspace: Workspace) throws {
+    public func delete(_ workspace: Repository) throws {
         access.end(for: workspace.id)
         context.delete(workspace)
         try context.save()
@@ -141,7 +141,7 @@ public struct WorkspaceStore {
     /// Puts the workspaces in the given order, renumbering every row in one
     /// save. Renumbering wholesale is a handful of assignments at this size, and
     /// leaves no room for the numbering to go inconsistent.
-    public func reorder(to ordered: [Workspace]) throws {
+    public func reorder(to ordered: [Repository]) throws {
         for (index, workspace) in ordered.enumerated() where workspace.order != index {
             workspace.order = index
         }
@@ -158,9 +158,9 @@ public struct WorkspaceStore {
         case .mainWorkingTree, .bare:
             return kind
         case .linkedWorktree(let mainRepository):
-            throw WorkspaceStoreError.isLinkedWorktree(mainRepository: mainRepository)
+            throw RepositoryStoreError.isLinkedWorktree(mainRepository: mainRepository)
         case .notARepository:
-            throw WorkspaceStoreError.notAGitRepository(url)
+            throw RepositoryStoreError.notAGitRepository(url)
         }
     }
 

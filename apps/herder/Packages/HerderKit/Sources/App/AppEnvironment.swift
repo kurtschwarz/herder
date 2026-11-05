@@ -7,7 +7,6 @@ import Services
 import Storage
 import SwiftData
 import WorkspacesFeature
-import Worktrees
 
 /// Composition root.
 ///
@@ -37,12 +36,12 @@ public final class AppEnvironment {
 
     /// Every change to the workspace list goes through here. Views read the list
     /// itself with `@Query` against the same container.
-    public let workspaces: WorkspaceStore
+    public let workspaces: SwiftDataRepositoryStore
 
     /// The authoritative file and git state of the worktrees being watched.
     /// Held here rather than inside a feature because more than one pane reads
     /// it and features never import each other.
-    public let worktrees: WorktreeStateStore
+    public let worktrees: WorkspaceRegistry
 
     /// What the sidebar shows beside the list itself.
     public let workspaceList: WorkspacesModel
@@ -97,10 +96,10 @@ public final class AppEnvironment {
     ) {
         self.container = container
         self.state = SwiftDataStateStore(container: container)
-        let workspaces = WorkspaceStore(context: container.mainContext, bookmarks: bookmarks, git: git)
+        let workspaces = SwiftDataRepositoryStore(context: container.mainContext, bookmarks: bookmarks, git: git)
         self.workspaces = workspaces
         self.workspaceList = WorkspacesModel(store: workspaces, git: git, picker: folderPicker)
-        let worktrees = WorktreeStateStore(files: files, git: git, watcher: watcher, clock: clock)
+        let worktrees = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock)
         self.worktrees = worktrees
         self.explorer = ExplorerModel(store: worktrees)
         self.editor = EditorModel(store: worktrees, files: files, highlighter: highlighter)

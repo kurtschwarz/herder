@@ -3,7 +3,7 @@ import SwiftData
 
 /// Version 2 of the workspace store: adds ``StoredState``.
 ///
-/// ``Workspace`` is carried over from ``WorkspaceSchemaV1`` unchanged rather
+/// ``Repository`` is carried over from ``WorkspaceSchemaV1`` unchanged rather
 /// than redeclared. A version that redeclares a model it has not altered gives
 /// two classes the same table and nothing to tell them apart; the version
 /// identifier is what records that the schema moved, and the stage below is
@@ -12,7 +12,7 @@ public enum WorkspaceSchemaV2: VersionedSchema {
     public static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
 
     public static var models: [any PersistentModel.Type] {
-        [WorkspaceSchemaV1.Workspace.self, StoredState.self]
+        [WorkspaceSchemaV1.Repository.self, StoredState.self]
     }
 
     /// One blob of the app's own state, keyed by a string.

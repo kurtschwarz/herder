@@ -8,8 +8,8 @@ import SwiftUI
 /// The sidebar's workspace list: a pinned header over a scrolling tree of
 /// workspaces and their worktrees.
 public struct WorkspacesView: View {
-    @Query(sort: [SortDescriptor(\Workspace.order), SortDescriptor(\Workspace.addedAt)])
-    private var workspaces: [Workspace]
+    @Query(sort: [SortDescriptor(\Repository.order), SortDescriptor(\Repository.addedAt)])
+    private var workspaces: [Repository]
 
     private let model: WorkspacesModel
 

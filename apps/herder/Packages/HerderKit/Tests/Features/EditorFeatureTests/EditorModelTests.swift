@@ -3,7 +3,6 @@ import Foundation
 import Services
 import TestSupport
 import Testing
-import Worktrees
 
 @testable import EditorFeature
 
@@ -46,12 +45,12 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
     let git = StubGitClient()
     let watcher = StubFileWatcherClient()
     let clock = VirtualClockClient()
-    let store: WorktreeStateStore
+    let store: WorkspaceRegistry
     let model: EditorModel
     let root = URL(filePath: "/code/api")
 
     init() {
-        store = WorktreeStateStore(files: files, git: git, watcher: watcher, clock: clock)
+        store = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock)
         model = EditorModel(store: store, files: files, highlighter: TreeSitterHighlighter())
     }
 
@@ -64,7 +63,7 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
     }
 
     /// Selects `root` with `names` in it, each holding its own name as text.
-    func start(with names: [String]) async throws -> WorktreeState {
+    func start(with names: [String]) async throws -> Workspace {
         for name in names { files.seed(path(name), "contents of \(name)") }
         files.seed(children: names.map(file), of: root)
         let state = try #require(await store.select(root))
