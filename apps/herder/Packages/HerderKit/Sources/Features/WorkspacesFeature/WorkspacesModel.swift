@@ -40,6 +40,20 @@ public final class WorkspacesModel {
     /// listing is the one that can say it has gone.
     private var selectedWorkspace: UUID?
 
+    /// The workspace itself, found the first time its name is asked for. Held
+    /// rather than looked up each time so reading the name from a view does not
+    /// fetch; the name is still read off it live, so a rename shows.
+    @ObservationIgnored private var selectedWorkspaceRecord: Workspace?
+
+    /// What the selected worktree's workspace is called. A worktree's own
+    /// folder is often `main`, which says nothing about what it belongs to.
+    public var selectedWorkspaceName: String? {
+        if selectedWorkspaceRecord == nil, let id = selectedWorkspace {
+            selectedWorkspaceRecord = (try? store.workspaces())?.first { $0.id == id }
+        }
+        return selectedWorkspaceRecord?.name
+    }
+
     /// The workspace whose name is being edited in place.
     public var renaming: UUID?
 
@@ -185,6 +199,7 @@ public final class WorkspacesModel {
     private func setSelection(_ worktree: URL?, in workspace: UUID?) {
         selectedWorktree = worktree
         selectedWorkspace = workspace
+        selectedWorkspaceRecord = nil
         defaults.set(worktree?.path(percentEncoded: false), forKey: Self.selectedPathKey)
         defaults.set(workspace?.uuidString, forKey: Self.selectedWorkspaceKey)
     }

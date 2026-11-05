@@ -1,0 +1,109 @@
+import AppKit
+import DesignSystem
+
+/// Numbers the lines of a TextKit 2 text view.
+///
+/// Draws only the fragments in view. A line's number is found by searching the
+/// offsets at which lines start, which are worked out once per text rather than
+/// on every scroll.
+final class LineNumberRuler: NSRulerView {
+    private weak var textView: NSTextView?
+
+    /// UTF-16 offset of the start of each line, the unit `NSTextContentManager`
+    /// measures in.
+    private var lineStarts = [0]
+
+    private let font = NSFont.monospacedDigitSystemFont(ofSize: Theme.Size.code, weight: .regular)
+
+    private var attributes: [NSAttributedString.Key: Any] {
+        [.font: font, .foregroundColor: NSColor(Theme.Palette.tertiaryText)]
+    }
+
+    init(scrollView: NSScrollView, textView: NSTextView) {
+        self.textView = textView
+        super.init(scrollView: scrollView, orientation: .verticalRuler)
+        clientView = textView
+        ruleThickness = Theme.Size.gutter
+        // Views stopped clipping to their bounds by default in macOS 14, and a
+        // number for a line scrolled half out of view would be drawn over the
+        // breadcrumb above.
+        clipsToBounds = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(scrolled),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+    }
+
+    required init(coder: NSCoder) {
+        fatalError("init(coder:) is not used")
+    }
+
+    override var isFlipped: Bool { true }
+
+    @objc private func scrolled(_ note: Notification) {
+        needsDisplay = true
+    }
+
+    func textDidChange(to text: String) {
+        var starts = [0]
+        for (offset, unit) in text.utf16.enumerated() where unit == 0x0A {
+            starts.append(offset + 1)
+        }
+        lineStarts = starts
+        needsDisplay = true
+        // Layout is lazy and has not happened yet, so what is in view is not
+        // known until after this pass.
+        DispatchQueue.main.async { [weak self] in self?.needsDisplay = true }
+    }
+
+    /// Skips `super`, which fills a background and rules a line down the edge
+    /// before the numbers are drawn. The gutter is just the numbers.
+    override func draw(_ dirtyRect: NSRect) {
+        drawHashMarksAndLabels(in: dirtyRect)
+    }
+
+    override func drawHashMarksAndLabels(in rect: NSRect) {
+        guard
+            let textView,
+            let layout = textView.textLayoutManager,
+            let content = layout.textContentManager
+        else { return }
+
+        let originY = textView.textContainerOrigin.y
+        let start = layout.textViewportLayoutController.viewportRange?.location ?? layout.documentRange.location
+
+        layout.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
+            // Converted rather than subtracted from the scroll offset: with a
+            // bar over the top, the scroll view has a content inset and the
+            // ruler's own origin is not the clip view's.
+            let top = convert(NSPoint(x: 0, y: fragment.layoutFragmentFrame.minY + originY), from: textView).y
+            if top > bounds.height { return false }
+            guard let line = fragment.textLineFragments.first else { return true }
+
+            let offset = content.offset(from: layout.documentRange.location, to: fragment.rangeInElement.location)
+            let label = NSAttributedString(string: "\(number(at: offset))", attributes: attributes)
+            let size = label.size()
+            // Sat on the text's own baseline. Centring in the line box drifts
+            // when the two fonts' ascents differ.
+            let baseline = top + line.typographicBounds.minY + line.glyphOrigin.y
+            label.draw(at: NSPoint(
+                x: bounds.width - size.width - Theme.Spacing.normal,
+                y: baseline - font.ascender
+            ))
+            return true
+        }
+    }
+
+    /// The 1-based line holding the character at `offset`.
+    private func number(at offset: Int) -> Int {
+        var low = 0
+        var high = lineStarts.count
+        while low < high {
+            let mid = (low + high) / 2
+            if lineStarts[mid] <= offset { low = mid + 1 } else { high = mid }
+        }
+        return low
+    }
+}

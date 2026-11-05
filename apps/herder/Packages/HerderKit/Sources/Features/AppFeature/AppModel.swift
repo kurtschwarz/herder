@@ -1,4 +1,5 @@
 import Clients
+import EditorFeature
 import ExplorerFeature
 import Foundation
 import Observation
@@ -30,6 +31,9 @@ public final class AppModel {
     /// The file tree of the worktree selected in the sidebar.
     public let explorer: ExplorerModel
 
+    /// The file open in the middle pane.
+    public let editor: EditorModel
+
     /// `context` is the app's `mainContext`, the same one `@Query` reads, so a
     /// change made here shows up in the sidebar without a round trip.
     public init(
@@ -47,6 +51,7 @@ public final class AppModel {
         let worktrees = WorktreeStateStore(files: files, git: git, watcher: watcher, clock: clock)
         self.worktrees = worktrees
         self.explorer = ExplorerModel(store: worktrees)
+        self.editor = EditorModel(store: worktrees, files: files)
     }
 
     /// Opens the add-workspace modal. Here rather than on the sidebar because a

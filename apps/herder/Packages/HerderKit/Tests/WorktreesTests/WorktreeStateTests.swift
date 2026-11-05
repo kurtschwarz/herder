@@ -307,3 +307,67 @@ private extension WorktreeState {
     /// Reads a listing by key without the test having to spell out the type.
     func listing(_ key: PathKey) -> Listing? { listing(of: key) }
 }
+
+@Suite struct WorktreeStateObserverTests {
+    let files = InMemoryFileClient()
+    let store: WorktreeStateStore
+    let root = URL(filePath: "/code/api")
+
+    init() {
+        store = WorktreeStateStore(
+            files: files,
+            git: StubGitClient(),
+            watcher: StubFileWatcherClient(),
+            clock: VirtualClockClient()
+        )
+    }
+
+    func start() async throws -> WorktreeState {
+        files.seed(children: [DirectoryEntry(url: root.appending(path: "a.txt"), isDirectory: false)], of: root)
+        let state = try #require(await store.select(root))
+        await state.refresh()
+        return state
+    }
+
+    @Test func everyObserverHearsAChange() async throws {
+        let state = try await start()
+        var heard = 0
+        let first = state.observe(onChange: { heard += 1 })
+        let second = state.observe(onChange: { heard += 1 })
+
+        await state.refresh()
+
+        #expect(heard == 2)
+        first.cancel()
+        second.cancel()
+    }
+
+    @Test func aCancelledObserverHearsNothing() async throws {
+        let state = try await start()
+        var heard = 0
+        state.observe(onChange: { heard += 1 }).cancel()
+
+        await state.refresh()
+
+        #expect(heard == 0)
+    }
+
+    @Test func aMoveIsBroadcastWithTheOldAndNewPaths() async throws {
+        let state = try await start()
+        var moves: [[PathKey]] = []
+        let registration = state.observe(onChange: {}, onMove: { moves.append([$0, $1]) })
+
+        try await state.move(root.appending(path: "a.txt"), to: root.appending(path: "b.txt"))
+
+        #expect(moves == [[PathKey(root.appending(path: "a.txt")), PathKey(root.appending(path: "b.txt"))]])
+        registration.cancel()
+    }
+
+    @Test func existsSaysNilForAFolderNeverRead() async throws {
+        let state = try await start()
+
+        #expect(state.exists(state.root.appending("a.txt")) == true)
+        #expect(state.exists(state.root.appending("gone.txt")) == false)
+        #expect(state.exists(state.root.appending("sub/x.txt")) == nil)
+    }
+}

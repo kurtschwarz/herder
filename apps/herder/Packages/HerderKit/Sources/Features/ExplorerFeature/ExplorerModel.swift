@@ -58,6 +58,8 @@ public final class ExplorerModel {
     /// The worktree being shown, or `nil` when none is selected.
     public private(set) var worktree: WorktreeState?
 
+    private var registration: WorktreeState.Registration?
+
     /// The folder the tree is rooted at. Always open; `nil` shows nothing.
     public var root: URL? { worktree?.root.url }
 
@@ -109,7 +111,8 @@ public final class ExplorerModel {
         let key = url.map(PathKey.init)
         guard key != worktree?.root else { return }
 
-        worktree?.onChange = nil
+        registration?.cancel()
+        registration = nil
         expanded = []
         selected = nil
         renaming = nil
@@ -118,7 +121,7 @@ public final class ExplorerModel {
         let state = await store.select(key?.url)
         // Weak, or the state would hold this model which holds the store which
         // holds the state.
-        state?.onChange = { [weak self] in self?.dropWhatHasGone() }
+        registration = state?.observe(onChange: { [weak self] in self?.dropWhatHasGone() })
         // Held before the first read, so the folders show as they are read
         // rather than all at once once git has answered as well.
         worktree = state
@@ -254,17 +257,10 @@ public final class ExplorerModel {
         if let renaming, !isStillThere(renaming) { self.renaming = nil }
     }
 
+    /// Unknown counts as there: leaving something alone beats dropping what is
+    /// probably fine.
     private func isStillThere(_ url: URL) -> Bool {
-        let key = Self.key(url)
-        guard
-            let parent = key.parent,
-            case .loaded(let entries)? = worktree?.listing(of: parent)
-        else {
-            // Its folder has not been read, so nothing here knows either way.
-            // Leaving it alone beats dropping something that is probably fine.
-            return true
-        }
-        return entries.contains { $0.name == key.name }
+        worktree?.exists(Self.key(url)) ?? true
     }
 
     private func rows(in folder: PathKey, depth: Int, underIgnored: Bool = false) -> [ExplorerRow] {

@@ -76,10 +76,17 @@ let package = Package(
         ),
 
         .target(
+            name: "EditorFeature",
+            dependencies: ["Models", "Clients", "DesignSystem", "Worktrees"],
+            path: "Sources/Features/EditorFeature",
+            swiftSettings: ui
+        ),
+
+        .target(
             name: "AppFeature",
             dependencies: [
                 "Models", "Clients", "DesignSystem", "Storage", "Worktrees",
-                "WorkspacesFeature", "ExplorerFeature",
+                "WorkspacesFeature", "ExplorerFeature", "EditorFeature",
             ],
             path: "Sources/Features/AppFeature",
             swiftSettings: ui
@@ -115,6 +122,12 @@ let package = Package(
             name: "ExplorerFeatureTests",
             dependencies: ["ExplorerFeature", "Models", "Clients", "ClientsTestSupport", "Worktrees"],
             path: "Tests/Features/ExplorerFeatureTests",
+            swiftSettings: ui
+        ),
+        .testTarget(
+            name: "EditorFeatureTests",
+            dependencies: ["EditorFeature", "Models", "Clients", "ClientsTestSupport", "Worktrees"],
+            path: "Tests/Features/EditorFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(

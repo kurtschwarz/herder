@@ -41,6 +41,11 @@ public final class WorktreeStateStore {
         states[PathKey(worktree)]
     }
 
+    /// The state of whichever held worktree `path` lies inside.
+    public func state(containing path: PathKey) -> WorktreeState? {
+        states.values.first { path.isInside($0.root) }
+    }
+
     /// Holds state for `worktree` and nothing else, stopping whatever else was
     /// being watched.
     ///

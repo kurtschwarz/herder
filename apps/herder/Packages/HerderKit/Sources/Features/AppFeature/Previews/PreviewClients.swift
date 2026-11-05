@@ -9,6 +9,7 @@ import SwiftData
 /// release build; tests use `InMemoryFileClient` from `ClientsTestSupport` instead.
 struct PreviewFileClient: FileClient {
     func read(_ path: String) async throws -> String { "" }
+    func read(_ path: String, maxBytes: Int) async throws -> String { "" }
     func write(_ contents: String, to path: String) async throws {}
     func exists(_ path: String) async -> Bool { true }
     func move(_ source: URL, to destination: URL) async throws {}

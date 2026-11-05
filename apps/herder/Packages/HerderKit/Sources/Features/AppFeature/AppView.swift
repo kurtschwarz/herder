@@ -1,4 +1,5 @@
 import DesignSystem
+import EditorFeature
 import ExplorerFeature
 import SwiftUI
 import WorkspacesFeature
@@ -21,17 +22,25 @@ public struct AppView: View {
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
 
-            Detail()
+            EditorView(model: model.editor, rootName: model.workspaceList.selectedWorkspaceName)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            ExplorerView(model: model.explorer)
+            ExplorerView(model: model.explorer, rootName: model.workspaceList.selectedWorkspaceName)
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
         }
         // The sidebar owns the selection and the explorer must not import it,
         // so the plain URL crosses here.
         .task(id: model.workspaceList.selectedWorktree) {
+            // A file from the worktree before is stale, not preserved.
+            model.editor.close()
             await model.explorer.setRoot(model.workspaceList.selectedWorktree)
+        }
+        // Selection only ever opens. A file that goes from disk loses its
+        // selection but not its pane: the editor keeps it, struck through.
+        .task(id: model.explorer.selected) {
+            guard let file = model.explorer.selected else { return }
+            await model.editor.open(file)
         }
         // The modal's scrim swallows clicks; this stops the keyboard reaching
         // what it covers.

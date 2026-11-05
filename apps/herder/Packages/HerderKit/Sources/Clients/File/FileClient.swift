@@ -7,6 +7,12 @@ import Foundation
 /// in `ClientsTestSupport` for tests.
 public protocol FileClient: Sendable {
     func read(_ path: String) async throws -> String
+
+    /// Like ``read(_:)``, but never takes in more than `maxBytes`. Throws
+    /// `tooLarge` for a longer file without reading the rest of it, and in the
+    /// same call that does the reading, so a file that grows in between cannot
+    /// slip past a size check made first.
+    func read(_ path: String, maxBytes: Int) async throws -> String
     func write(_ contents: String, to path: String) async throws
     func exists(_ path: String) async -> Bool
 
@@ -42,6 +48,7 @@ public struct DirectoryEntry: Sendable, Equatable, Identifiable {
 public enum FileClientError: Error, Equatable {
     case notFound(path: String)
     case notUTF8(path: String)
+    case tooLarge(path: String)
     case unreadable(path: String)
     case alreadyExists(path: String)
 }

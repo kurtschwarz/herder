@@ -72,10 +72,46 @@ public final class WorktreeState {
     /// half-dead tree after that.
     public private(set) var isAvailable = true
 
-    /// Called after the listings or the status change. One consumer: the pane
-    /// showing this worktree, which uses it to drop a selection whose file has
-    /// gone. A second would want a broadcast, and nothing needs one yet.
-    public var onChange: (() -> Void)?
+    /// Who hears about changes to this worktree. See ``observe(onChange:onMove:)``.
+    private struct Observer {
+        var onChange: () -> Void
+        var onMove: (PathKey, PathKey) -> Void
+    }
+
+    private var observers: [UUID: Observer] = [:]
+
+    /// Held by whoever is listening, and cancelled when they stop. Cancelling
+    /// is explicit: nothing here is told when its holder goes away.
+    public final class Registration {
+        private weak var state: WorktreeState?
+        private let id: UUID
+
+        fileprivate init(state: WorktreeState, id: UUID) {
+            self.state = state
+            self.id = id
+        }
+
+        public func cancel() {
+            state?.observers[id] = nil
+            state = nil
+        }
+    }
+
+    /// Calls `onChange` after the listings or the status change, and `onMove`
+    /// when a file or folder is renamed through ``move(_:to:)``, with the old
+    /// and the new path. The change signal carries nothing else: a listener
+    /// re-reads what it cares about.
+    ///
+    /// Capture the listener as `[weak self]`, or the state would hold a
+    /// listener which holds the state.
+    public func observe(
+        onChange: @escaping () -> Void,
+        onMove: @escaping (PathKey, PathKey) -> Void = { _, _ in }
+    ) -> Registration {
+        let id = UUID()
+        observers[id] = Observer(onChange: onChange, onMove: onMove)
+        return Registration(state: self, id: id)
+    }
 
     private var dirty: Set<PathKey> = []
     private var needsFullScan = false
@@ -122,6 +158,24 @@ public final class WorktreeState {
 
     public func listing(of folder: PathKey) -> Listing? {
         listings[folder]
+    }
+
+    /// Whether `path` is still there, as far as the folder that holds it
+    /// says. `nil` when that folder has not been read, so nothing here knows
+    /// either way; leaving what is probably fine alone beats dropping it.
+    public func exists(_ path: PathKey) -> Bool? {
+        guard
+            let parent = path.parent,
+            case .loaded(let entries)? = listings[parent]
+        else { return nil }
+        return entries.contains { $0.name == path.name }
+    }
+
+    /// The worktree's own folder name followed by the names between it and
+    /// `path`, for a breadcrumb. Empty when `path` is not inside.
+    public func components(of path: PathKey) -> [String] {
+        guard path.isInside(root) else { return [] }
+        return [root.name] + path.path.dropFirst(root.path.count).split(separator: "/").map(String.init)
     }
 
     /// Reads `folder` the first time it is asked for, and not again: a
@@ -202,6 +256,9 @@ public final class WorktreeState {
             listings.map { (Self.moved($0.key, from: old, to: new), $0.value) },
             uniquingKeysWith: { first, _ in first }
         )
+        // Before the refresh, which tells listeners to re-read: they must know
+        // where the file went by then, or the re-read finds it gone.
+        for observer in Array(observers.values) { observer.onMove(old, new) }
         await refresh()
     }
 
@@ -223,7 +280,7 @@ public final class WorktreeState {
     }
 
     private func notify() {
-        onChange?()
+        for observer in Array(observers.values) { observer.onChange() }
     }
 
     // MARK: - Watching

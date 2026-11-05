@@ -24,6 +24,25 @@ import Testing
         #expect(try await client.read(path("a.txt")) == "hello")
     }
 
+    @Test func aBoundedReadOfAFileWithinTheLimitReturnsIt() async throws {
+        try await client.write("12345", to: path("a.txt"))
+        #expect(try await client.read(path("a.txt"), maxBytes: 5) == "12345")
+    }
+
+    @Test func aBoundedReadOfALongerFileThrowsTooLarge() async throws {
+        try await client.write("123456", to: path("a.txt"))
+        await #expect(throws: FileClientError.tooLarge(path: path("a.txt"))) {
+            try await client.read(path("a.txt"), maxBytes: 5)
+        }
+    }
+
+    @Test func aBoundedReadOfBytesThatAreNotTextThrows() async throws {
+        try Data([0xFF, 0xFE, 0x00]).write(to: URL(filePath: path("bin")))
+        await #expect(throws: FileClientError.notUTF8(path: path("bin"))) {
+            try await client.read(path("bin"), maxBytes: 100)
+        }
+    }
+
     @Test func readingAMissingPathThrows() async {
         let missing = path("nope.txt")
         await #expect(throws: FileClientError.notFound(path: missing)) {

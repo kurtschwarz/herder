@@ -26,6 +26,27 @@ public struct LiveFileClient: FileClient {
     }
 
     @concurrent
+    public func read(_ path: String, maxBytes: Int) async throws -> String {
+        guard let handle = FileHandle(forReadingAtPath: path) else {
+            throw FileClientError.notFound(path: path)
+        }
+        defer { try? handle.close() }
+        // One byte more than allowed: enough to tell "exactly the limit" from
+        // "over it" without reading the rest.
+        let data: Data
+        do {
+            data = try handle.read(upToCount: maxBytes + 1) ?? Data()
+        } catch {
+            throw FileClientError.unreadable(path: path)
+        }
+        guard data.count <= maxBytes else { throw FileClientError.tooLarge(path: path) }
+        guard let contents = String(data: data, encoding: .utf8) else {
+            throw FileClientError.notUTF8(path: path)
+        }
+        return contents
+    }
+
+    @concurrent
     public func write(_ contents: String, to path: String) async throws {
         let url = URL(filePath: path)
         try FileManager.default.createDirectory(

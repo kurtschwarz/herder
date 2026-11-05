@@ -41,6 +41,12 @@ public final class InMemoryFileClient: FileClient {
         return contents
     }
 
+    public func read(_ path: String, maxBytes: Int) async throws -> String {
+        let contents = try await read(path)
+        guard contents.utf8.count <= maxBytes else { throw FileClientError.tooLarge(path: path) }
+        return contents
+    }
+
     public func write(_ contents: String, to path: String) async throws {
         storage.withLock { $0[path] = contents }
     }

@@ -22,8 +22,12 @@ public struct ExplorerView: View {
     /// hold focus at once.
     @FocusState private var focus: ExplorerFocus?
 
-    public init(model: ExplorerModel) {
+    /// What the root is called, in place of the worktree's folder name.
+    private let rootName: String?
+
+    public init(model: ExplorerModel, rootName: String? = nil) {
         self.model = model
+        self.rootName = rootName
     }
 
     public var body: some View {
@@ -36,7 +40,7 @@ public struct ExplorerView: View {
             if let root = model.root {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        RootLabel(url: root, model: model)
+                        RootLabel(url: root, name: rootName ?? root.lastPathComponent, model: model)
                         ForEach(model.rows) { row in
                             ExplorerRowView(row: row, model: model, focus: $focus)
                         }
@@ -111,10 +115,11 @@ private struct ExplorerHeader: View {
 /// its children are always showing.
 private struct RootLabel: View {
     let url: URL
+    let name: String
     let model: ExplorerModel
 
     var body: some View {
-        Text(url.lastPathComponent)
+        Text(name)
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(Theme.Palette.secondaryText)
             .lineLimit(1)
@@ -184,6 +189,7 @@ private struct PreviewWatcher: FileWatcherClient {
 
 private struct PreviewFiles: FileClient {
     func read(_ path: String) async throws -> String { "" }
+    func read(_ path: String, maxBytes: Int) async throws -> String { "" }
     func write(_ contents: String, to path: String) async throws {}
     func exists(_ path: String) async -> Bool { true }
     func children(of url: URL) async throws -> [DirectoryEntry] { [] }

@@ -17,6 +17,7 @@ apps/herder/
     │   ├── Features/         # one target per feature, each with an explicit path
     │   │   ├── WorkspacesFeature/  # workspace list, worktrees, add modal
     │   │   ├── ExplorerFeature/    # file tree of the selected worktree
+    │   │   ├── EditorFeature/      # read-only view of the file clicked in the explorer
     │   │   └── AppFeature/   # root view and composition
     │   │       ├── AppModel.swift    # @Observable, builds the feature graph
     │   │       ├── AppView.swift     # window layout, no feature logic

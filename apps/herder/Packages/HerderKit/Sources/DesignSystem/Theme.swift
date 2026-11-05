@@ -39,6 +39,10 @@ public enum Theme {
         /// chevron slot on a folder row, so a file's icon lines up with its
         /// sibling folders'.
         public static let treeIndent: CGFloat = 14
+        /// Point size of code in the editor.
+        public static let code: CGFloat = 12
+        /// Width of the editor's line-number gutter.
+        public static let gutter: CGFloat = 48
     }
 
     public enum Opacity {
