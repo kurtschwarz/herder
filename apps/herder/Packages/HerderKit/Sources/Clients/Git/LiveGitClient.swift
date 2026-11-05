@@ -193,12 +193,20 @@ public struct LiveGitClient: GitClient {
     /// the output stays small no matter what a build has written. `-z` is the
     /// only safe way to read paths back, since a path may hold anything but a
     /// NUL.
+    ///
+    /// `--ignored=matching` rather than the bare flag, which means
+    /// `traditional`: that mode has to prove a folder holds nothing but
+    /// ignored files before it will collapse it, so it walks all of
+    /// `node_modules`. `matching` stops at the pattern. On a 29k-file
+    /// repository that was 3.1 s against 0.28 s, for the same collapsed
+    /// folders; the one difference is a folder that is partly ignored, which
+    /// is listed file by file instead.
     @concurrent
     public func status(in worktree: URL) async throws -> GitWorktreeStatus {
         let root = PathKey(worktree)
         let (code, output) = try runGit([
             "-C", root.path,
-            "status", "--porcelain=v2", "--ignored", "--untracked-files=normal", "-z",
+            "status", "--porcelain=v2", "--ignored=matching", "--untracked-files=normal", "-z",
         ], allowing: [])
         // 128 is git saying this is not a repository, a normal answer for a
         // folder the app was pointed at.
