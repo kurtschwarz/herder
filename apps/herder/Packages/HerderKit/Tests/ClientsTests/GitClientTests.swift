@@ -55,39 +55,109 @@ import Testing
         return url
     }
 
-    @Test func ignoredFindsWhatGitIgnoresIncludingFoldersAndNestedRules() async throws {
+    /// Relative paths and their status, which is what the assertions read more
+    /// clearly than a dictionary keyed on absolute URLs.
+    func statuses(_ status: GitWorktreeStatus) -> [String: GitStatus] {
+        Dictionary(uniqueKeysWithValues: status.entries.map {
+            (String($0.key.path.dropFirst(status.root.path.count + 1)), $0.value)
+        })
+    }
+
+    @Test func statusFindsWhatGitIgnoresIncludingNestedRulesAndNegations() async throws {
         let repo = try makeRepository("repo")
         try Data("*.log\nbuild/\n!keep.log\n".utf8).write(to: repo.appending(path: ".gitignore"))
         try FileManager.default.createDirectory(at: repo.appending(path: "build"), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: repo.appending(path: "build/out.o"))
         try FileManager.default.createDirectory(at: repo.appending(path: "sub"), withIntermediateDirectories: true)
         try Data("*.tmp\n".utf8).write(to: repo.appending(path: "sub/.gitignore"))
-        for name in ["a.txt", "debug.log", "keep.log"] {
+        for name in ["debug.log", "keep.log"] {
             try Data("x".utf8).write(to: repo.appending(path: name))
         }
         for name in ["x.tmp", "y.txt"] {
             try Data("x".utf8).write(to: repo.appending(path: "sub/\(name)"))
         }
-        func entry(_ name: String, in folder: URL, isDirectory: Bool = false) -> DirectoryEntry {
-            DirectoryEntry(url: folder.appending(path: name), isDirectory: isDirectory)
-        }
-        let top = [
-            entry("a.txt", in: repo), entry("debug.log", in: repo), entry("keep.log", in: repo),
-            entry("build", in: repo, isDirectory: true),
-        ]
-        let sub = repo.appending(path: "sub")
 
-        let ignoredTop = try await client.ignored(top, in: repo)
-        let ignoredSub = try await client.ignored([entry("x.tmp", in: sub), entry("y.txt", in: sub)], in: sub)
+        let found = statuses(try await client.status(in: repo))
 
-        #expect(ignoredTop.map(\.lastPathComponent).sorted() == ["build", "debug.log"])
-        #expect(ignoredSub.map(\.lastPathComponent) == ["x.tmp"])
+        #expect(found["debug.log"] == .ignored)
+        // A nested ignore file counts, and is reported even though the folder
+        // holding it collapsed as untracked.
+        #expect(found["sub"] == .untracked)
+        #expect(found["sub/x.tmp"] == .ignored)
+        // Negated back in, so untracked rather than ignored.
+        #expect(found["keep.log"] == .untracked)
     }
 
-    @Test func ignoredIsEmptyOutsideARepository() async throws {
-        let plain = try makeDirectory("plain-ignored")
-        let entry = DirectoryEntry(url: plain.appending(path: "a.log"), isDirectory: false)
+    /// The flag that keeps the output small: an ignored or untracked folder is
+    /// one entry, and nothing inside it is walked or reported.
+    @Test func statusCollapsesIgnoredAndUntrackedFolders() async throws {
+        let repo = try makeRepository("collapsing")
+        try Data("build/\n".utf8).write(to: repo.appending(path: ".gitignore"))
+        for name in ["build", "fresh"] {
+            try FileManager.default.createDirectory(at: repo.appending(path: name), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: repo.appending(path: "\(name)/inside.txt"))
+        }
 
-        #expect(try await client.ignored([entry], in: plain).isEmpty)
+        let found = statuses(try await client.status(in: repo))
+
+        #expect(found["build"] == .ignored)
+        #expect(found["fresh"] == .untracked)
+        #expect(found["build/inside.txt"] == nil)
+        #expect(found["fresh/inside.txt"] == nil)
+    }
+
+    @Test func statusKeepsStagedAndUnstagedApart() async throws {
+        let repo = try makeRepository("columns")
+        try Data("one".utf8).write(to: repo.appending(path: "staged.txt"))
+        try git("add", "staged.txt", in: repo)
+        try Data("two".utf8).write(to: repo.appending(path: "staged.txt"))
+        try Data("edited".utf8).write(to: repo.appending(path: "README.md"))
+
+        let found = statuses(try await client.status(in: repo))
+
+        #expect(found["staged.txt"] == .tracked(staged: .added, unstaged: .modified))
+        #expect(found["README.md"] == .tracked(staged: .unchanged, unstaged: .modified))
+    }
+
+    @Test func statusReportsADeletedFile() async throws {
+        let repo = try makeRepository("gone")
+
+        try git("rm", "--quiet", "README.md", in: repo)
+
+        // Nothing is left on disk, so no row will draw it: the entry is here
+        // only so the folder it was in can say something went missing.
+        #expect(statuses(try await client.status(in: repo))["README.md"]
+            == .tracked(staged: .deleted, unstaged: .unchanged))
+    }
+
+    @Test func statusReportsWhereARenameCameFrom() async throws {
+        let repo = try makeRepository("renamed")
+        // Content git cannot confuse with README.md's, or rename detection is
+        // free to pair the two files the other way round.
+        try Data("something else entirely".utf8).write(to: repo.appending(path: "moved.txt"))
+        try git("add", ".", in: repo)
+        try git("commit", "-m", "second", in: repo)
+        try git("mv", "moved.txt", "elsewhere.txt", in: repo)
+
+        let found = statuses(try await client.status(in: repo))
+
+        #expect(found["elsewhere.txt"] == .tracked(staged: .renamed, unstaged: .unchanged))
+        #expect(found["moved.txt"] == .tracked(staged: .renamed, unstaged: .unchanged))
+    }
+
+    @Test func statusReadsAPathWithSpacesAndQuotesInIt() async throws {
+        let repo = try makeRepository("awkward")
+        let name = #"a "quoted" name.txt"#
+        try Data("x".utf8).write(to: repo.appending(path: name))
+
+        #expect(statuses(try await client.status(in: repo))[name] == .untracked)
+    }
+
+    @Test func statusIsEmptyOutsideARepository() async throws {
+        let plain = try makeDirectory("plain-status")
+        try Data("x".utf8).write(to: plain.appending(path: "a.log"))
+
+        #expect(try await client.status(in: plain).entries.isEmpty)
     }
 
     @Test func plainFolderIsNotARepository() async throws {

@@ -1,7 +1,9 @@
 import Clients
 import ClientsTestSupport
 import Foundation
+import Models
 import Testing
+import WorktreeState
 
 @testable import ExplorerFeature
 
@@ -381,38 +383,32 @@ import Testing
         #expect(ignoredNames(model) == ["build", "out.o"])
     }
 
-    @Test func gitIsNotAskedAboutWhatIsInsideAnIgnoredFolder() async {
+    /// One `git status` covers the whole worktree, including folders nobody has
+    /// opened, so opening one asks git nothing.
+    @Test func gitIsAskedOnceForTheTreeHoweverManyFoldersOpen() async {
         let build = dir("build")
         let deeper = dir("obj", in: build.url)
-        files.seed(children: [build], of: root)
+        let sources = dir("Sources")
+        files.seed(children: [build, sources], of: root)
         files.seed(children: [deeper], of: build.url)
         files.seed(children: [file("a.o", in: deeper.url)], of: deeper.url)
+        files.seed(children: [file("a.swift", in: sources.url)], of: sources.url)
         git.seed(ignored: ["build"], in: root)
         await model.setRoot(root)
 
         await model.toggle(build.url)
         await model.toggle(deeper.url)
+        await model.toggle(sources.url)
 
-        #expect(git.ignoredLookups == [root])
+        #expect(git.statusLookups == [root])
         #expect(ignoredNames(model) == ["build", "obj", "a.o"])
     }
 
-    @Test func gitIsAskedAboutFoldersThatAreNotIgnored() async {
-        let sources = dir("Sources")
-        files.seed(children: [sources], of: root)
-        files.seed(children: [file("a.swift", in: sources.url)], of: sources.url)
-        await model.setRoot(root)
-
-        await model.toggle(sources.url)
-
-        #expect(git.ignoredLookups == [root, sources.url])
-    }
-
-    @Test func aFolderIgnoredOnlyInsideItselfFlagsOnlyThatEntry() async {
+    @Test func aFileIgnoredOnlyInsideAFolderFlagsOnlyThatEntry() async {
         let sources = dir("Sources")
         files.seed(children: [sources], of: root)
         files.seed(children: [file("a.swift", in: sources.url), file("b.log", in: sources.url)], of: sources.url)
-        git.seed(ignored: ["b.log"], in: sources.url)
+        git.seed(ignored: ["Sources/b.log"], in: root)
         await model.setRoot(root)
 
         await model.toggle(sources.url)
@@ -423,27 +419,27 @@ import Testing
     @Test func theListingShowsBeforeGitHasAnswered() async {
         files.seed(children: [file("a.txt"), file("debug.log")], of: root)
         git.seed(ignored: ["debug.log"], in: root)
-        git.holdIgnoredLookups()
+        git.holdStatusLookups()
 
         let reading = Task { await model.setRoot(root) }
-        while git.ignoredLookups.isEmpty { await Task.yield() }
+        while git.statusLookups.isEmpty { await Task.yield() }
 
         #expect(names(model) == ["a.txt", "debug.log"])
         #expect(ignoredNames(model).isEmpty)
 
-        git.releaseIgnoredLookups()
+        git.releaseStatusLookups()
         await reading.value
 
         #expect(ignoredNames(model) == ["debug.log"])
     }
 
-    @Test func aFailedGitLookupKeepsTheFadeAndStillShowsTheFiles() async {
+    @Test func aFailedGitLookupKeepsTheMarksAndStillShowsTheFiles() async {
         files.seed(children: [file("debug.log")], of: root)
         git.seed(ignored: ["debug.log"], in: root)
         await model.setRoot(root)
 
         files.seed(children: [file("debug.log"), file("new.txt")], of: root)
-        git.failIgnoredLookups()
+        git.failStatusLookups()
         await model.refresh()
 
         #expect(names(model) == ["debug.log", "new.txt"])
@@ -459,5 +455,30 @@ import Testing
         await model.refresh()
 
         #expect(ignoredNames(model).isEmpty)
+    }
+
+    @Test func everythingInsideAnUntrackedFolderIsUntrackedWithIt() async {
+        let fresh = dir("fresh")
+        files.seed(children: [fresh], of: root)
+        files.seed(children: [file("a.txt", in: fresh.url)], of: fresh.url)
+        git.seed(status: ["fresh": .untracked], in: root)
+        await model.setRoot(root)
+
+        await model.toggle(fresh.url)
+
+        #expect(model.status.status(of: PathKey(fresh.url.appending(path: "a.txt"))) == .untracked)
+        // Untracked is not ignored: it is the work, not the leftovers.
+        #expect(ignoredNames(model).isEmpty)
+    }
+
+    @Test func aTrackedChangeInsideAClosedFolderMarksTheFolder() async {
+        let sources = dir("Sources")
+        files.seed(children: [sources], of: root)
+        git.seed(status: ["Sources/deep/App.swift": .tracked(staged: .unchanged, unstaged: .modified)], in: root)
+
+        await model.setRoot(root)
+
+        #expect(model.status.rollup(of: PathKey(sources.url)) == .modified)
+        #expect(model.status.rollup(of: PathKey(root)) == .modified)
     }
 }

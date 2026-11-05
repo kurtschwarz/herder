@@ -1,6 +1,7 @@
 import AppKit
 import Clients
 import DesignSystem
+import Models
 import PhosphorSwift
 import SwiftUI
 
@@ -160,7 +161,7 @@ private struct PreviewGit: GitClient {
     func worktrees(at url: URL) async throws -> [GitWorktree] { [] }
     func branches(at url: URL) async throws -> [String] { [] }
     func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {}
-    func ignored(_ entries: [DirectoryEntry], in folder: URL) async throws -> Set<URL> { [] }
+    func status(in worktree: URL) async throws -> GitWorktreeStatus { GitWorktreeStatus(root: PathKey(worktree)) }
 }
 
 private struct PreviewFiles: FileClient {

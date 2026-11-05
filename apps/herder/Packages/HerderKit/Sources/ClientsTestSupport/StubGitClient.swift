@@ -1,5 +1,6 @@
 import Clients
 import Foundation
+import Models
 import Synchronization
 
 /// `GitClient` whose answers are set by the test, so no test needs a real
@@ -13,11 +14,11 @@ public final class StubGitClient: GitClient {
     private let added = Mutex<[AddedWorktree]>([])
     private let addFailure = Mutex<String?>(nil)
     private let unreadable = Mutex<Set<String>>([])
-    private let ignoredNames = Mutex<[String: Set<String>]>([:])
-    private let ignoredAsked = Mutex<[URL]>([])
-    private let ignoredFails = Mutex(false)
-    private let ignoredHeld = Mutex(false)
-    private let ignoredWaiter = Mutex<CheckedContinuation<Void, Never>?>(nil)
+    private let statuses = Mutex<[String: [String: GitStatus]]>([:])
+    private let statusAsked = Mutex<[URL]>([])
+    private let statusFails = Mutex(false)
+    private let statusHeld = Mutex(false)
+    private let statusWaiter = Mutex<CheckedContinuation<Void, Never>?>(nil)
 
     /// A call to `addWorktree`, as the stub saw it.
     public struct AddedWorktree: Equatable, Sendable {
@@ -68,48 +69,61 @@ public final class StubGitClient: GitClient {
         unreadable.withLock { _ = $0.insert(FolderKey.of(url)) }
     }
 
-    /// Declares which entries of `folder`, by name, git would ignore.
-    public func seed(ignored names: Set<String>, in folder: URL) {
-        ignoredNames.withLock { $0[FolderKey.of(folder)] = names }
+    /// Declares what git would say about the working tree at `worktree`, keyed
+    /// by path relative to it, the way porcelain output is. Replaces any
+    /// earlier seed.
+    public func seed(status: [String: GitStatus], in worktree: URL) {
+        statuses.withLock { $0[PathKey(worktree).path] = status }
     }
 
-    /// Makes `ignored(_:in:)` throw, as it would if git could not run.
-    public func failIgnoredLookups(_ fails: Bool = true) {
-        ignoredFails.withLock { $0 = fails }
+    /// The common case: these paths, relative to `worktree`, are ignored and
+    /// nothing else has changed.
+    public func seed(ignored paths: Set<String>, in worktree: URL) {
+        seed(status: Dictionary(uniqueKeysWithValues: paths.map { ($0, GitStatus.ignored) }), in: worktree)
     }
 
-    /// Makes `ignored(_:in:)` wait, once asked, until `releaseIgnoredLookups()`.
-    public func holdIgnoredLookups() {
-        ignoredHeld.withLock { $0 = true }
+    /// Makes `status(in:)` throw, as it would if git could not run.
+    public func failStatusLookups(_ fails: Bool = true) {
+        statusFails.withLock { $0 = fails }
     }
 
-    public func releaseIgnoredLookups() {
-        ignoredHeld.withLock { $0 = false }
-        ignoredWaiter.withLock { waiter in
+    /// Makes `status(in:)` wait, once asked, until `releaseStatusLookups()`.
+    public func holdStatusLookups() {
+        statusHeld.withLock { $0 = true }
+    }
+
+    public func releaseStatusLookups() {
+        statusHeld.withLock { $0 = false }
+        statusWaiter.withLock { waiter in
             defer { waiter = nil }
             return waiter
         }?.resume()
     }
 
-    /// Every folder `ignored(_:in:)` has been asked about, in order.
-    public var ignoredLookups: [URL] {
-        ignoredAsked.withLock { $0 }
+    /// Every working tree `status(in:)` has been asked about, in order.
+    public var statusLookups: [URL] {
+        statusAsked.withLock { $0 }
     }
 
-    public func ignored(_ entries: [DirectoryEntry], in folder: URL) async throws -> Set<URL> {
-        if ignoredHeld.withLock({ $0 }) {
+    public func status(in worktree: URL) async throws -> GitWorktreeStatus {
+        if statusHeld.withLock({ $0 }) {
             // Recorded once the wait is in place, so a test that sees the
             // lookup can release it without racing the wait.
             await withCheckedContinuation { waiter in
-                ignoredWaiter.withLock { $0 = waiter }
-                ignoredAsked.withLock { $0.append(folder) }
+                statusWaiter.withLock { $0 = waiter }
+                statusAsked.withLock { $0.append(worktree) }
             }
         } else {
-            ignoredAsked.withLock { $0.append(folder) }
+            statusAsked.withLock { $0.append(worktree) }
         }
-        if ignoredFails.withLock({ $0 }) { throw GitClientError.commandFailed("git could not run") }
-        let names = ignoredNames.withLock { $0[FolderKey.of(folder)] } ?? []
-        return Set(entries.filter { names.contains($0.name) }.map(\.url))
+        if statusFails.withLock({ $0 }) { throw GitClientError.commandFailed("git could not run") }
+
+        let root = PathKey(worktree)
+        let seeded = statuses.withLock { $0[root.path] } ?? [:]
+        return GitWorktreeStatus(
+            root: root,
+            entries: Dictionary(uniqueKeysWithValues: seeded.map { (root.appending($0.key), $0.value) })
+        )
     }
 
     public func repositoryKind(at url: URL) async throws -> GitRepositoryKind {

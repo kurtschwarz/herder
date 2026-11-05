@@ -1,6 +1,8 @@
 import Clients
 import Foundation
+import Models
 import Observation
+import WorktreeState
 
 /// One line of the flattened tree.
 public struct ExplorerRow: Identifiable, Equatable {
@@ -59,8 +61,13 @@ public final class ExplorerModel {
     private let files: any FileClient
     private let git: any GitClient
 
-    /// The folder the tree is rooted at. Always open; `nil` shows nothing.
+    /// The folder the tree is rooted at, in the app's one path spelling.
+    /// Always open; `nil` shows nothing.
     public private(set) var root: URL?
+
+    /// `root` as a key, so every path below it can be keyed by appending
+    /// instead of resolving again.
+    private var rootKey: PathKey?
 
     public private(set) var listings: [URL: Listing] = [:]
 
@@ -82,8 +89,8 @@ public final class ExplorerModel {
 
     public private(set) var creating: Creation?
 
-    /// Everything in the folders read so far that git ignores.
-    public private(set) var ignored: Set<URL> = []
+    /// What git says about the whole worktree, however much of it is open.
+    public private(set) var status: WorktreeStatus = .empty
 
     public init(files: any FileClient, git: any GitClient) {
         self.files = files
@@ -106,10 +113,16 @@ public final class ExplorerModel {
     /// Points the tree at a new folder, or at nothing. Does nothing when `url`
     /// is already the root, so a repeat selection keeps what is open.
     public func setRoot(_ url: URL?) async {
+        // Canonicalised here, at the edge of the tree, so `listings` and the
+        // keys git and the file watcher hand back are all the one spelling and
+        // compare by construction.
+        let key = url.map(PathKey.init)
+        let url = key?.url
         guard url != root else { return }
         root = url
+        rootKey = key
         listings = [:]
-        ignored = []
+        status = .empty
         expanded = []
         selected = nil
         await refresh()
@@ -219,18 +232,21 @@ public final class ExplorerModel {
         expanded = []
     }
 
-    /// Re-reads the root and every open folder. Files change in a terminal while
-    /// the app is in the background, so this is what keeps the tree honest.
+    /// Re-reads the root and every open folder, then asks git about the tree.
+    /// Files change in a terminal while the app is in the background, so this is
+    /// what keeps the tree honest.
+    ///
+    /// The listings go up before git is asked, so a slow git delays the marks
+    /// and not the folders.
     public func refresh() async {
         guard let root else { return }
         for folder in [root] + expanded.sorted(by: { $0.path < $1.path }) {
             await read(folder)
         }
+        await readStatus()
     }
 
-    /// Reads `folder` and shows it, then fades what git ignores. The listing
-    /// goes up before git is asked, so a slow git delays the fade and not the
-    /// folder.
+    /// Reads `folder` and shows it.
     private func read(_ folder: URL) async {
         let origin = root
         let entries: [DirectoryEntry]
@@ -240,59 +256,45 @@ public final class ExplorerModel {
             // The task that asked was cancelled, which says nothing about the
             // folder.
             guard !Task.isCancelled, root == origin else { return }
-            forgetIgnored(in: folder)
             listings[folder] = .unreadable
             return
         }
         // The root changed while the read was out: its answer is for a tree
         // that is no longer showing.
         guard root == origin else { return }
-        let before = listings[folder]
+        // A listing that came back the same is not assigned. Writing to a file
+        // inside an open folder changes nothing about what is in that folder,
+        // so a build in watch mode would otherwise re-flatten the whole tree
+        // over and over for no visible difference.
+        guard listings[folder] != .loaded(entries) else { return }
         listings[folder] = .loaded(entries)
+    }
 
-        // Inside an ignored folder everything is faded already, so asking git
-        // about each child of `node_modules` would be wasted.
-        if isInsideIgnored(folder) {
-            ignored.subtract(entries.map(\.url))
-            return
-        }
-        let flagged: Set<URL>
+    /// Asks git about the whole worktree. One subprocess, however many folders
+    /// are open, and it covers folders nobody has opened too: that is what lets
+    /// a closed folder say something inside it changed.
+    private func readStatus() async {
+        guard let root else { return }
+        let origin = root
+        let answer: GitWorktreeStatus
         do {
-            flagged = try await git.ignored(entries, in: folder)
+            answer = try await git.status(in: root)
         } catch {
             // Git could not be asked, which says nothing about the files: keep
-            // what was faded.
+            // what is already marked rather than calling the tree clean.
             return
         }
-        // A newer read of this folder, or another root, overtook this one.
-        guard root == origin, listings[folder] == .loaded(entries) else { return }
-        if case .loaded(let old)? = before { ignored.subtract(old.map(\.url)) }
-        ignored.subtract(entries.map(\.url))
-        ignored.formUnion(flagged)
+        guard self.root == origin else { return }
+        let derived = WorktreeStatus(answer)
+        guard status != derived else { return }
+        status = derived
     }
 
-    private func forgetIgnored(in folder: URL) {
-        if case .loaded(let old)? = listings[folder] { ignored.subtract(old.map(\.url)) }
-    }
-
-    /// Whether `folder`, or a folder between it and the root, is ignored.
-    private func isInsideIgnored(_ folder: URL) -> Bool {
-        // A folder's URL may or may not end in a slash, depending on where it
-        // came from, so compare paths without one.
-        func key(_ url: URL) -> String {
-            var path = url.path(percentEncoded: false)
-            while path.count > 1, path.hasSuffix("/") { path.removeLast() }
-            return path
-        }
-        let paths = Set(ignored.map(key))
-        let rootPath = root.map(key)
-        var current = folder
-        while true {
-            let path = key(current)
-            if paths.contains(path) { return true }
-            if path == rootPath || path == "/" { return false }
-            current = current.deletingLastPathComponent()
-        }
+    /// Keys a path inside the tree. Resolved by construction rather than by
+    /// another `realpath`: the root was canonicalised when it was set, and
+    /// everything under it was built by appending to that.
+    private func key(_ url: URL) -> PathKey {
+        PathKey(resolved: url.path(percentEncoded: false))
     }
 
     private func rows(in folder: URL, depth: Int, underIgnored: Bool = false) -> [ExplorerRow] {
@@ -310,8 +312,10 @@ public final class ExplorerModel {
                     result.append(field)
                     placed = true
                 }
-                // Everything inside an ignored folder is ignored with it.
-                let isIgnored = underIgnored || ignored.contains(entry.url)
+                // Everything inside an ignored folder is ignored with it. The
+                // flag rides down the recursion rather than being asked again
+                // per row, which would walk back up to the root each time.
+                let isIgnored = underIgnored || status.isIgnored(key(entry.url))
                 var row = ExplorerRow(kind: .entry(entry), depth: depth, parent: folder)
                 row.isIgnored = isIgnored
                 result.append(row)

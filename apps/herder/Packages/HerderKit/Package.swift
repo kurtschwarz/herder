@@ -33,11 +33,16 @@ let package = Package(
         .target(name: "Clients", dependencies: ["Models"], swiftSettings: core),
 
         // Fakes for the above. Separate target so they never link into the app.
-        .target(name: "ClientsTestSupport", dependencies: ["Clients"], swiftSettings: core),
+        .target(name: "ClientsTestSupport", dependencies: ["Models", "Clients"], swiftSettings: core),
 
         // The one module that owns reference types: the SwiftData `@Model`
         // classes, their schema versions and the container.
         .target(name: "Storage", dependencies: ["Models", "Clients"], swiftSettings: ui),
+
+        // The authoritative file and git state of a worktree, watched and kept
+        // fresh. Above the clients and below the features, because more than
+        // one feature reads it and features never import each other.
+        .target(name: "WorktreeState", dependencies: ["Models", "Clients"], swiftSettings: ui),
 
         // Shared views, styles, tokens.
         .target(
@@ -63,7 +68,7 @@ let package = Package(
         .target(
             name: "ExplorerFeature",
             dependencies: [
-                "Models", "Clients", "DesignSystem",
+                "Models", "Clients", "DesignSystem", "WorktreeState",
                 .product(name: "PhosphorSwift", package: "swift"),
             ],
             path: "Sources/Features/ExplorerFeature",
@@ -81,6 +86,11 @@ let package = Package(
         ),
 
         .testTarget(
+            name: "ModelsTests",
+            dependencies: ["Models"],
+            swiftSettings: core
+        ),
+        .testTarget(
             name: "ClientsTests",
             dependencies: ["Clients", "ClientsTestSupport"],
             swiftSettings: core
@@ -91,6 +101,11 @@ let package = Package(
             swiftSettings: ui
         ),
         .testTarget(
+            name: "WorktreeStateTests",
+            dependencies: ["WorktreeState", "Clients", "ClientsTestSupport"],
+            swiftSettings: ui
+        ),
+        .testTarget(
             name: "WorkspacesFeatureTests",
             dependencies: ["WorkspacesFeature", "Clients", "ClientsTestSupport", "Storage"],
             path: "Tests/Features/WorkspacesFeatureTests",
@@ -98,7 +113,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ExplorerFeatureTests",
-            dependencies: ["ExplorerFeature", "Clients", "ClientsTestSupport"],
+            dependencies: ["ExplorerFeature", "Models", "Clients", "ClientsTestSupport", "WorktreeState"],
             path: "Tests/Features/ExplorerFeatureTests",
             swiftSettings: ui
         ),

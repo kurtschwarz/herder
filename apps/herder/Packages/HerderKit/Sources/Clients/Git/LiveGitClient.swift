@@ -1,10 +1,12 @@
 import Foundation
+import Models
 
 /// `GitClient` that reads the repository layout off disk instead of running `git`.
 ///
-/// Reading never shells out to `git`: it is quicker, needs no git install, and
-/// everything these questions ask is visible in the layout itself. Only
-/// `addWorktree`, which has to change the repository, runs the real thing.
+/// The layout questions never shell out to `git`: it is quicker, needs no git
+/// install, and everything they ask is visible in the layout itself.
+/// `addWorktree`, which has to change the repository, and `status`, which has to
+/// apply ignore rules the layout does not spell out, run the real thing.
 /// The layout: `.git` as a directory means a main working tree,
 /// `.git` as a file means a linked worktree and names its git directory, and a
 /// repository directory with `bare = true` in its config is a bare repository.
@@ -168,32 +170,97 @@ public struct LiveGitClient: GitClient {
         ])
     }
 
+    /// `--untracked-files=normal` is the load-bearing flag: it collapses an
+    /// untracked or ignored folder into one line instead of walking into it, so
+    /// the output stays small no matter what a build has written. `-z` is the
+    /// only safe way to read paths back, since a path may hold anything but a
+    /// NUL.
     @concurrent
-    public func ignored(_ entries: [DirectoryEntry], in folder: URL) async throws -> Set<URL> {
-        var result: Set<URL> = []
-        // Arguments rather than stdin: git answers as it reads, so feeding a
-        // long list through a pipe while nobody drains the answers can stall.
-        for chunk in stride(from: 0, to: entries.count, by: 500) {
-            let batch = entries[chunk..<min(chunk + 500, entries.count)]
-            // A trailing slash is how git is told a path is a folder, which
-            // patterns like `build/` need.
-            let names = batch.map { $0.name + ($0.isDirectory ? "/" : "") }
-            let byName = Dictionary(batch.map { ($0.name, $0.url) }, uniquingKeysWith: { first, _ in first })
+    public func status(in worktree: URL) async throws -> GitWorktreeStatus {
+        let root = PathKey(worktree)
+        let (code, output) = try runGit([
+            "-C", root.path,
+            "status", "--porcelain=v2", "--ignored", "--untracked-files=normal", "-z",
+        ], allowing: [])
+        // 128 is git saying this is not a repository, a normal answer for a
+        // folder the app was pointed at.
+        guard code == 0 else { return GitWorktreeStatus(root: root) }
+        return GitWorktreeStatus(root: root, entries: Self.parse(output, under: root))
+    }
 
-            let (status, output) = try runGit(
-                ["-C", folder.path(percentEncoded: false), "-c", "core.quotePath=false", "check-ignore", "--"] + names,
-                allowing: [1]
-            )
-            // 1 is "nothing here is ignored"; 128 is "not a repository".
-            guard status == 0 else { continue }
-            // A name git has to quote (a quote or newline in it) will not match,
-            // and so stays unfaded: a missed fade, not a wrong answer.
-            for path in output.split(separator: "\n") {
-                let name = path.hasSuffix("/") ? String(path.dropLast()) : String(path)
-                if let url = byName[name] { result.insert(url) }
+    // MARK: - Reading porcelain v2
+
+    /// Every record is NUL-terminated, and a rename's original path is a record
+    /// of its own. The leading character names the record: `#` a header, `1` an
+    /// ordinary change, `2` a rename or copy, `u` an unmerged path, `?`
+    /// untracked, `!` ignored.
+    static func parse(_ output: String, under root: PathKey) -> [PathKey: GitStatus] {
+        var entries: [PathKey: GitStatus] = [:]
+        let records = output.split(separator: "\0", omittingEmptySubsequences: true)
+        var index = 0
+
+        while index < records.count {
+            let record = records[index]
+            index += 1
+            guard let marker = record.first, record.count > 2 else { continue }
+            // The marker and the space after it.
+            let body = record.dropFirst(2)
+
+            switch marker {
+            case "?":
+                entries[root.appending(String(body))] = .untracked
+            case "!":
+                entries[root.appending(String(body))] = .ignored
+            case "1":
+                guard let (code, path) = Self.code(body, tokensBeforePath: 7) else { continue }
+                entries[root.appending(String(path))] = Self.tracked(code)
+            case "2":
+                guard let (code, path) = Self.code(body, tokensBeforePath: 8) else { continue }
+                entries[root.appending(String(path))] = Self.tracked(code)
+                // The path it came from is the next record. Recorded too: a
+                // folder a file moved out of is a folder something changed in,
+                // and nothing else in the output would say so.
+                if index < records.count {
+                    entries[root.appending(String(records[index]))] = .tracked(staged: .renamed, unstaged: .unchanged)
+                    index += 1
+                }
+            case "u":
+                guard let (_, path) = Self.code(body, tokensBeforePath: 9) else { continue }
+                entries[root.appending(String(path))] = .unmerged
+            default:
+                continue
             }
         }
-        return result
+        return entries
+    }
+
+    /// A record's `XY` code and its path. How many space-separated fields stand
+    /// between the two differs per record type, and only the path may hold a
+    /// space, so the split has to stop counting at exactly the right point.
+    private static func code(_ body: Substring, tokensBeforePath: Int) -> (Substring, Substring)? {
+        let parts = body.split(separator: " ", maxSplits: tokensBeforePath, omittingEmptySubsequences: false)
+        guard parts.count == tokensBeforePath + 1, parts[0].count == 2, !parts[tokensBeforePath].isEmpty else {
+            return nil
+        }
+        return (parts[0], parts[tokensBeforePath])
+    }
+
+    private static func tracked(_ code: Substring) -> GitStatus {
+        var characters = code.makeIterator()
+        return .tracked(staged: Self.change(characters.next()), unstaged: Self.change(characters.next()))
+    }
+
+    /// `.` is git's "nothing on this side".
+    private static func change(_ code: Character?) -> GitChange {
+        switch code {
+        case "M": .modified
+        case "A": .added
+        case "D": .deleted
+        case "R": .renamed
+        case "C": .copied
+        case "T": .typeChanged
+        default: .unchanged
+        }
     }
 
     // MARK: - Running git

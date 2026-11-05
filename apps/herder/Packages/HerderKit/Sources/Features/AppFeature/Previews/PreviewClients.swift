@@ -1,6 +1,7 @@
 #if DEBUG
 import Clients
 import Foundation
+import Models
 import Storage
 import SwiftData
 
@@ -43,8 +44,9 @@ struct PreviewGitClient: GitClient {
     func branches(at url: URL) async throws -> [String] { ["feature", "main"] }
     func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {}
     func repositoryKind(at url: URL) async throws -> GitRepositoryKind { .mainWorkingTree }
-    func ignored(_ entries: [DirectoryEntry], in folder: URL) async throws -> Set<URL> {
-        Set(entries.filter { $0.name == "Package.swift" }.map(\.url))
+    func status(in worktree: URL) async throws -> GitWorktreeStatus {
+        let root = PathKey(worktree)
+        return GitWorktreeStatus(root: root, entries: [root.appending("Package.swift"): .ignored])
     }
     func worktrees(at url: URL) async throws -> [GitWorktree] {
         [
