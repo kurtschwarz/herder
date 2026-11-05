@@ -36,6 +36,13 @@ public final class WorkspaceRegistry {
         self.clock = clock
     }
 
+    /// The workspace `id` names, if it is one being held. `nil` for a workspace
+    /// that has not been opened, which is every one but the active workspace
+    /// until 4g widens this.
+    public func workspace(for id: WorkspaceID) -> Workspace? {
+        states[id.root]
+    }
+
     public func state(for worktree: URL) -> Workspace? {
         states[PathKey(worktree)]
     }

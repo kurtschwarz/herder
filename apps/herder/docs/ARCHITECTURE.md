@@ -268,6 +268,21 @@ if let workspace = registry.workspace(for: window.activeWorkspaceID) {
 }
 ```
 
+### How a feature changes the active workspace
+
+Reading is free: a feature takes `@Environment(Workspace.self)` and gets whatever this window resolved. Nothing asks "which one is active?", which is what keeps two windows from disagreeing.
+
+Writing cannot be, because `WindowModel` is in the App target and no feature may import it. So a feature says what it wants through `OpenWorkspaceAction` — declared in `Core`, supplied by App as an environment value, and shaped like SwiftUI's `openWindow`:
+
+```swift
+// RepositoriesFeature
+@Environment(\.openWorkspace) private var openWorkspace
+...
+.onTapGesture { openWorkspace(WorkspaceID(worktree.path)) }
+```
+
+The `@Entry` declaring the key is in `DesignSystem`, which is the one module every feature already has that may import SwiftUI. That is also why `DesignSystem` depends on `Core`: for the action types, not for anything a design token knows about.
+
 ### Per-workspace UI state
 
 Anything that must survive a workspace switch (scroll position, expanded folders, selected tab, split layout) cannot live in `@State`, because SwiftUI discards it when the view swaps out. Features define their own UI state types and store them on the workspace without Core knowing the concrete types:

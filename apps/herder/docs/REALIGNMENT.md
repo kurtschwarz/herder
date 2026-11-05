@@ -86,6 +86,7 @@ The survey raised ten questions. These are the answers; they are settled and not
 - **D7. `AGENTS.md` points at `ARCHITECTURE.md`.** The four rules it held that were not in the architecture doc (`PathKey` over raw `URL`; tokens only applied to the string they were found in; a reload that finds the same text changes nothing; token kinds and colours kept apart) have been moved into `ARCHITECTURE.md`. `AGENTS.md` keeps only the "where a new file goes" table and a pointer. The root `README.md` is left until Phase 8, then asked about.
 - **D8. The composition root is `AppFeature`, not the Xcode target.** `Herder/` holds `@main` and resources and links one product. `AppFeature` moves to `Sources/App/` and is the one HerderKit module that may import `Services`. `AppEnvironment` there constructs the live services, so the app target no longer links them.
 - **D9. Phase 4 only moves what exists.** No `DocumentStore`, `AgentSessionStore`, tabs, dirty state or saving: those features don't exist, and building them is product work, not realignment. Phase 4 is now the workspace rename, UI state, snapshots, restoration and per-window active workspace. The smoke test above is rewritten to match.
+- **D12. `WindowModel` stays in the App target**, and the repository list reaches the window through an action rather than the other way round. Reading needs nothing new: a feature takes `@Environment(Workspace.self)` and gets whichever workspace the window resolved, so nothing ever asks "which one is active?" — which is what stops two windows disagreeing. Writing goes through `OpenWorkspaceAction` in `Core`, supplied by App as an environment value, shaped like SwiftUI's own `openWindow`. The `@Entry` declaring the key lives in `DesignSystem`, because `Core` may not import SwiftUI and App setting a key declared inside one feature would be worse. `DesignSystem` therefore gains a dependency on `Core`, which the template did not have.
 - **D11. `WorkspaceID` is the folder's canonical path**, wrapping `PathKey`, not a `UUID`. A workspace is a folder, the registry already keys on the path, and a generated id would need persisting beside the path and keeping in step with it. `WorkspaceSnapshot` therefore has no separate `root` field — the id is the path — which is one change to `ARCHITECTURE.md`'s example. The other is that the example is now labelled as the shape it grows into: `openTabs`, `activeTab` and `agentSessions` arrive with their features, per D9. **Made while implementing 4b rather than asked; reverse it if you disagree.**
 - **D10. Smaller corrections** are all folded into `ARCHITECTURE.md`: `just test` not `swift test`, clippy is part of green, `PhosphorSwift` is in the `Package.swift` template, `UITests/` and the generated project are in the layout diagram, `NonisolatedNonsendingByDefault` is in the concurrency section, offsets are already UTF-16 from the crate, and the bindings are hand-written rather than generated. The untracked `default.profraw` droppings are a `.gitignore` line in Phase 8.
 
@@ -262,13 +263,17 @@ Two things from this step's original list are **not** here:
 - **`WorkspaceRegistry.open(_:)` and `close(_:)`.** The registry has `select(_:)`, which holds one workspace and stops the rest. Adding open and close beside it would be two ways to say one thing and two places for the set of live workspaces to disagree — exactly what this phase's own rule warns about. They replace `select` in 4g, where the single-workspace behaviour changes anyway.
 - **`WorkspaceServicesFactory`.** Workspace-scoped services are the four clients the registry already threads through. A factory for them would be a wrapper with nothing to wrap until search or a PTY exists.
 
-**4c. Per-window active workspace. Blocked on a decision — see below.**
+**4c. Per-window active workspace. Done.**
 
-Add `WindowModel` with `activeWorkspaceID` in `Sources/App/`. The root view resolves the active workspace from the registry and injects it with `.environment(workspace)`.
+`WindowModel` in `Sources/App/` owns `activeWorkspaceID`. The root view resolves the workspace from the id and injects it with `.environment(workspace)`; switching sets the id and nothing else.
 
-The original note said "features keep reading what they read today; this just establishes the path". That cannot be done: injecting a `Workspace` nothing reads is dead code, and the fact this step is about — which workspace is active — is **already owned by a feature**. `WorkspacesModel` holds `selectedWorktree` and `selectedWorkspace`, persists both to `UserDefaults`, and `AppView` pushes the selection into the file tree with `.task(id:)`. So this step is not "establish a path", it is "move ownership", and it cannot half-happen without two places holding one fact.
+This was not the "establish a path" the step first described. The fact it is about was **already owned by a feature**: `WorkspacesModel` held `selectedWorktree` and `selectedWorkspace` and persisted both to `UserDefaults`, which meant every window in the app necessarily agreed about which checkout was showing. So it was a move of ownership, and per D12 it needed a way for a feature to reach a window it cannot import:
 
-**The decision it needs.** `ARCHITECTURE.md` puts `WindowModel` in the App target, but `RepositoriesFeature` has to both read the active workspace (to show which row is selected) and set it (when a row is clicked) — and a feature may import only `Core`. One of those has to give. See D12 once decided.
+- **Reading:** `WorkspaceSection` takes `@Environment(Workspace.self)` and marks the row whose path matches. Nothing asks which workspace is active.
+- **Writing:** a tap calls `openWorkspace(WorkspaceID(…))`, an `OpenWorkspaceAction` the App target supplies.
+- **Restoring:** `@SceneStorage("activeWorkspacePath")` in `AppView`, per window, replacing the two global `UserDefaults` keys. `ARCHITECTURE.md` already specified `@SceneStorage` for this, so 4f inherits it rather than adding it.
+- **Deselecting:** `AppView` watches the active workspace's `isAvailable`, which goes false when its folder vanishes. The old check lived in `WorkspacesModel.refresh`, comparing git's worktree list against the selection; the watcher knows sooner and in one place.
+- `WorkspacesModel` keeps the association the selection used to track by hand, now derived from the listings it already had: `nameOfWorkspace(holding:)` and `isKnown(_:)`.
 
 **4d. Move feature UI state onto the workspace. Partly done.**
 
@@ -407,7 +412,7 @@ added to docs/realignment/notes.md.
   - [x] 4a rename to `Workspace` / `WorkspaceRegistry` / `Repository`
   - [ ] 4a′ `RepositoryStore` and `RepositoryAccess` behind protocols *(with 4e)*
   - [x] 4b snapshot and UI-state types + tests
-  - [ ] 4c `WindowModel` and per-window active workspace *(blocked: needs D12)*
+  - [x] 4c `WindowModel` and per-window active workspace
   - [~] 4d feature UI state onto the workspace
     - [x] file tree expansion → `ExplorerUIState`
     - [ ] sidebar collapse → `AppSnapshot` *(4f)*

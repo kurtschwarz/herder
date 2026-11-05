@@ -236,44 +236,68 @@ import Testing
         #expect(session.failure == "no")
     }
 
-    @Test func selectingAWorktreeRemembersItAcrossLaunches() async throws {
+    // MARK: - Which workspace a worktree belongs to
+    //
+    // These replace four tests about `selectedWorktree`, which this model no
+    // longer owns: which workspace is active is the window's, in `WindowModel`.
+    // What is left here is the association the old selection kept by hand — and
+    // which the listings already knew — plus the panes' need to name it.
+
+    @Test func aWorktreeIsNamedAfterTheWorkspaceHoldingIt() async throws {
         let workspace = try await addWorkspace("/code/api")
-        let worktree = GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true)
-
-        model.select(worktree, in: workspace)
-
-        #expect(model.selectedWorktree == worktree.path)
-        let relaunched = WorkspacesModel(store: store, git: git, picker: picker, defaults: defaults)
-        #expect(relaunched.selectedWorktree == worktree.path)
-    }
-
-    @Test func aWorktreeThatHasGoneIsDeselected() async throws {
-        let workspace = try await addWorkspace("/code/api")
-        let gone = GitWorktree(path: URL(filePath: "/code/api-gone"), checkout: .branch("gone"), isMainWorkingTree: false)
-        model.select(gone, in: workspace)
+        git.seed(worktrees: [
+            GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
+        ], at: URL(filePath: "/code/api"))
 
         await model.refresh(workspace)
 
-        #expect(model.selectedWorktree == nil)
+        #expect(model.nameOfWorkspace(holding: URL(filePath: "/code/api")) == workspace.name)
     }
 
-    @Test func aWorktreeThatIsStillThereStaysSelected() async throws {
+    /// A worktree the list has never seen belongs to nothing it can name. This
+    /// is what tells a window its worktree has been removed in a terminal.
+    @Test func aWorktreeNoWorkspaceClaimsIsNotKnown() async throws {
         let workspace = try await addWorkspace("/code/api")
-        let main = GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true)
-        model.select(main, in: workspace)
-
         await model.refresh(workspace)
 
-        #expect(model.selectedWorktree == main.path)
+        #expect(!model.isKnown(URL(filePath: "/code/api-gone")))
+        #expect(model.nameOfWorkspace(holding: URL(filePath: "/code/api-gone")) == nil)
     }
 
-    @Test func removingAWorkspaceDeselectsItsWorktree() async throws {
+    @Test func aWorktreeThatIsStillThereStaysKnown() async throws {
         let workspace = try await addWorkspace("/code/api")
-        let main = GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true)
-        model.select(main, in: workspace)
+        git.seed(worktrees: [
+            GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
+        ], at: URL(filePath: "/code/api"))
+
+        await model.refresh(workspace)
+        await model.refresh(workspace)
+
+        #expect(model.isKnown(URL(filePath: "/code/api")))
+    }
+
+    @Test func removingAWorkspaceForgetsItsWorktrees() async throws {
+        let workspace = try await addWorkspace("/code/api")
+        git.seed(worktrees: [
+            GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
+        ], at: URL(filePath: "/code/api"))
+        await model.refresh(workspace)
 
         model.remove(workspace)
 
-        #expect(model.selectedWorktree == nil)
+        #expect(!model.isKnown(URL(filePath: "/code/api")))
+    }
+
+    /// A rename has to show in the pane header, which reads this.
+    @Test func renamingAWorkspaceChangesWhatItsWorktreesAreNamedAfter() async throws {
+        let workspace = try await addWorkspace("/code/api")
+        git.seed(worktrees: [
+            GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
+        ], at: URL(filePath: "/code/api"))
+        await model.refresh(workspace)
+
+        model.commitRename(workspace, to: "API")
+
+        #expect(model.nameOfWorkspace(holding: URL(filePath: "/code/api")) == "API")
     }
 }

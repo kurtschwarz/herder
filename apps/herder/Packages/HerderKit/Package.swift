@@ -63,7 +63,11 @@ let package = Package(
         .target(name: "Storage", dependencies: ["Core"], swiftSettings: ui),
 
         // Shared views, styles, tokens.
-        .target(name: "DesignSystem", dependencies: [icons], swiftSettings: ui),
+        // Depends on `Core` only for the environment keys that carry Core's
+        // action types across the App/feature boundary: `Core` cannot declare
+        // them itself because it may not import SwiftUI. No design token knows
+        // anything about a workspace.
+        .target(name: "DesignSystem", dependencies: ["Core", icons], swiftSettings: ui),
 
         // Feature targets carry an explicit `path` because SwiftPM otherwise
         // looks for them directly under `Sources`. Each one sees `Core`,

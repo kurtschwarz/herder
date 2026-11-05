@@ -184,3 +184,28 @@ whatever the code currently says and pass.
   keys as the path strings they already are. A synthesised `Codable` on `PathKey`
   would let a decoder hand one back without canonicalising, which is the one
   thing the type exists to prevent.
+
+## From Phase 4c (per-window active workspace)
+
+- **The previously selected worktree does not restore once, on the first launch
+  after this change.** The selection moved from two global `UserDefaults` keys
+  to `@SceneStorage`, so the old value is not where the new code looks. One
+  empty sidebar selection, then it sticks. Not worth a migration for state the
+  user replaces with a click.
+- **`UserDefaults` is still in the feature** for `collapsed`. The selection keys
+  are gone; the last one goes in 4f, when sidebar collapse moves to
+  `AppSnapshot`.
+- **`DesignSystem` now depends on `Core`.** Only to declare the `@Entry` for
+  `OpenWorkspaceAction`: `Core` cannot, because it may not import SwiftUI, and
+  putting the key inside a feature would make App import one feature to
+  configure another. If a second action joins it, a small component module is
+  probably the better home.
+- **Deselection moved from the listing to the watcher.** `WorkspacesModel.refresh`
+  used to clear the selection when git stopped reporting the worktree;
+  `AppView` now watches `Workspace.isAvailable`, which the file watcher sets when
+  the folder goes. Same outcome, sooner, and in one place — but it is a
+  different mechanism, so it is worth a look during the smoke test: remove a
+  worktree with `git worktree remove` while it is showing.
+- **`AppView` is getting busy** — eight modifiers of app logic on one `HStack`.
+  Fine for now; `WorkspaceView` in `ARCHITECTURE.md` is where this goes when the
+  window gains a second thing to show.

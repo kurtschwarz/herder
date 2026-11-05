@@ -1,3 +1,4 @@
+import Core
 import DesignSystem
 import EditorFeature
 import ExplorerFeature
@@ -12,8 +13,24 @@ import WorkspacesFeature
 public struct AppView: View {
     @State private var environment: AppEnvironment
 
+    /// This window's own state. `@State`, so a second window gets a second one
+    /// and the two can show different checkouts.
+    @State private var window = WindowModel()
+
+    /// Which workspace this window was showing, kept by the system per window
+    /// rather than by the app globally. The path, because `WorkspaceID` is a
+    /// path and `@SceneStorage` takes the primitives.
+    @SceneStorage("activeWorkspacePath") private var activeWorkspacePath: String?
+
     public init(environment: AppEnvironment) {
         _environment = State(initialValue: environment)
+    }
+
+    /// The workspace this window is showing, resolved from the id. `nil` until
+    /// the task below has opened it, and again once its folder goes away.
+    private var activeWorkspace: Workspace? {
+        guard let id = window.activeWorkspaceID else { return nil }
+        return environment.worktrees.workspace(for: id)
     }
 
     public var body: some View {
@@ -22,19 +39,40 @@ public struct AppView: View {
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
 
-            EditorView(model: environment.editor, rootName: environment.workspaceList.selectedWorkspaceName)
+            EditorView(model: environment.editor, rootName: activeWorkspaceName)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            ExplorerView(model: environment.explorer, rootName: environment.workspaceList.selectedWorkspaceName)
+            ExplorerView(model: environment.explorer, rootName: activeWorkspaceName)
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
         }
-        // The sidebar owns the selection and the explorer must not import it,
-        // so the plain URL crosses here.
-        .task(id: environment.workspaceList.selectedWorktree) {
+        // Features read the workspace; they never ask which one is active.
+        .environment(activeWorkspace)
+        // And they ask for a different one through here, rather than reaching
+        // for a window they cannot see.
+        .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
+        // Restores what this window was showing. Once, on appear: after that
+        // the window is the source of truth and the storage follows it.
+        .task {
+            if window.activeWorkspaceID == nil, let path = activeWorkspacePath {
+                window.activate(WorkspaceID(PathKey(canonical: path)))
+            }
+        }
+        .onChange(of: window.activeWorkspaceID) { _, id in
+            activeWorkspacePath = id?.root.path
+        }
+        // Switching workspaces is this, and only this: the id changed, so open
+        // what it names. Nothing else is torn down.
+        .task(id: window.activeWorkspaceID) {
             // A file from the worktree before is stale, not preserved.
             environment.editor.close()
-            await environment.explorer.setRoot(environment.workspaceList.selectedWorktree)
+            await environment.explorer.setRoot(window.activeWorkspaceID?.url)
+        }
+        // A worktree removed in a terminal takes its window's selection with
+        // it. The workspace marks itself unavailable when its folder goes, so
+        // this is the one place that has to notice.
+        .onChange(of: activeWorkspace?.isAvailable) { _, isAvailable in
+            if isAvailable == false { window.activate(nil) }
         }
         // Selection only ever opens. A file that goes from disk loses its
         // selection but not its pane: the editor keeps it, struck through.
@@ -58,6 +96,14 @@ public struct AppView: View {
         .overlay { AddWorkspaceOverlay(model: environment.workspaceList) }
         .overlay { NewSessionOverlay(model: environment.workspaceList) }
         .preferredColorScheme(.dark)
+    }
+
+    /// What the panes call the checkout they are showing: the workspace's name,
+    /// not the worktree folder's, which is often `main` and says nothing about
+    /// what it belongs to.
+    private var activeWorkspaceName: String? {
+        guard let url = window.activeWorkspaceID?.url else { return nil }
+        return environment.workspaceList.nameOfWorkspace(holding: url)
     }
 }
 

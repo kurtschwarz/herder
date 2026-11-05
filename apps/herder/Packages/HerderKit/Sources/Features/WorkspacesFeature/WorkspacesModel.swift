@@ -8,6 +8,12 @@ import Storage
 /// The workspaces come from `@Query`, so this never caches them. What it holds
 /// is derived or ephemeral: each workspace's worktrees as last read, which
 /// workspaces the user has folded away, and which row is being renamed.
+///
+/// **Not** which worktree is active. That is the window's, in `WindowModel`,
+/// because two windows can show different checkouts and a model held once per
+/// app cannot answer for both. Rows learn whether they are the active one from
+/// the `Workspace` in the environment, and ask for a change through
+/// ``OpenWorkspaceAction``.
 @Observable
 public final class WorkspacesModel {
     /// What reading a workspace's worktrees came to. A failed read is its own
@@ -18,8 +24,6 @@ public final class WorkspacesModel {
     }
 
     private static let collapsedKey = "collapsedWorkspaces"
-    private static let selectedPathKey = "selectedWorktreePath"
-    private static let selectedWorkspaceKey = "selectedWorktreeWorkspace"
 
     private let store: SwiftDataRepositoryStore
     private let git: any GitClient
@@ -32,27 +36,11 @@ public final class WorkspacesModel {
     /// never touched, and one added later, starts open.
     public private(set) var collapsed: Set<UUID>
 
-    /// The worktree the user last clicked, whose files the explorer shows.
-    /// Cleared when a read finds it gone.
-    public private(set) var selectedWorktree: URL?
-
-    /// The workspace `selectedWorktree` was picked under, so that workspace's
-    /// listing is the one that can say it has gone.
-    private var selectedWorkspace: UUID?
-
-    /// The workspace itself, found the first time its name is asked for. Held
-    /// rather than looked up each time so reading the name from a view does not
-    /// fetch; the name is still read off it live, so a rename shows.
-    @ObservationIgnored private var selectedWorkspaceRecord: Repository?
-
-    /// What the selected worktree's workspace is called. A worktree's own
-    /// folder is often `main`, which says nothing about what it belongs to.
-    public var selectedWorkspaceName: String? {
-        if selectedWorkspaceRecord == nil, let id = selectedWorkspace {
-            selectedWorkspaceRecord = (try? store.workspaces())?.first { $0.id == id }
-        }
-        return selectedWorkspaceRecord?.name
-    }
+    /// Each workspace's name, as last read. Kept beside ``listings`` so that
+    /// naming the workspace a worktree belongs to costs no fetch: a view asks
+    /// for it on every redraw, and the old code cached a whole record to avoid
+    /// exactly that.
+    private var names: [UUID: String] = [:]
 
     /// The workspace whose name is being edited in place.
     public var renaming: UUID?
@@ -82,17 +70,31 @@ public final class WorkspacesModel {
         self.defaults = defaults
         let saved = defaults.stringArray(forKey: Self.collapsedKey) ?? []
         self.collapsed = Set(saved.compactMap(UUID.init(uuidString:)))
-        if let path = defaults.string(forKey: Self.selectedPathKey),
-           let workspace = defaults.string(forKey: Self.selectedWorkspaceKey).flatMap(UUID.init(uuidString:)) {
-            self.selectedWorktree = URL(filePath: path)
-            self.selectedWorkspace = workspace
-        }
     }
 
-    /// Selecting what is already selected changes nothing.
-    public func select(_ worktree: GitWorktree, in workspace: Repository) {
-        guard worktree.path != selectedWorktree else { return }
-        setSelection(worktree.path, in: workspace.id)
+    /// What the workspace holding the worktree at `path` is called.
+    ///
+    /// For a pane that wants to say what it is showing: a worktree's own folder
+    /// is often `main`, which says nothing about what it belongs to. `nil` when
+    /// no workspace on show claims it.
+    ///
+    /// Derived rather than remembered. The association used to be a stored
+    /// `selectedWorkspace` kept in step with the selection by hand; the
+    /// listings already know which workspace each worktree came from.
+    public func nameOfWorkspace(holding path: URL) -> String? {
+        let key = PathKey(path)
+        for (id, listing) in listings {
+            guard case .loaded(let worktrees) = listing else { continue }
+            guard worktrees.contains(where: { PathKey($0.path) == key }) else { continue }
+            return names[id]
+        }
+        return nil
+    }
+
+    /// Whether the worktree at `path` is one this list is showing. Used to stop
+    /// a window holding on to a worktree that has been removed in a terminal.
+    public func isKnown(_ path: URL) -> Bool {
+        nameOfWorkspace(holding: path) != nil
     }
 
     public func beginAdding() {
@@ -163,9 +165,7 @@ public final class WorkspacesModel {
         do {
             let worktrees = try await git.worktrees(at: URL(filePath: workspace.path))
             listings[id] = .loaded(worktrees)
-            if selectedWorkspace == id, let selectedWorktree, !worktrees.contains(where: { $0.path == selectedWorktree }) {
-                setSelection(nil, in: nil)
-            }
+            names[id] = workspace.name
         } catch {
             // The task that asked was cancelled, which says nothing about the
             // folder.
@@ -178,6 +178,7 @@ public final class WorkspacesModel {
         renaming = nil
         do {
             try store.rename(workspace, to: name)
+            names[workspace.id] = workspace.name
         } catch {
             assertionFailure("Could not rename workspace: \(error)")
         }
@@ -192,16 +193,8 @@ public final class WorkspacesModel {
             return
         }
         listings[id] = nil
-        if selectedWorkspace == id { setSelection(nil, in: nil) }
+        names[id] = nil
         if collapsed.remove(id) != nil { persistCollapsed() }
-    }
-
-    private func setSelection(_ worktree: URL?, in workspace: UUID?) {
-        selectedWorktree = worktree
-        selectedWorkspace = workspace
-        selectedWorkspaceRecord = nil
-        defaults.set(worktree?.path(percentEncoded: false), forKey: Self.selectedPathKey)
-        defaults.set(workspace?.uuidString, forKey: Self.selectedWorkspaceKey)
     }
 
     private func persistCollapsed() {
