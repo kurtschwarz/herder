@@ -1,0 +1,64 @@
+set shell := ["zsh", "-cu"]
+
+# Recipes for the syntax-highlighting crate. Callable from here, or from the
+# repo root as `just <recipe> packages/syntax`.
+#
+# The build output is an XCFramework, because that is the only form a SwiftPM
+# `.binaryTarget` accepts. Whoever consumes it copies it in; this crate does not
+# know who that is.
+
+lib := "libherder_syntax.a"
+xcframework := "target/HerderSyntaxFFI.xcframework"
+
+# Universal, because Xcode builds macOS Release for both architectures. Debug
+# sets ONLY_ACTIVE_ARCH, so a Debug build only ever uses one of these slices.
+targets := "aarch64-apple-darwin x86_64-apple-darwin"
+
+# Show available recipes
+default:
+    @just --list --unsorted
+
+# Set up a fresh clone
+bootstrap:
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    command -v rustup >/dev/null || { print -u2 "rustup not found: brew install rustup && rustup-init"; exit 1 }
+    for target in {{ targets }}; do
+        rustup target add "${target}"
+    done
+
+# Build the XCFramework the Swift package links
+build: bootstrap
+    #!/usr/bin/env zsh
+    set -euo pipefail
+
+    slices=()
+    for target in {{ targets }}; do
+        cargo build --release --target "${target}"
+        slices+=("target/${target}/release/{{ lib }}")
+    done
+
+    mkdir -p target/universal
+    lipo -create -output "target/universal/{{ lib }}" "${slices[@]}"
+
+    # -create-xcframework refuses to overwrite, and a stale one is worse than
+    # none: it would link against yesterday's Rust without saying so.
+    rm -rf "{{ xcframework }}"
+    xcodebuild -create-xcframework \
+        -library "target/universal/{{ lib }}" \
+        -headers include \
+        -output "{{ xcframework }}" >/dev/null
+    print -P "%F{cyan}==>%f {{ xcframework }}"
+
+# Run the tests and the linter
+test *args:
+    cargo test {{ args }}
+    cargo clippy --all-targets -- -D warnings
+
+# Print the tokens for a file, to see why something is the wrong colour
+dump file:
+    @cargo run --quiet --example dump -- {{ file }}
+
+# Remove build artifacts
+clean:
+    cargo clean

@@ -44,6 +44,18 @@ let package = Package(
         // one feature reads it and features never import each other.
         .target(name: "Worktrees", dependencies: ["Models", "Clients"], swiftSettings: ui),
 
+        // Syntax highlighting. The grammars, their queries and the table
+        // matching a file to a language are all in the `herder-syntax` Rust
+        // crate under `packages/syntax`; this is the Swift face of it.
+        //
+        // An XCFramework because that is the only shape a `.binaryTarget`
+        // takes. It is a build artifact, not a checked-in one: `just bootstrap`
+        // and `just build` in `apps/herder` produce it, and a fresh clone has
+        // to run one of them before this package will resolve.
+        .binaryTarget(name: "HerderSyntaxFFI", path: "Vendor/HerderSyntaxFFI.xcframework"),
+
+        .target(name: "Syntax", dependencies: ["HerderSyntaxFFI"], swiftSettings: core),
+
         // Shared views, styles, tokens.
         .target(
             name: "DesignSystem",
@@ -77,7 +89,7 @@ let package = Package(
 
         .target(
             name: "EditorFeature",
-            dependencies: ["Models", "Clients", "DesignSystem", "Worktrees"],
+            dependencies: ["Models", "Clients", "DesignSystem", "Syntax", "Worktrees"],
             path: "Sources/Features/EditorFeature",
             swiftSettings: ui
         ),
@@ -85,7 +97,7 @@ let package = Package(
         .target(
             name: "AppFeature",
             dependencies: [
-                "Models", "Clients", "DesignSystem", "Storage", "Worktrees",
+                "Models", "Clients", "DesignSystem", "Storage", "Syntax", "Worktrees",
                 "WorkspacesFeature", "ExplorerFeature", "EditorFeature",
             ],
             path: "Sources/Features/AppFeature",
@@ -108,6 +120,11 @@ let package = Package(
             swiftSettings: ui
         ),
         .testTarget(
+            name: "SyntaxTests",
+            dependencies: ["Syntax"],
+            swiftSettings: core
+        ),
+        .testTarget(
             name: "WorktreesTests",
             dependencies: ["Worktrees", "Models", "Clients", "ClientsTestSupport"],
             swiftSettings: ui
@@ -126,7 +143,7 @@ let package = Package(
         ),
         .testTarget(
             name: "EditorFeatureTests",
-            dependencies: ["EditorFeature", "Models", "Clients", "ClientsTestSupport", "Worktrees"],
+            dependencies: ["EditorFeature", "Models", "Clients", "ClientsTestSupport", "Syntax", "Worktrees"],
             path: "Tests/Features/EditorFeatureTests",
             swiftSettings: ui
         ),

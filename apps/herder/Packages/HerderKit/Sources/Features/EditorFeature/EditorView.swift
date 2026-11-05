@@ -42,8 +42,8 @@ public struct EditorView: View {
     @ViewBuilder
     private func body(of content: EditorModel.Content?) -> some View {
         switch content {
-        case .text(let text):
-            CodeTextView(text: text, session: model.session)
+        case .text(let source):
+            CodeTextView(source: source, session: model.session)
                 .opacity(model.isDeleted ? Theme.Opacity.ignored : 1)
         case .unavailable(let reason):
             Text(message(for: reason))

@@ -1,0 +1,6 @@
+// Makes the static library importable from Swift as `HerderSyntaxFFI`.
+// Travels inside the XCFramework's Headers directory, beside the header.
+module HerderSyntaxFFI {
+    header "herder_syntax.h"
+    export *
+}

@@ -7,6 +7,11 @@ name := "Herder"
 proj := name + ".xcodeproj"
 kit := "Packages/HerderKit"
 
+# The syntax-highlighting crate. Its XCFramework is a `.binaryTarget` of
+# HerderKit, so it has to exist before SwiftPM will resolve the package at all.
+crate := "../../packages/syntax"
+vendor := kit + "/Vendor"
+
 # `platform=macOS` alone matches both arm64 and x86_64, which makes xcodebuild warn
 # that it picked one. Naming this machine's arch keeps the output clean.
 arch := `uname -m`
@@ -17,8 +22,21 @@ default:
     @just --list --unsorted
 
 # Set up a fresh clone
-bootstrap: project
+bootstrap: syntax project
     @echo "Ready. Open {{ proj }}"
+
+# Build the syntax crate and put its XCFramework where HerderKit expects it.
+#
+# A dependency of every recipe that compiles Swift, because a stale static
+# library links without complaint: the app would highlight with yesterday's
+# grammars and nothing would say so.
+syntax:
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    just --justfile {{ crate }}/justfile --working-directory {{ crate }} build
+    mkdir -p {{ vendor }}
+    rsync --archive --delete \
+        {{ crate }}/target/HerderSyntaxFFI.xcframework {{ vendor }}/
 
 # Regenerate Herder.xcodeproj from project.yml
 project:
@@ -29,11 +47,11 @@ project:
 # than `swift test`: PhosphorSwift ships its icons as an asset catalog without
 # declaring it as a resource, which only Xcode's build system can bundle.
 # Extra arguments go to xcodebuild, e.g. `-only-testing:ClientsTests`.
-test *args:
+test *args: syntax
     cd {{ kit }} && xcodebuild test -scheme HerderKit-Package -destination 'platform=macOS,arch={{ arch }}' {{ args }}
 
 # Build the app
-build: project
+build: project syntax
     @{{ xcodebuild }} -configuration Debug -quiet build
 
 # Build and run the app, with its output in this terminal
@@ -84,5 +102,12 @@ open: project
 
 # Remove build artifacts
 clean:
-    rm -rf {{ kit }}/.build
-    @{{ xcodebuild }} clean >/dev/null 2>&1 || true
+    #!/usr/bin/env zsh
+    set -uo pipefail
+    # Xcode's background indexer writes into .build the whole time it has the
+    # project open, so rm can lose a race with it and report a directory it just
+    # emptied as non-empty. Not something to fail a clean over, and not a reason
+    # to skip the rest of it.
+    rm -rf {{ kit }}/.build {{ vendor }} 2>/dev/null || true
+    just --justfile {{ crate }}/justfile --working-directory {{ crate }} clean
+    {{ xcodebuild }} clean >/dev/null 2>&1 || true

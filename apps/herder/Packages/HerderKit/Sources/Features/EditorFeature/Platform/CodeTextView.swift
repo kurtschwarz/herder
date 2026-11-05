@@ -1,6 +1,7 @@
 import AppKit
 import DesignSystem
 import SwiftUI
+import Syntax
 
 /// A read-only, selectable text view with a line-number gutter.
 ///
@@ -8,7 +9,9 @@ import SwiftUI
 /// with it, and it is the same view an editable one would be. Lines do not wrap,
 /// so a gutter number is one per line.
 struct CodeTextView: NSViewRepresentable {
-    let text: String
+    /// The text and its tokens, which arrive together so colour can never be
+    /// applied to a string it was not computed for.
+    let source: SourceText
 
     /// Which opening this is. A new one starts at the top; a re-read of the same
     /// file keeps its place.
@@ -16,6 +19,11 @@ struct CodeTextView: NSViewRepresentable {
 
     final class Coordinator {
         var session: Int?
+
+        /// What was last put into the view, so an identical update does no work.
+        /// The text alone is not enough: the same text can arrive with tokens
+        /// after arriving without them.
+        var source: SourceText?
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -56,13 +64,19 @@ struct CodeTextView: NSViewRepresentable {
 
         let isNewFile = context.coordinator.session != session
         context.coordinator.session = session
-        guard isNewFile || textView.string != text else { return }
+        guard isNewFile || context.coordinator.source != source else { return }
+        context.coordinator.source = source
 
         let offset = scrollView.contentView.bounds.origin
-        storage.setAttributedString(NSAttributedString(string: text, attributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: Theme.Size.code, weight: .regular),
-            .foregroundColor: NSColor(Theme.Palette.text),
-        ]))
+        // One editing transaction: the base pass rewrites every character and
+        // each token then overwrites part of it, and laying out between them
+        // would be laying out work that is about to be replaced.
+        storage.beginEditing()
+        storage.setAttributedString(NSAttributedString(string: source.text, attributes: SyntaxAttributes.base))
+        for token in source.tokens where NSMaxRange(token.range) <= storage.length {
+            storage.addAttributes(SyntaxAttributes.attributes(for: token.kind), range: token.range)
+        }
+        storage.endEditing()
         // The selection does not survive: a character range means nothing once
         // the text under it has been rewritten.
         textView.setSelectedRange(NSRange(location: 0, length: 0))
@@ -76,6 +90,6 @@ struct CodeTextView: NSViewRepresentable {
         }
         scrollView.reflectScrolledClipView(clip)
 
-        (scrollView.verticalRulerView as? LineNumberRuler)?.textDidChange(to: text)
+        (scrollView.verticalRulerView as? LineNumberRuler)?.textDidChange(to: source.text)
     }
 }

@@ -7,30 +7,42 @@ A monorepo. Today it holds one macOS app; more apps and services go beside it.
 ```
 herder/
 ├── justfile                  # forwards every task to an app or service
-└── apps/
-    └── herder/               # the macOS app
-        ├── AGENTS.md         # structure and conventions, for agents
-        ├── justfile          # how to build, test and run this app
-        ├── project.yml       # source of truth for Herder.xcodeproj
-        ├── Herder/           # thin app target: entry point and glue only
-        ├── Packages/
-        │   └── HerderKit/    # all the code, split into modules
-        └── UITests/          # XCTest, since Swift Testing has no UI automation
+├── apps/
+│   └── herder/               # the macOS app
+│       ├── AGENTS.md         # structure and conventions, for agents
+│       ├── justfile          # how to build, test and run this app
+│       ├── project.yml       # source of truth for Herder.xcodeproj
+│       ├── Herder/           # thin app target: entry point and glue only
+│       ├── Packages/
+│       │   └── HerderKit/    # all the code, split into modules
+│       └── UITests/          # XCTest, since Swift Testing has no UI automation
+└── packages/
+    └── syntax/               # Rust: tree-sitter grammars behind a C ABI
 ```
 
-New apps go in `apps/<name>/`. Services go in `services/<name>/`. Code shared
-between more than one of them goes in a package under `packages/` at the root, not
-inside an app.
+New apps go in `apps/<name>/`. Services go in `services/<name>/`. A package under
+`packages/` is for code that does not belong inside one app: either because more
+than one of them uses it, or because it is not written in the app's language.
+`packages/syntax` is the second kind — Rust, consumed by the macOS app as an
+XCFramework.
 
 ## Getting started
 
 ```sh
-just bootstrap apps/herder   # generates Herder.xcodeproj
+just bootstrap apps/herder   # builds the syntax crate, generates Herder.xcodeproj
 just test apps/herder        # fast module tests, no app host
 just dev apps/herder         # build and run, logs in the terminal
 ```
 
-Requires Xcode 26+ and `brew install just xcodegen`.
+Requires Xcode 26+, `brew install just xcodegen`, and a Rust toolchain
+(`brew install rustup && rustup-init`). `just bootstrap` installs the Rust
+targets it needs.
+
+`HerderKit` has a `.binaryTarget` pointing at an XCFramework built from
+`packages/syntax`, so a fresh clone must run `just bootstrap apps/herder` before
+the Swift package will resolve. Every recipe that compiles Swift rebuilds the
+crate first: a stale static library would link without complaint and highlight
+with yesterday's grammars.
 
 ## Commands
 
@@ -73,6 +85,7 @@ modules:
 | `ClientsTestSupport` | Fakes for those protocols. Never linked into the app. | `nonisolated` |
 | `Storage` | SwiftData `@Model` classes, their schema versions and the container. The one module that owns reference types. | `MainActor` |
 | `Worktrees` | The authoritative file and git state of a worktree, kept fresh by a file watcher. | `MainActor` |
+| `Syntax` | Token kinds and the highlighter protocol, over the Rust crate. No colours. | `nonisolated` |
 | `DesignSystem` | Shared views, styles, tokens. | `MainActor` |
 | `AppFeature` | Root view, navigation, composes features. | `MainActor` |
 
@@ -134,6 +147,58 @@ onto `Sources/<name>` unless told otherwise.
 The dependency graph only points downward. Features depend on `Clients`, `Models`,
 `Storage`, `Worktrees` and `DesignSystem`, never on each other. If two features
 need to talk, that goes through `AppFeature` or a shared model.
+
+### Syntax highlighting
+
+The editor's colours come from tree-sitter, which is a C library with a grammar
+per language. Those grammars are driven from Rust, in `packages/syntax`, rather
+than from Swift, for one reason: the `tree-sitter-highlight` crate already does
+the two awkward parts. It resolves a grammar's capture names against a list of
+names you recognize, longest dotted prefix first, so `@keyword.control.conditional`
+finds `keyword` without anyone writing that rule; and it resolves injections, so
+JavaScript inside HTML and the inline half of markdown work without layer logic
+of ours. The Swift packages for the same grammars have neither, and would need
+both hand-written.
+
+Three modules share the work, and none of them knows all of it:
+
+- `packages/syntax` owns the grammars, the queries and the table matching a file
+  to a language. It emits spans with a semantic kind and no opinion about colour.
+- `Syntax` is the Swift face of that: `SyntaxTokenKind`, `SyntaxToken`,
+  `SourceText` and the `SyntaxHighlighter` protocol.
+- `EditorFeature` pairs a kind with a colour from `DesignSystem`.
+
+So adding a language touches one file in Rust and nothing in Swift, and retheming
+touches `Theme.swift` and nothing else. `packages/syntax/AGENTS.md` has the
+procedure for both.
+
+The boundary speaks UTF-8 going in and UTF-16 offsets coming out, so neither side
+converts: tree-sitter counts bytes and `NSTextStorage` indexes UTF-16, and a
+conversion left to the caller is one that gets forgotten until a file with an
+emoji in it paints its colours two characters to the left.
+
+The timing is the part that needed measuring rather than guessing. Highlighting a
+file is a few hundred microseconds; compiling one language's queries is up to a
+quarter of a second, because the work scales with the size of the *grammar* and
+Swift's `parser.c` is 23 MB. So all of the perceived cost is that one-off
+compile, and two things keep it off the reader's path: `AppModel.start` warms
+every grammar on a detached task at launch, and the editor publishes a file's
+text as soon as it is read and lets colour follow. The second is what makes a
+cold grammar survivable at all; the first means it rarely happens.
+
+Colour arriving separately is only safe because tokens are offsets into a
+particular string, and `EditorModel` checks that string is still the one on
+screen before letting them land. That check replaces a generation counter and is
+a better question to ask: a slow highlight for a file that was rewritten and
+written back is still right, and a fast one for a file that has since changed is
+not.
+
+The cost is honest and worth stating: the grammars' parse tables are data, and
+sixteen of them add about 15 MB per architecture to the binary. That total is
+dominated by a few large grammars — Swift's generated parser alone is 23 MB of C
+— so most languages are far cheaper than the average suggests: gitignore cost
+54 KB. A second
+toolchain also has to be present to build the app at all.
 
 ### Concurrency
 

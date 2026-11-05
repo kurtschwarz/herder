@@ -110,6 +110,46 @@ public enum Theme {
         /// Something that needs resolving before work can go on, such as a
         /// merge conflict.
         public static let danger = Color(red: 247 / 255, green: 118 / 255, blue: 142 / 255)
+
+        /// Code colours, one per `SyntaxTokenKind`.
+        ///
+        /// Named for what the token is, not for the colour, so the mapping in
+        /// `EditorFeature` reads as a list of pairings and a retheme is a change
+        /// to the right-hand side only. `Syntax` does not import this module
+        /// and this module does not import `Syntax`: the editor is the one place
+        /// that knows both.
+        ///
+        /// Some pairs share a value on purpose. A number and a `true` are both
+        /// literals and Tokyo Night gives them one orange; splitting them here
+        /// would be a distinction without a difference.
+        public enum Syntax {
+            public static let comment = Color(red: 86 / 255, green: 95 / 255, blue: 137 / 255)
+            public static let keyword = Color(red: 187 / 255, green: 154 / 255, blue: 247 / 255)
+            public static let `operator` = Color(red: 137 / 255, green: 221 / 255, blue: 255 / 255)
+            public static let punctuation = Color(red: 154 / 255, green: 165 / 255, blue: 206 / 255)
+            public static let string = Color(red: 158 / 255, green: 206 / 255, blue: 106 / 255)
+            public static let escape = Color(red: 180 / 255, green: 249 / 255, blue: 248 / 255)
+            public static let number = Color(red: 255 / 255, green: 158 / 255, blue: 100 / 255)
+            public static let constant = number
+            public static let function = Color(red: 122 / 255, green: 162 / 255, blue: 247 / 255)
+            public static let type = Color(red: 42 / 255, green: 195 / 255, blue: 222 / 255)
+            public static let constructor = function
+
+            /// A shade under `text`, so plain identifiers sit back and the
+            /// things that were worth marking come forward.
+            public static let variable = Color(red: 192 / 255, green: 202 / 255, blue: 245 / 255)
+
+            public static let property = Color(red: 125 / 255, green: 207 / 255, blue: 255 / 255)
+            public static let parameter = Color(red: 224 / 255, green: 175 / 255, blue: 104 / 255)
+
+            /// `@MainActor`, `#[derive]`, `@Observable`: declaration markers,
+            /// so the keyword colour.
+            public static let attribute = keyword
+
+            public static let tag = Color(red: 247 / 255, green: 118 / 255, blue: 142 / 255)
+            public static let namespace = Color(red: 65 / 255, green: 166 / 255, blue: 181 / 255)
+            public static let label = Color(red: 157 / 255, green: 124 / 255, blue: 216 / 255)
+        }
     }
 
     public enum Gradient {

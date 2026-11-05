@@ -1,0 +1,6 @@
+# Pinned so a build here is the same build everywhere, the way
+# Package.resolved pins the Swift side.
+[toolchain]
+channel = "1.99.0"
+components = ["clippy", "rustfmt"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]

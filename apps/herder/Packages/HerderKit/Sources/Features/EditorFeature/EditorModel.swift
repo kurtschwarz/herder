@@ -2,6 +2,7 @@ import Clients
 import Foundation
 import Models
 import Observation
+import Syntax
 import Worktrees
 
 /// The file shown in the editor pane.
@@ -19,7 +20,8 @@ public final class EditorModel {
     static let maxBytes = 1_000_000
 
     public enum Content: Equatable {
-        case text(String)
+        /// The text and the tokens found in it, as one value: see `SourceText`.
+        case text(SourceText)
         case unavailable(Reason)
     }
 
@@ -32,6 +34,7 @@ public final class EditorModel {
 
     private let store: WorktreeStateStore
     private let files: any FileClient
+    private let highlighter: any SyntaxHighlighter
 
     private var worktree: WorktreeState?
     private var registration: WorktreeState.Registration?
@@ -55,9 +58,18 @@ public final class EditorModel {
     /// the top.
     public private(set) var session = 0
 
-    public init(store: WorktreeStateStore, files: any FileClient) {
+    /// `highlighter` defaults to the real one. It is pure — the same text gives
+    /// the same tokens — so there is nothing for a test to control and nothing
+    /// for the app target to inject. `NoSyntaxHighlighter` is there for a test
+    /// that wants the editor without the colour.
+    public init(
+        store: WorktreeStateStore,
+        files: any FileClient,
+        highlighter: any SyntaxHighlighter = TreeSitterHighlighter()
+    ) {
         self.store = store
         self.files = files
+        self.highlighter = highlighter
     }
 
     /// The worktree's folder name, then each folder down to the file.
@@ -105,6 +117,15 @@ public final class EditorModel {
     /// Reads the file again, unless it has gone, in which case what is showing
     /// stays. The text is only replaced when it differs: most changes are to
     /// some other file, and an identical read must not redraw.
+    ///
+    /// The text is published as soon as it is read, and colour follows when the
+    /// highlighter has it. Nothing a reader is waiting on is behind a parser.
+    ///
+    /// Tokens landing separately is safe because they are only ever applied to
+    /// the exact string they were found in — see `highlight` — and because a
+    /// `SourceText` with no tokens is incomplete rather than wrong. What is not
+    /// safe, and what `SourceText` exists to prevent, is tokens from one string
+    /// reaching another.
     func reload() async {
         guard let worktree, let key = fileKey else { return }
         if worktree.exists(key) == false {
@@ -116,7 +137,7 @@ public final class EditorModel {
         let mine = generation
         let result: Content
         do {
-            result = .text(try await files.read(key.path, maxBytes: Self.maxBytes))
+            result = .text(SourceText(text: try await files.read(key.path, maxBytes: Self.maxBytes)))
         } catch FileClientError.tooLarge {
             result = .unavailable(.tooLarge)
         } catch FileClientError.notUTF8 {
@@ -131,7 +152,48 @@ public final class EditorModel {
         guard mine == generation, key == fileKey else { return }
 
         isDeleted = false
-        if content != result { content = result }
+        guard case .text(let source) = result else {
+            if content != result { content = result }
+            return
+        }
+
+        // An identical read must not redraw, and with colour arriving after the
+        // text that means comparing the text rather than the whole value.
+        // `result` never carries tokens, so comparing values would throw away
+        // the colour already on screen and put it back a moment later. A worktree
+        // notifies every observer when any folder in it is read, so expanding a
+        // folder in the explorer reloads an unchanged file — and the flicker was
+        // plain to see.
+        guard shownText != source.text else { return }
+        content = result
+        await highlight(source.text, at: key)
+    }
+
+    /// The text on screen, or `nil` when the pane is empty or showing a reason
+    /// instead of a file.
+    private var shownText: String? {
+        guard case .text(let source) = content else { return nil }
+        return source.text
+    }
+
+    /// Colours what is on screen, if it is still the text these tokens were
+    /// found in.
+    ///
+    /// That check is the whole safety argument, and it is a better one than a
+    /// generation counter: tokens are offsets into a particular string, so the
+    /// question is not "is this read still the newest" but "is this still the
+    /// text". A slow highlight whose file was rewritten and then written back
+    /// is still correct; a fast one for a file that has since changed is not.
+    private func highlight(_ text: String, at key: PathKey) async {
+        let tokens = await highlighter.tokens(in: text, ofFileNamed: key.path)
+        let highlighted = Content.text(SourceText(text: text, tokens: tokens))
+        guard
+            key == fileKey,
+            case .text(let shown) = content,
+            shown.text == text,
+            content != highlighted
+        else { return }
+        content = highlighted
     }
 
     /// A rename of the open file, or of a folder above it, carries the pane

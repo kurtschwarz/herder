@@ -5,6 +5,7 @@ import Foundation
 import Observation
 import SwiftData
 import Storage
+import Syntax
 import WorkspacesFeature
 import Worktrees
 
@@ -63,6 +64,13 @@ public final class AppModel {
     /// Takes access to every workspace folder. Called at launch, before any view
     /// exists: a workspace must be reachable before anything can render it.
     public func start() {
+        // Compiling the editor's grammars takes a few hundred milliseconds in
+        // total, and all of it is paid the first time a file of each language
+        // is opened unless it is paid here instead. Detached and unawaited:
+        // nothing waits on it, and a reader who opens a file before it finishes
+        // simply gets the colour a moment later.
+        Task.detached { await TreeSitterHighlighter.warmUp() }
+
         do {
             try workspaces.open()
         } catch {

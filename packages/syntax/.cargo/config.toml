@@ -1,0 +1,10 @@
+# Must match `options.deploymentTarget.macOS` in apps/herder/project.yml.
+#
+# Without it, cargo builds the grammars' C against whatever SDK this machine
+# has, and linking them into an app with an older minimum produces one `ld`
+# warning per object file — about sixty lines of noise hiding anything real.
+#
+# Here rather than in the justfile so a bare `cargo build` or `cargo test`
+# behaves the same way as `just build`.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "26.0"

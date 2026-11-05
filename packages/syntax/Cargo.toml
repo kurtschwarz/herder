@@ -1,0 +1,60 @@
+[package]
+name = "herder-syntax"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Tokenises source text for Herder's editor pane, over a C ABI."
+
+[lib]
+name = "herder_syntax"
+# `staticlib` is what gets wrapped into the XCFramework the Swift package links.
+# `rlib` is also needed so the crate's own tests can link against it.
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+tree-sitter = "0.27"
+tree-sitter-highlight = "0.27"
+
+tree-sitter-bash = "0.25"
+tree-sitter-c = "0.24"
+tree-sitter-css = "0.23"
+# Renamed: the only published gitignore grammar is under its author's name
+# rather than the `tree-sitter-*` convention the rest of these follow. Aliased
+# so `language.rs` reads the same for every row.
+tree-sitter-gitignore = { package = "konomanoasa-tree-sitter-gitignore", version = "0.7" }
+tree-sitter-go = "0.25"
+tree-sitter-html = "0.23"
+tree-sitter-javascript = "0.25"
+tree-sitter-json = "0.24"
+# Renamed, and not the crate called `tree-sitter-just`, which cannot be used
+# here for two independent reasons: it depends on tree-sitter directly rather
+# than through `tree-sitter-language`, and only one package in a graph may link
+# the native tree-sitter library, so it cannot coexist with the version
+# `tree-sitter-highlight` pulls in; and its `include` omits `queries-src/`, so
+# the published crate has no highlights query to compile against anyway.
+#
+# This is a separate grammar rather than a fork of that one, written against
+# just's own lexer and parser. Its node names agree with the other grammar's
+# where `language.rs` relies on them, which is what `just_injections` is
+# written against.
+tree-sitter-just = { package = "codebook-tree-sitter-just", version = "0.1" }
+tree-sitter-md = "0.5"
+tree-sitter-python = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-swift = "0.7"
+tree-sitter-toml-ng = "0.7"
+tree-sitter-typescript = "0.23"
+tree-sitter-yaml = "0.7"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = "debuginfo"
+
+# A panic must not unwind across the C ABI, so there is nothing to gain by
+# keeping the machinery that would: the only honest response to one is to stop.
+# It buys no space worth measuring — the grammars' parse tables are nearly all
+# of the size, and they are data.
+panic = "abort"
+
