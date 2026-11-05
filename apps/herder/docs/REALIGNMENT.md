@@ -262,9 +262,29 @@ Two things from this step's original list are **not** here:
 - **`WorkspaceRegistry.open(_:)` and `close(_:)`.** The registry has `select(_:)`, which holds one workspace and stops the rest. Adding open and close beside it would be two ways to say one thing and two places for the set of live workspaces to disagree — exactly what this phase's own rule warns about. They replace `select` in 4g, where the single-workspace behaviour changes anyway.
 - **`WorkspaceServicesFactory`.** Workspace-scoped services are the four clients the registry already threads through. A factory for them would be a wrapper with nothing to wrap until search or a PTY exists.
 
-**4c. Per-window active workspace.** Add `WindowModel` with `activeWorkspaceID` in `Sources/App/`. The root view resolves the active workspace from the registry and injects it with `.environment(workspace)`. Features keep reading what they read today; this just establishes the path.
+**4c. Per-window active workspace. Blocked on a decision — see below.**
 
-**4d. Move feature UI state onto the workspace.** One task. `FileTreeModel.expanded` and `RepositoriesModel`'s `collapsed` / `selectedWorktree` / `selectedWorktreeWorkspace` become `WorkspaceUIState` types, so they survive a switch. This also gets `UserDefaults.standard` out of the feature (see `notes.md`). Repoint every reader and delete the old holder **in the same task** — never merge with two sources of truth for the same fact.
+Add `WindowModel` with `activeWorkspaceID` in `Sources/App/`. The root view resolves the active workspace from the registry and injects it with `.environment(workspace)`.
+
+The original note said "features keep reading what they read today; this just establishes the path". That cannot be done: injecting a `Workspace` nothing reads is dead code, and the fact this step is about — which workspace is active — is **already owned by a feature**. `WorkspacesModel` holds `selectedWorktree` and `selectedWorkspace`, persists both to `UserDefaults`, and `AppView` pushes the selection into the file tree with `.task(id:)`. So this step is not "establish a path", it is "move ownership", and it cannot half-happen without two places holding one fact.
+
+**The decision it needs.** `ARCHITECTURE.md` puts `WindowModel` in the App target, but `RepositoriesFeature` has to both read the active workspace (to show which row is selected) and set it (when a row is clicked) — and a feature may import only `Core`. One of those has to give. See D12 once decided.
+
+**4d. Move feature UI state onto the workspace. Partly done.**
+
+The original list was wrong about two of its three items, because not all of this state is per-workspace:
+
+| State | Scope | Where it goes |
+|---|---|---|
+| the file tree's `expanded` | **per workspace** — the user opened folders in *this* checkout | `WorkspaceUIState`. **Done:** `ExplorerUIState`. |
+| `RepositoriesModel.selectedWorktree` | **per window** — it *is* "which workspace is active" | `WindowModel`, in 4c. It cannot be per-workspace state: a workspace cannot hold which workspace is active. |
+| `RepositoriesModel.collapsed` | **app-wide** — which repositories are folded in the sidebar, and the sidebar is app-scoped (D5) | `AppSnapshot`, in 4f. Not `WorkspaceUIState`. |
+
+Still to do here: the editor's open file, once there is more than one.
+
+`UserDefaults.standard` leaves the feature when the last two land, not with this step.
+
+Repoint every reader and delete the old holder **in the same task** — never merge with two sources of truth for the same fact.
 
 **4e. Persistence off `@Query`.** Replace the one `@Query` in the repositories list and the `ModelContext` in `AppModel` with reads from `RepositoryStore` (Phase 3 task 4), plus snapshot save and restore through `StateStore`. Note that the current design relies on the store writing through the same `mainContext` that `@Query` reads, so a change shows with no round trip — whatever replaces it has to replace that too, not just the call site. **Migrate the `Repository` rows into snapshots; do not delete the table** (D6). Enable the SwiftData check in `check-boundaries.sh`.
 
@@ -387,8 +407,10 @@ added to docs/realignment/notes.md.
   - [x] 4a rename to `Workspace` / `WorkspaceRegistry` / `Repository`
   - [ ] 4a′ `RepositoryStore` and `RepositoryAccess` behind protocols *(with 4e)*
   - [x] 4b snapshot and UI-state types + tests
-  - [ ] 4c `WindowModel` and per-window active workspace
-  - [ ] 4d feature UI state onto the workspace
+  - [ ] 4c `WindowModel` and per-window active workspace *(blocked: needs D12)*
+  - [~] 4d feature UI state onto the workspace
+    - [x] file tree expansion → `ExplorerUIState`
+    - [ ] sidebar collapse → `AppSnapshot` *(4f)*
   - [ ] 4e persistence off `@Query`
   - [ ] 4f restoration
   - [ ] 4g several live workspaces at once

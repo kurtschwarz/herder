@@ -166,3 +166,21 @@ whatever the code currently says and pass.
   would invite the user to add folders to a store that is not there.
 - **4e migrates these rows into snapshots**, which is the next time this risk
   peaks. The fixture test is the thing that makes that step safe to attempt.
+
+## From Phase 4d (file tree expansion)
+
+- **`expanded` is a computed property over the workspace's UI state**, not a
+  stored one. Twelve readers inside `ExplorerModel` are untouched that way, and
+  there is exactly one place the tree's expansion lives. It is silently
+  unwritable when no worktree is shown, which is correct — there is nothing for
+  a path to be relative to — but it is a quiet failure, so it carries a comment.
+- **Expansion surviving a switch is not yet visible to the user.**
+  `WorkspaceRegistry.select` still drops every workspace it is not showing, so
+  the state goes with the object. The structural move is done and the behaviour
+  arrives with 4g, or with 4f if a snapshot is saved and restored first. The
+  test for it has to hold the `Workspace` across the switch for that reason, and
+  says so.
+- **`PathKey` is deliberately not `Codable`**, so `ExplorerUIState` encodes its
+  keys as the path strings they already are. A synthesised `Codable` on `PathKey`
+  would let a decoder hand one back without canonicalising, which is the one
+  thing the type exists to prevent.

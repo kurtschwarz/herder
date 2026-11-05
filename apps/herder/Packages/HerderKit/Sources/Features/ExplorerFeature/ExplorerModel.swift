@@ -61,8 +61,18 @@ public final class ExplorerModel {
     /// The folder the tree is rooted at. Always open; `nil` shows nothing.
     public var root: URL? { worktree?.root.url }
 
-    /// Open folders below the root.
-    private var expanded: Set<PathKey> = []
+    /// Open folders below the root, kept on the workspace so that switching
+    /// away and back does not close everything the user opened. See
+    /// ``ExplorerUIState``.
+    ///
+    /// A computed property over that state rather than a stored one, so every
+    /// reader below is unchanged and there is exactly one place the tree's
+    /// expansion lives. Empty, and silently unwritable, when no worktree is
+    /// shown — there is nothing for expansion to be relative to.
+    private var expanded: Set<PathKey> {
+        get { worktree?.uiState(ExplorerUIState.self).expanded ?? [] }
+        set { worktree?.uiState(ExplorerUIState.self).expanded = newValue }
+    }
 
     /// The file the user last clicked.
     public private(set) var selected: URL?
@@ -111,7 +121,9 @@ public final class ExplorerModel {
 
         registration?.cancel()
         registration = nil
-        expanded = []
+        // Expansion is not cleared: it belongs to the worktree being left, not
+        // to this pane, and it is still that worktree's when the user comes
+        // back. What is cleared is what was about the pane's last contents.
         selected = nil
         renaming = nil
         creating = nil
