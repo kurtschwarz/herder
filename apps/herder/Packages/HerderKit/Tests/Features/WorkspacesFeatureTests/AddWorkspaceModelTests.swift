@@ -1,22 +1,19 @@
 import Core
 import Foundation
-import Storage
-import SwiftData
 import TestSupport
 import Testing
 
 @testable import WorkspacesFeature
 
-@Suite struct AddWorkspaceModelTests {
+@Suite @MainActor struct AddWorkspaceModelTests {
     let bookmarks = InMemoryBookmarkClient()
     let git = StubGitClient()
     let picker = StubFolderPickerClient()
-    let store: SwiftDataRepositoryStore
+    let store: RepositoryStore
     let model: AddWorkspaceModel
 
     init() throws {
-        let container = try WorkspaceContainer.inMemory()
-        store = SwiftDataRepositoryStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
+        store = RepositoryStore(bookmarks: bookmarks, git: git, state: InMemoryStateStore())
         model = AddWorkspaceModel(store: store, picker: picker)
     }
 
@@ -142,7 +139,7 @@ import Testing
 
         #expect(await model.submit())
 
-        let added = try #require(try store.workspaces().first)
+        let added = try #require(store.repositories.first)
         #expect(added.name == "Gateway")
         #expect(added.path == "/code/api")
     }
@@ -154,7 +151,7 @@ import Testing
 
         #expect(await model.submit())
 
-        #expect(try store.workspaces().first?.name == "api")
+        #expect(store.repositories.first?.name == "api")
     }
 
     @Test func aFolderThatChangedAfterThePickIsRefusedOnSubmit() async throws {
@@ -167,6 +164,6 @@ import Testing
 
         #expect(model.refusal == .notARepository)
         #expect(!model.canAdd)
-        #expect(try store.workspaces().isEmpty)
+        #expect(store.repositories.isEmpty)
     }
 }

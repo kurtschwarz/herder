@@ -57,11 +57,6 @@ let package = Package(
         // to run one of them before this package will resolve.
         .binaryTarget(name: "HerderSyntaxFFI", path: "Vendor/HerderSyntaxFFI.xcframework"),
 
-        // The one module that owns reference types: the SwiftData `@Model`
-        // classes, their schema versions and the container. Becomes
-        // `Services/Persistence/` in Phase 3.
-        .target(name: "Storage", dependencies: ["Core"], swiftSettings: ui),
-
         // Shared views, styles, tokens.
         // Depends on `Core` only for the environment keys that carry Core's
         // action types across the App/feature boundary: `Core` cannot declare
@@ -75,7 +70,7 @@ let package = Package(
         // services are `AppFeature`'s business alone.
         .target(
             name: "WorkspacesFeature",
-            dependencies: ["Core", "DesignSystem", "TestSupport", "Storage", icons],
+            dependencies: ["Core", "DesignSystem", "TestSupport", icons],
             path: "Sources/Features/WorkspacesFeature",
             swiftSettings: ui
         ),
@@ -101,7 +96,7 @@ let package = Package(
         .target(
             name: "AppFeature",
             dependencies: [
-                "Core", "Services", "DesignSystem", "TestSupport", "Storage",
+                "Core", "Services", "DesignSystem", "TestSupport",
                 "WorkspacesFeature", "ExplorerFeature", "EditorFeature",
             ],
             path: "Sources/App",
@@ -116,22 +111,17 @@ let package = Package(
         .testTarget(
             name: "ServicesTests",
             dependencies: ["Services", "TestSupport"],
-            swiftSettings: core
-        ),
-        .testTarget(
-            name: "StorageTests",
-            dependencies: ["Storage", "TestSupport"],
             // A real store written by a build that only knew schema V1. An
             // in-memory container is always created at the current version, so
             // nothing else here can catch a schema change that strands the
             // store already on the user's disk — which is where the one piece
             // of unrecoverable state lives. See WorkspaceMigrationTests.
             resources: [.copy("Fixtures")],
-            swiftSettings: ui
+            swiftSettings: core
         ),
         .testTarget(
             name: "WorkspacesFeatureTests",
-            dependencies: ["WorkspacesFeature", "Core", "TestSupport", "Storage"],
+            dependencies: ["WorkspacesFeature", "Core", "TestSupport"],
             path: "Tests/Features/WorkspacesFeatureTests",
             swiftSettings: ui
         ),

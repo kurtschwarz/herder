@@ -291,7 +291,17 @@ Still to do here: the editor's open file, once there is more than one.
 
 Repoint every reader and delete the old holder **in the same task** — never merge with two sources of truth for the same fact.
 
-**4e. Persistence off `@Query`.** Replace the one `@Query` in the repositories list and the `ModelContext` in `AppModel` with reads from `RepositoryStore` (Phase 3 task 4), plus snapshot save and restore through `StateStore`. Note that the current design relies on the store writing through the same `mainContext` that `@Query` reads, so a change shows with no round trip — whatever replaces it has to replace that too, not just the call site. **Migrate the `Repository` rows into snapshots; do not delete the table** (D6). Enable the SwiftData check in `check-boundaries.sh`.
+**4e. Persistence off `@Query`. Done.**
+
+`Repository` is a Core value type, held by `RepositoryStore` — an `@Observable` store in `Core/Repositories/` — and persisted in `AppSnapshot` through `StateStore`. The sidebar reads `store.repositories` and Observation redraws it, which is what replaced `@Query`'s no-round-trip immediacy: the old design got that by writing through the same `mainContext` the view read, and owning the array gives it without a feature knowing what a `ModelContext` is.
+
+The rows came across rather than being abandoned (D6). `LegacyRepositoryImport` copies them into the snapshot once, guarded on the new list being empty — so a user who has deleted every repository since migrating does not get them all back, and SwiftData is not touched at all on any launch after the first. **The `ZWORKSPACE` table is left exactly as it was.**
+
+Then `Storage` finally became `Services/Persistence/`, which Phase 3 could not do: the feature had been passing `@Model` objects around, and that was the whole blocker.
+
+**All four boundary checks now pass**, including "SwiftData imported outside Services/Persistence". Getting there needed one more seam: `AppEnvironment` was holding a `ModelContainer`, so the App target still imported SwiftData. `PersistenceStack` in `Services/Persistence/` now hands back a `StateStore` and a list of `Repository` values and keeps the container to itself — which is also what makes the Phase 7 swap a replacement of one type rather than a change to the composition root.
+
+Verified against the real store: the `herder` row arrived in the snapshot with its 740-byte bookmark, its path and its order, and a second launch neither re-imported nor duplicated it.
 
 **4f. Restoration.** Store `activeWorkspaceID` per window with `@SceneStorage`. On launch, the registry restores open workspaces from `AppSnapshot`. Keep `willTerminateNotification` handing back security-scoped access — it is the only place that does.
 
@@ -410,13 +420,14 @@ added to docs/realignment/notes.md.
   - [ ] `StateStore` (SwiftData-backed)
 - [ ] **P4** Workspace state *(gate: smoke test)*
   - [x] 4a rename to `Workspace` / `WorkspaceRegistry` / `Repository`
-  - [ ] 4a′ `RepositoryStore` and `RepositoryAccess` behind protocols *(with 4e)*
+  - [x] 4a′ `RepositoryStore` owns the list; `RepositoryAccess` moved to `Core`
   - [x] 4b snapshot and UI-state types + tests
   - [x] 4c `WindowModel` and per-window active workspace
   - [~] 4d feature UI state onto the workspace
     - [x] file tree expansion → `ExplorerUIState`
     - [ ] sidebar collapse → `AppSnapshot` *(4f)*
-  - [ ] 4e persistence off `@Query`
+    - [x] repository list → `AppSnapshot` *(4e)*
+  - [x] 4e persistence off `@Query`, `Storage` → `Services/Persistence/`
   - [ ] 4f restoration
   - [ ] 4g several live workspaces at once
 - [ ] **P5** Features

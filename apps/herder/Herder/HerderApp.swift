@@ -13,16 +13,16 @@ struct HerderApp: App {
     @State private var environment: AppEnvironment
 
     init() {
-        let environment = AppEnvironment()
-        // Before any scene exists: a view must never render a workspace the
-        // sandbox has not been asked for yet.
-        environment.start()
-        _environment = State(initialValue: environment)
+        _environment = State(initialValue: AppEnvironment())
     }
 
     var body: some Scene {
         WindowGroup {
             AppView(environment: environment)
+                // Reading the repository list touches the disk, so it happens
+                // here rather than in `init`. The sidebar is empty for the
+                // moment it takes.
+                .task { await environment.start() }
                 // Quitting is the only way out, so this is where the sandbox
                 // gets its folder access handed back.
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
@@ -33,7 +33,6 @@ struct HerderApp: App {
         // The design puts the traffic lights inside the sidebar's header rather
         // than in a title bar of their own.
         .windowStyle(.hiddenTitleBar)
-        .modelContainer(environment.container)
         .commands {
             // ⌘N already opens a new window.
             CommandGroup(after: .newItem) {

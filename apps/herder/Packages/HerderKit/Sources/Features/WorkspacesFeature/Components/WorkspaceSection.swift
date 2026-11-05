@@ -1,6 +1,5 @@
 import Core
 import DesignSystem
-import Storage
 import SwiftUI
 
 /// A workspace row and, while it is open, the worktrees beneath it.

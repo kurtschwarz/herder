@@ -2,8 +2,6 @@
 import Core
 import Foundation
 import Services
-import Storage
-import SwiftData
 
 /// Does-nothing `FileClient` for SwiftUI previews. Debug-only so it never reaches a
 /// release build; tests use `InMemoryFileClient` from `ClientsTestSupport` instead.
@@ -65,37 +63,38 @@ struct PreviewFileWatcherClient: FileWatcherClient {
 }
 
 extension AppEnvironment {
-    /// Two workspaces in an in-memory store. One container for every preview,
-    /// because a context outlives nothing: its container has to stay alive for
-    /// as long as a view queries it. Traps rather than returning an optional: a
-    /// preview that cannot build its store has nothing to show, and the message
-    /// is what tells you why the canvas is blank.
-    @MainActor static let previewContainer: ModelContainer = {
-        do {
-            let container = try WorkspaceContainer.inMemory()
-            for (index, name) in ["agent-editor", "herder"].enumerated() {
-                let path = "/preview/\(name)"
-                container.mainContext.insert(
-                    Repository(name: name, path: path, bookmark: Data(path.utf8), order: index)
-                )
-            }
-            return container
-        } catch {
-            fatalError("Could not build the preview workspace store: \(error)")
-        }
-    }()
-
-    /// An app model over the seeded preview store.
+    /// An app environment over fakes, with two repositories already adopted.
+    ///
+    /// The store is in-memory and nothing queries it; the repositories go in
+    /// through the state store, which is where they live now. Traps rather than
+    /// returning an optional: a preview that cannot build its store has nothing
+    /// to show, and the message is what tells you why the canvas is blank.
     @MainActor static var preview: AppEnvironment {
-        AppEnvironment(
+        let persistence: PersistenceStack
+        do {
+            persistence = try PersistenceStack.inMemory()
+        } catch {
+            fatalError("Could not build the preview store: \(error)")
+        }
+
+        let environment = AppEnvironment(
             files: PreviewFileClient(),
             bookmarks: PreviewBookmarkClient(),
             git: PreviewGitClient(),
             folderPicker: PreviewFolderPickerClient(),
             watcher: PreviewFileWatcherClient(),
             clock: LiveClockClient(),
-            container: previewContainer
+            persistence: persistence
         )
+
+        Task {
+            for (index, name) in ["agent-editor", "herder"].enumerated() {
+                let path = "/preview/\(name)"
+                try? await environment.repositories.add(url: URL(filePath: path), name: name)
+                _ = index
+            }
+        }
+        return environment
     }
 }
 #endif

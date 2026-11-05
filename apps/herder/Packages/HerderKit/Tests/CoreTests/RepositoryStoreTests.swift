@@ -1,29 +1,36 @@
 import Core
 import Foundation
-import SwiftData
 import TestSupport
 import Testing
 
-@testable import Storage
-
-/// Runs against a real in-memory `ModelContainer`, so the schema, the unique
-/// constraint and the sort descriptors are the ones the app ships. Only the two
-/// OS-touching clients are faked.
-@Suite struct SwiftDataRepositoryStoreTests {
+/// The rules about adopting a folder: what may be added, what it is called,
+/// where it sits, and what happens to the list across a launch.
+///
+/// Ported from `SwiftDataRepositoryStoreTests` when the list moved off
+/// SwiftData in 4e. The assertions are the same; what changed is that a
+/// `Repository` is now a value, so a test reads the result back off the store
+/// rather than off the copy it is holding. Only the two OS-touching clients are
+/// faked — the state store is real, in memory.
+@Suite @MainActor struct RepositoryStoreTests {
     let bookmarks = InMemoryBookmarkClient()
     let git = StubGitClient()
-    let container: ModelContainer
-    let store: SwiftDataRepositoryStore
+    let state = InMemoryStateStore()
+    let store: RepositoryStore
 
-    init() throws {
-        container = try WorkspaceContainer.inMemory()
-        store = SwiftDataRepositoryStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
+    init() {
+        store = RepositoryStore(bookmarks: bookmarks, git: git, state: state)
     }
 
-    /// A second store over the same data, standing in for the next launch.
-    func relaunch() -> SwiftDataRepositoryStore {
-        SwiftDataRepositoryStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
+    /// A second store over the same saved state, standing in for the next
+    /// launch. Loaded, because that is what launching does.
+    func relaunch() async -> RepositoryStore {
+        let next = RepositoryStore(bookmarks: bookmarks, git: git, state: state)
+        await next.load()
+        return next
     }
+
+    /// What the store holds, which is what a view would draw.
+    var repositories: [Repository] { store.repositories }
 
     func url(_ path: String) -> URL { URL(filePath: path) }
 
@@ -43,7 +50,7 @@ import Testing
 
         #expect(workspace.name == "api")
         #expect(workspace.path == "/code/api")
-        #expect(try store.workspaces().map(\.id) == [workspace.id])
+        #expect(repositories.map(\.id) == [workspace.id])
     }
 
     @Test func addsABareRepositoryWithoutItsGitSuffix() async throws {
@@ -64,7 +71,7 @@ import Testing
         await #expect(throws: RepositoryStoreError.notAGitRepository(url("/code/notes"))) {
             _ = try await store.add(url: url("/code/notes"))
         }
-        #expect(try store.workspaces().isEmpty)
+        #expect(repositories.isEmpty)
     }
 
     @Test func refusesALinkedWorktreeAndNamesItsRepository() async throws {
@@ -83,7 +90,7 @@ import Testing
         await #expect(throws: RepositoryStoreError.alreadyOpen(url)) {
             _ = try await store.add(url: url)
         }
-        #expect(try store.workspaces().count == 1)
+        #expect(repositories.count == 1)
     }
 
     @Test func recognisesAFolderItAlreadyHasUnderAnewPath() async throws {
@@ -111,7 +118,7 @@ import Testing
     @Test func validatingAddsNothing() async throws {
         let url = repository("/code/api")
         try await store.validate(url: url)
-        #expect(try store.workspaces().isEmpty)
+        #expect(repositories.isEmpty)
     }
 
     @Test func validatingRefusesWhatAddingRefuses() async throws {
@@ -133,8 +140,8 @@ import Testing
 
     @Test func theDefaultNameIsWhatAddingWouldUse() async throws {
         let url = url("/code/api.git")
-        #expect(SwiftDataRepositoryStore.defaultName(for: url, kind: .bare) == "api")
-        #expect(SwiftDataRepositoryStore.defaultName(for: url, kind: .mainWorkingTree) == "api.git")
+        #expect(RepositoryStore.defaultName(for: url, kind: .bare) == "api")
+        #expect(RepositoryStore.defaultName(for: url, kind: .mainWorkingTree) == "api.git")
     }
 
     // MARK: - Renaming
@@ -142,28 +149,28 @@ import Testing
     @Test func renamingPersistsTheNewName() async throws {
         let workspace = try await store.add(url: repository("/code/api"))
 
-        try store.rename(workspace, to: "  Gateway ")
+        await store.rename(workspace, to: "  Gateway ")
 
-        #expect(workspace.name == "Gateway")
-        #expect(try relaunch().workspaces().first?.name == "Gateway")
+        #expect(repositories.first?.name == "Gateway")
+        #expect(await relaunch().repositories.first?.name == "Gateway")
     }
 
     @Test func aBlankNameKeepsTheCurrentOne() async throws {
         let workspace = try await store.add(url: repository("/code/api"), name: "Gateway")
 
-        try store.rename(workspace, to: "   ")
+        await store.rename(workspace, to: "   ")
 
-        #expect(workspace.name == "Gateway")
+        #expect(repositories.first?.name == "Gateway")
     }
 
     @Test func twoWorkspacesMayShareAName() async throws {
         let first = try await store.add(url: repository("/code/api"), name: "api")
         let second = try await store.add(url: repository("/work/api"), name: "other")
 
-        try store.rename(second, to: "api")
+        await store.rename(second, to: "api")
 
-        #expect(first.name == second.name)
-        #expect(try store.workspaces().count == 2)
+        #expect(repositories.map(\.name) == ["api", "api"])
+        #expect(first.id != second.id)
     }
 
     @Test func newWorkspacesGoToTheBottom() async throws {
@@ -171,7 +178,7 @@ import Testing
             try await store.add(url: repository("/code/\(name)"))
         }
 
-        #expect(try store.workspaces().map(\.name) == ["api", "web", "infra"])
+        #expect(repositories.map(\.name) == ["api", "web", "infra"])
     }
 
     @Test func reorderingRenumbersEveryRow() async throws {
@@ -179,11 +186,11 @@ import Testing
             try await store.add(url: repository("/code/\(name)"))
         }
 
-        var ordered = try store.workspaces()
+        var ordered = repositories
         ordered.insert(ordered.removeLast(), at: 0)
-        try store.reorder(to: ordered)
+        await store.reorder(to: ordered)
 
-        let reloaded = try store.workspaces()
+        let reloaded = repositories
         #expect(reloaded.map(\.name) == ["infra", "api", "web"])
         #expect(reloaded.map(\.order) == [0, 1, 2])
     }
@@ -193,11 +200,11 @@ import Testing
             try await store.add(url: repository("/code/\(name)"))
         }
 
-        try store.delete(try #require(try store.workspaces().first))
+        await store.delete(try #require(repositories.first))
 
         // The gap is deliberate: renumbering here would move rows the user never
         // touched, and would collide with an undone delete.
-        let remaining = try store.workspaces()
+        let remaining = repositories
         #expect(remaining.map(\.name) == ["web", "infra"])
         #expect(remaining.map(\.order) == [1, 2])
     }
@@ -206,10 +213,10 @@ import Testing
         for name in ["api", "web"] {
             try await store.add(url: repository("/code/\(name)"))
         }
-        try store.delete(try #require(try store.workspaces().first))
+        await store.delete(try #require(repositories.first))
 
         try await store.add(url: repository("/code/infra"))
-        #expect(try store.workspaces().map(\.name) == ["web", "infra"])
+        #expect(repositories.map(\.name) == ["web", "infra"])
     }
 
     // MARK: - Deleting
@@ -218,15 +225,15 @@ import Testing
         let url = repository("/code/api")
         let workspace = try await store.add(url: url)
 
-        try store.delete(workspace)
+        await store.delete(workspace)
 
-        #expect(try store.workspaces().isEmpty)
+        #expect(repositories.isEmpty)
         #expect(bookmarks.accessedURLs.isEmpty)
     }
 
     @Test func aDeletedFolderCanBeAddedAgain() async throws {
         let url = repository("/code/api")
-        try store.delete(try await store.add(url: url))
+        await store.delete(try await store.add(url: url))
 
         let readded = try await store.add(url: url)
         #expect(readded.name == "api")
@@ -239,10 +246,9 @@ import Testing
         try await store.add(url: repository("/code/api"))
         try await store.add(url: repository("/code/web"))
 
-        let next = relaunch()
-        let opened = try next.open()
+        let next = await relaunch()
 
-        #expect(opened.allSatisfy { $0.isAvailable })
+        #expect(next.repositories.allSatisfy { $0.isAvailable })
         #expect(Set(next.access.openFolders.values) == [url("/code/api"), url("/code/web")])
     }
 
@@ -251,8 +257,8 @@ import Testing
         try await store.add(url: url)
         bookmarks.markStale(url)
 
-        let next = relaunch()
-        let reopened = try #require(try next.open().first)
+        let next = await relaunch()
+        let reopened = try #require(next.repositories.first)
 
         #expect(reopened.isAvailable)
         #expect(try bookmarks.resolve(reopened.bookmark).isStale == false)
@@ -262,8 +268,8 @@ import Testing
         let workspace = try await store.add(url: repository("/code/api"))
         bookmarks.redirect(workspace.bookmark, to: url("/elsewhere/api"))
 
-        let next = relaunch()
-        let reopened = try #require(try next.open().first)
+        let next = await relaunch()
+        let reopened = try #require(next.repositories.first)
 
         #expect(reopened.path == "/elsewhere/api")
         // The name was fixed when the workspace was added and does not follow.
@@ -275,11 +281,11 @@ import Testing
         try await store.add(url: url)
         bookmarks.breakResolution(for: url)
 
-        let next = relaunch()
-        let reopened = try #require(try next.open().first)
+        let next = await relaunch()
+        let reopened = try #require(next.repositories.first)
 
         #expect(reopened.isAvailable == false)
-        #expect(try next.workspaces().count == 1)
+        #expect(next.repositories.count == 1)
         #expect(next.access.openFolders.isEmpty)
     }
 
@@ -287,10 +293,11 @@ import Testing
         let url = repository("/volumes/backup/api")
         try await store.add(url: url)
         bookmarks.breakResolution(for: url)
-        try store.open()
+        await store.load()
 
         bookmarks.restoreResolution(for: url)
-        let reopened = try #require(try store.open().first)
+        await store.load()
+        let reopened = try #require(repositories.first)
 
         #expect(reopened.isAvailable)
     }
@@ -300,15 +307,16 @@ import Testing
     @Test func relocatingPointsTheSameWorkspaceAtANewFolder() async throws {
         let workspace = try await store.add(url: repository("/volumes/backup/api"), name: "Backup API")
         bookmarks.breakResolution(for: url("/volumes/backup/api"))
-        try store.open()
+        await store.load()
 
         try await store.relocate(workspace, to: repository("/code/api"))
 
-        #expect(workspace.isAvailable)
-        #expect(workspace.path == "/code/api")
-        // Identity, name and position survive: it is the same workspace.
-        #expect(workspace.name == "Backup API")
-        #expect(try store.workspaces().map(\.id) == [workspace.id])
+        let relocated = try #require(repositories.first)
+        #expect(relocated.isAvailable)
+        #expect(relocated.path == "/code/api")
+        // Identity, name and position survive: it is the same repository.
+        #expect(relocated.name == "Backup API")
+        #expect(relocated.id == workspace.id)
     }
 
     @Test func relocatingRefusesAFolderThatIsNotARepository() async throws {
@@ -317,6 +325,6 @@ import Testing
         await #expect(throws: RepositoryStoreError.notAGitRepository(url("/code/notes"))) {
             try await store.relocate(workspace, to: url("/code/notes"))
         }
-        #expect(workspace.path == "/code/api")
+        #expect(repositories.first?.path == "/code/api")
     }
 }

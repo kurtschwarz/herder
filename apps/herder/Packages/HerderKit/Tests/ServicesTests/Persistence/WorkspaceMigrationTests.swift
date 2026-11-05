@@ -1,6 +1,6 @@
 import Core
 import Foundation
-import Storage
+import Services
 import SwiftData
 import Testing
 
@@ -61,7 +61,7 @@ import Testing
 
         let current = try container(WorkspaceSchemaV2.self, at: url, migrating: WorkspaceMigrationPlan.self)
         let repositories = try ModelContext(current)
-            .fetch(FetchDescriptor<Repository>(sortBy: [SortDescriptor(\.order)]))
+            .fetch(FetchDescriptor<LegacyRepository>(sortBy: [SortDescriptor(\.order)]))
 
         #expect(repositories.map(\.name) == ["herder", "api"])
         #expect(repositories.map(\.path) == ["/code/herder", "/code/api"])
@@ -86,7 +86,7 @@ import Testing
         _ = try container(WorkspaceSchemaV2.self, at: url, migrating: WorkspaceMigrationPlan.self)
 
         let again = try container(WorkspaceSchemaV2.self, at: url, migrating: WorkspaceMigrationPlan.self)
-        #expect(try ModelContext(again).fetch(FetchDescriptor<Repository>()).count == 2)
+        #expect(try ModelContext(again).fetch(FetchDescriptor<LegacyRepository>()).count == 2)
     }
 
     /// The entity name is the class name, and the store records it. This is what
@@ -121,12 +121,12 @@ import Testing
         do {
             let first = try container(WorkspaceSchemaV2.self, at: url, migrating: WorkspaceMigrationPlan.self)
             let context = ModelContext(first)
-            context.insert(Repository(name: "api", path: "/code/api", bookmark: Data(), order: 0))
+            context.insert(LegacyRepository(name: "api", path: "/code/api", bookmark: Data(), order: 0))
             try context.save()
         }
 
         let second = try container(WorkspaceSchemaV2.self, at: url, migrating: WorkspaceMigrationPlan.self)
-        #expect(try ModelContext(second).fetch(FetchDescriptor<Repository>()).count == 1)
+        #expect(try ModelContext(second).fetch(FetchDescriptor<LegacyRepository>()).count == 1)
     }
 
     /// App state and repositories share one store, so the V2 addition must not
@@ -137,7 +137,7 @@ import Testing
         do {
             let v1 = try container(WorkspaceSchemaV1.self, at: url)
             let context = ModelContext(v1)
-            context.insert(Repository(name: "herder", path: "/code/herder", bookmark: Data(), order: 0))
+            context.insert(LegacyRepository(name: "herder", path: "/code/herder", bookmark: Data(), order: 0))
             try context.save()
         }
 
@@ -146,7 +146,7 @@ import Testing
         try await state.save(AppSnapshot(openWorkspaces: [WorkspaceID(PathKey(canonical: "/code/herder"))]),
                              forKey: AppSnapshot.persistenceKey)
 
-        #expect(try ModelContext(current).fetch(FetchDescriptor<Repository>()).count == 1)
+        #expect(try ModelContext(current).fetch(FetchDescriptor<LegacyRepository>()).count == 1)
         let loaded = try await state.load(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)
         #expect(loaded?.openWorkspaces.count == 1)
     }

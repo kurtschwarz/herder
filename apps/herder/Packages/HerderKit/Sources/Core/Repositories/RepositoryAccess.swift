@@ -1,13 +1,12 @@
-import Core
 import Foundation
 
-/// Holds the sandbox's folder access open for as long as a workspace is open.
+/// Holds the sandbox's folder access open for as long as a repository is adopted.
 ///
 /// Security-scoped access is a counted resource: every start needs exactly one
 /// stop. Scoping it around each file operation would put that pairing on every
-/// future caller, so it is taken once when a workspace opens and released when it
-/// is removed or the app quits. One object owns the count, so there is one place
-/// for it to be wrong.
+/// future caller, so it is taken once when a repository is opened and released
+/// when it is removed or the app quits. One object owns the count, so there is
+/// one place for it to be wrong.
 public final class RepositoryAccess {
     private let bookmarks: any BookmarkClient
     private var urls: [UUID: URL] = [:]

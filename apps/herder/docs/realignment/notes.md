@@ -209,3 +209,33 @@ whatever the code currently says and pass.
 - **`AppView` is getting busy** — eight modifiers of app logic on one `HStack`.
   Fine for now; `WorkspaceView` in `ARCHITECTURE.md` is where this goes when the
   window gains a second thing to show.
+
+## From Phase 4e (repositories off @Query)
+
+- **`RepositoryStore` is state in `Core`, not a service behind a protocol.** The
+  plan called for a `RepositoryStore` protocol in `Core/Services/`, but the
+  seam was already there: the thing that varies is where the list is *stored*,
+  and that is `StateStore`. A second protocol in front of the list itself would
+  have had one implementation forever. The scoping table in `ARCHITECTURE.md`
+  listed it as an app-scoped service and has been corrected.
+- **I deleted 27 tests and had to go back for them.** Removing
+  `SwiftDataRepositoryStore` took `SwiftDataRepositoryStoreTests` with it, and
+  the test count dropping from 347 to 324 is what caught it. They are now
+  `CoreTests/RepositoryStoreTests`, assertions unchanged except that a
+  `Repository` is a value, so each one reads the result off the store rather
+  than off the copy it is holding. Worth a rule: if a module is replaced rather
+  than moved, its tests are ported before the old file goes.
+- **Security-scoped bookmarks are now base64 inside JSON inside SQLite.** Fine
+  today, and it makes D6's open question concrete: after Phase 7 they will sit
+  in a plain JSON file under Application Support. A bookmark is a capability
+  scoped to this app's identity rather than a secret, and Apple's own apps keep
+  them in plists, so a file is defensible — but it is Kurt's call before Phase 7
+  swaps the store.
+- **Mutations save immediately rather than debounced.** `ARCHITECTURE.md` asks
+  for a debounce; it is right for UI state, which changes as the user scrolls,
+  and wrong here. Adding a repository mints a bookmark that cannot be
+  regenerated, so losing it to a crash inside the debounce window is not worth
+  the saved write. Debouncing arrives with the UI-state snapshots in 4f.
+- **`AppEnvironment.start()` is `async` now**, and the window renders before it
+  finishes, so the sidebar is empty for the moment the first read takes. `@main`
+  calls it from `.task`, not `init`, because reading the list touches the disk.

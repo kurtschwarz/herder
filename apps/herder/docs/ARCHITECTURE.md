@@ -230,7 +230,8 @@ Each feature's test target takes `path: "Tests/Features/<Name>FeatureTests"`. Sw
 Two app-wide things, because Herder's model has two levels: the repositories the user has adopted, and the checkouts currently open.
 
 ```
-RepositoryStore            app-wide: the folders the user has adopted (Core)
+RepositoryStore            app-wide state, not a service: the folders the
+                           user has adopted (Core/Repositories)
  └── Repository            one adopted repository. Persisted: name, bookmark,
                            sidebar order. Has N git worktrees.
 
@@ -331,7 +332,7 @@ extension Workspace {
 | Settings, keybindings, theme | File system + FSEvents watcher |
 | `HighlightService` (Rust syntax engine) | Git |
 | `StateStore` | Search |
-| `RepositoryStore`, bookmarks, folder picker | Process / PTY |
+| Bookmarks, folder picker | Process / PTY |
 | | Agent runner |
 
 Workspace-scoped services are created when a workspace opens and torn down when it closes. Each one is bound to its workspace root, so there's never a question of which repo it's talking to.
@@ -369,7 +370,7 @@ Two rules follow:
 
 ### Implementations
 
-- **Transitional:** `SwiftDataStateStore` in `Services/Persistence/`, storing snapshot JSON blobs in a single `@Model`.
+- **Transitional:** `SwiftDataStateStore` in `Services/Persistence/`, storing snapshot JSON blobs in a single `@Model`. `PersistenceStack` is the seam in front of it: it hands back a `StateStore`, and the `ModelContainer` never leaves the module. That is what keeps `import SwiftData` out of the App target, and what makes the swap below a new type rather than a change to `AppEnvironment`.
 - **Target:** `FileStateStore` writing JSON:
 
 ```

@@ -1,3 +1,4 @@
+import Core
 import Foundation
 import SwiftData
 
@@ -74,9 +75,6 @@ public enum WorkspaceSchemaV1: VersionedSchema {
     }
 }
 
-/// What everything outside this file calls it.
-///
-/// The name the architecture uses, over the name the store recorded. See the
-/// class above for why the two differ. Unchanged in V2, which carries it over
-/// rather than redeclaring it.
-public typealias Repository = WorkspaceSchemaV1.Workspace
+// There is deliberately no `typealias Repository` here. `Core.Repository` is
+// the repository now; this class is only the row the old store holds, reached
+// as `LegacyRepository` by the one-shot import that empties it.

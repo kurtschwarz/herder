@@ -1,7 +1,6 @@
 import Core
 import Foundation
 import Observation
-import Storage
 
 /// The add-workspace modal's state: the folder picked, the name, and whether
 /// the store would take them.
@@ -30,7 +29,7 @@ public final class AddWorkspaceModel {
         }
     }
 
-    private let store: SwiftDataRepositoryStore
+    private let store: RepositoryStore
     private let picker: any FolderPickerClient
 
     /// What git made of `folder`, set only once the store has accepted it.
@@ -46,7 +45,7 @@ public final class AddWorkspaceModel {
 
     public var canAdd: Bool { kind != nil && refusal == nil && !isSubmitting }
 
-    public init(store: SwiftDataRepositoryStore, picker: any FolderPickerClient) {
+    public init(store: RepositoryStore, picker: any FolderPickerClient) {
         self.store = store
         self.picker = picker
     }
@@ -100,7 +99,7 @@ public final class AddWorkspaceModel {
             guard folder == url else { return }
             self.kind = kind
             if !isNameEdited {
-                name = SwiftDataRepositoryStore.defaultName(for: url.standardizedFileURL, kind: kind)
+                name = RepositoryStore.defaultName(for: url.standardizedFileURL, kind: kind)
             }
         } catch {
             guard folder == url else { return }

@@ -2,13 +2,10 @@ import Foundation
 
 /// The app's own state across every window, as it goes to ``StateStore``.
 ///
-/// Which workspaces were open, so a relaunch can reopen them. **Not** which
-/// window was showing which: that is per-window and `@SceneStorage` already
-/// restores it, scene by scene, without this having to model windows at all.
-///
-/// The adopted repositories are not here yet — they are still SwiftData rows,
-/// and move in 4e. When they do, they arrive as a new field with an empty
-/// default, like everything else.
+/// The repositories the user has adopted, and which workspaces were open so a
+/// relaunch can reopen them. **Not** which window was showing which: that is
+/// per-window and `@SceneStorage` already restores it, scene by scene, without
+/// this having to model windows at all.
 public struct AppSnapshot: Codable, Sendable, Equatable {
     /// Where this snapshot is stored. One key for the whole app.
     public static let persistenceKey = "app"
@@ -20,14 +17,24 @@ public struct AppSnapshot: Codable, Sendable, Equatable {
     /// shuffle the sidebar for no reason the user caused.
     public var openWorkspaces: [WorkspaceID]
 
-    public init(openWorkspaces: [WorkspaceID] = []) {
+    /// The folders the user has adopted, in sidebar order.
+    ///
+    /// The only thing Herder persists that the user would have to recreate by
+    /// hand, because each one carries a security-scoped bookmark. Nothing here
+    /// may drop them — see `RepositoryStore.save()`, which reads this key before
+    /// writing it for that reason.
+    public var repositories: [Repository]
+
+    public init(openWorkspaces: [WorkspaceID] = [], repositories: [Repository] = []) {
         self.openWorkspaces = openWorkspaces
+        self.repositories = repositories
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
         openWorkspaces = try container.decodeIfPresent([WorkspaceID].self, forKey: .openWorkspaces) ?? []
+        repositories = try container.decodeIfPresent([Repository].self, forKey: .repositories) ?? []
     }
 }
 

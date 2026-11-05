@@ -39,9 +39,8 @@ check "Singleton in HerderKit" \
 # check "Rust module imported outside Services" \
 #   -e "^import $RUST_MODULE\$" --type swift --glob '!**/Services/**' "$SRC" "$APP_DIR"
 
-# Enable in Phase 4, task 4e:
-# check "SwiftData imported outside Services/Persistence" \
-#   -e '^import SwiftData' --type swift --glob '!**/Services/Persistence/**' "$SRC" "$APP_DIR"
+check "SwiftData imported outside Services/Persistence" \
+  -e '^import SwiftData' --type swift --glob '!**/Services/Persistence/**' "$SRC" "$APP_DIR"
 
 if [[ $fail -eq 0 ]]; then echo "✓ boundaries OK"; fi
 exit $fail

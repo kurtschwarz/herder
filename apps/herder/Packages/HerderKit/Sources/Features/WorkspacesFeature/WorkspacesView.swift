@@ -1,20 +1,24 @@
 import AppKit
+import Core
 import DesignSystem
 import PhosphorSwift
-import Storage
-import SwiftData
 import SwiftUI
 
 /// The sidebar's workspace list: a pinned header over a scrolling tree of
 /// workspaces and their worktrees.
 public struct WorkspacesView: View {
-    @Query(sort: [SortDescriptor(\Repository.order), SortDescriptor(\Repository.addedAt)])
-    private var workspaces: [Repository]
-
     private let model: WorkspacesModel
 
-    public init(model: WorkspacesModel) {
+    /// The list, read straight off the store. This was a `@Query` against
+    /// SwiftData; Observation does the same job, and the sidebar no longer
+    /// knows what backs it.
+    private let store: RepositoryStore
+
+    private var workspaces: [Repository] { store.repositories }
+
+    public init(model: WorkspacesModel, store: RepositoryStore) {
         self.model = model
+        self.store = store
     }
 
     public var body: some View {

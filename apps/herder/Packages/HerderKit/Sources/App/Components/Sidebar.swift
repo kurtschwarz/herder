@@ -1,5 +1,5 @@
+import Core
 import DesignSystem
-import SwiftData
 import SwiftUI
 import WorkspacesFeature
 
@@ -7,11 +7,12 @@ import WorkspacesFeature
 /// `AppFeature` uses it.
 struct Sidebar: View {
     let workspaces: WorkspacesModel
+    let repositories: RepositoryStore
 
     var body: some View {
         VStack(spacing: 0) {
             SidebarHeader()
-            WorkspacesView(model: workspaces)
+            WorkspacesView(model: workspaces, store: repositories)
         }
         // The empty list has nothing tall in it, and the pane would shrink to
         // fit; the pane's height is the window's, not its content's.
@@ -34,8 +35,8 @@ private struct SidebarHeader: View {
 
 #if DEBUG
 #Preview {
-    Sidebar(workspaces: AppEnvironment.preview.workspaceList)
-        .modelContainer(AppEnvironment.previewContainer)
+    let environment = AppEnvironment.preview
+    Sidebar(workspaces: environment.workspaceList, repositories: environment.repositories)
         .frame(width: Theme.Size.sidebarWidth, height: 420)
         .glassPaneBackground()
         .padding(Theme.Spacing.windowPadding)

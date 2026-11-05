@@ -4,8 +4,6 @@ import ExplorerFeature
 import Foundation
 import Observation
 import Services
-import Storage
-import SwiftData
 import WorkspacesFeature
 
 /// Composition root.
@@ -22,9 +20,10 @@ import WorkspacesFeature
 /// `@MainActor` is implicit: this target's default isolation is `MainActor`.
 @Observable
 public final class AppEnvironment {
-    /// The SwiftData container the whole app shares. Held so the scene can hand
-    /// it to `.modelContainer(_:)`, which is what puts it in reach of `@Query`.
-    public let container: ModelContainer
+    /// Where the app's own state is kept. Whatever is behind it — SwiftData
+    /// today, JSON files after Phase 7 — stays inside `Services`, which is why
+    /// this target no longer imports SwiftData at all.
+    private let persistence: PersistenceStack
 
     /// Where the app keeps its own state: open workspaces, tabs, expanded
     /// folders. App-scoped, because one store serves every window.
@@ -34,9 +33,10 @@ public final class AppEnvironment {
     /// anything depends on it.
     public let state: any StateStore
 
-    /// Every change to the workspace list goes through here. Views read the list
-    /// itself with `@Query` against the same container.
-    public let workspaces: SwiftDataRepositoryStore
+    /// The repositories the user has adopted. Views read the list off it and
+    /// Observation redraws them; nothing above here knows it is backed by
+    /// ``StateStore``.
+    public let repositories: RepositoryStore
 
     /// The authoritative file and git state of the worktrees being watched.
     /// Held here rather than inside a feature because more than one pane reads
@@ -64,11 +64,11 @@ public final class AppEnvironment {
     /// folder, so a store that will not open is a bug to fix rather than state
     /// to discard — hence the message naming the file and saying so.
     public convenience init() {
-        let container: ModelContainer
+        let persistence: PersistenceStack
         do {
-            container = try WorkspaceContainer.live()
+            persistence = try PersistenceStack.live()
         } catch {
-            let path = (try? WorkspaceContainer.storeURL().path(percentEncoded: false)) ?? "unknown"
+            let path = (try? PersistenceStack.storeURL().path(percentEncoded: false)) ?? "unknown"
             fatalError(
                 """
                 Could not open the repository store, so Herder has nothing to \
@@ -95,15 +95,12 @@ public final class AppEnvironment {
             folderPicker: LiveFolderPickerClient(),
             watcher: LiveFileWatcherClient(),
             clock: LiveClockClient(),
-            container: container
+            persistence: persistence
         )
     }
 
     /// Takes every service, so tests and previews can pass fakes.
     ///
-    /// The store writes through `container.mainContext`, the same context
-    /// `@Query` reads, so a change made here shows up in the sidebar without a
-    /// round trip.
     ///
     /// `highlighter` is named here rather than defaulted inside the editor
     /// because this is the only module allowed to know a concrete service type.
@@ -114,14 +111,14 @@ public final class AppEnvironment {
         folderPicker: any FolderPickerClient,
         watcher: any FileWatcherClient,
         clock: any ClockClient,
-        container: ModelContainer,
+        persistence: PersistenceStack,
         highlighter: any SyntaxHighlighter = TreeSitterHighlighter()
     ) {
-        self.container = container
-        self.state = SwiftDataStateStore(container: container)
-        let workspaces = SwiftDataRepositoryStore(context: container.mainContext, bookmarks: bookmarks, git: git)
-        self.workspaces = workspaces
-        self.workspaceList = WorkspacesModel(store: workspaces, git: git, picker: folderPicker)
+        self.persistence = persistence
+        self.state = persistence.state
+        let repositories = RepositoryStore(bookmarks: bookmarks, git: git, state: persistence.state)
+        self.repositories = repositories
+        self.workspaceList = WorkspacesModel(store: repositories, git: git, picker: folderPicker)
         let worktrees = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock)
         self.worktrees = worktrees
         self.explorer = ExplorerModel(store: worktrees)
@@ -134,9 +131,14 @@ public final class AppEnvironment {
         workspaceList.beginAdding()
     }
 
-    /// Takes access to every workspace folder. Called at launch, before any view
-    /// exists: a workspace must be reachable before anything can render it.
-    public func start() {
+    /// Reads the repository list, takes access to every folder, and brings
+    /// across the rows the SwiftData store used to hold.
+    ///
+    /// `async`, unlike the `start()` it replaces: the list now comes from
+    /// ``StateStore``. The window renders before this finishes, showing an empty
+    /// sidebar for the moment it takes — which is why the import happens here
+    /// and not lazily behind a first read.
+    public func start() async {
         // Compiling the editor's grammars takes a few hundred milliseconds in
         // total, and all of it is paid the first time a file of each language
         // is opened unless it is paid here instead. Detached and unawaited:
@@ -144,12 +146,17 @@ public final class AppEnvironment {
         // simply gets the colour a moment later.
         Task.detached { await TreeSitterHighlighter.warmUp() }
 
-        do {
-            try workspaces.open()
-        } catch {
-            // Nothing here is recoverable by the app, and the per-workspace
-            // failures are already reported as unavailable workspaces.
-            assertionFailure("Could not open workspaces: \(error)")
+        await repositories.load()
+
+        // One-shot: the rows the SwiftData store used to hold carry
+        // security-scoped bookmarks that cannot be regenerated, so they are
+        // copied across rather than abandoned, and the table is left exactly as
+        // it was. Guarded on the list being empty rather than on a flag — a
+        // user who has deleted every repository since migrating must not have
+        // them all come back — which also means SwiftData is not touched at all
+        // on any launch after the first.
+        if repositories.repositories.isEmpty {
+            await repositories.adopt(persistence.legacyRepositories())
         }
     }
 
@@ -157,6 +164,6 @@ public final class AppEnvironment {
     /// for changes. Balances `start()`.
     public func stop() {
         worktrees.stop()
-        workspaces.access.endAll()
+        repositories.access.endAll()
     }
 }

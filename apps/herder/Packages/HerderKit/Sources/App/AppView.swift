@@ -35,7 +35,7 @@ public struct AppView: View {
 
     public var body: some View {
         HStack(spacing: Theme.Spacing.paneGap) {
-            Sidebar(workspaces: environment.workspaceList)
+            Sidebar(workspaces: environment.workspaceList, repositories: environment.repositories)
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
 
@@ -111,6 +111,5 @@ public struct AppView: View {
 #Preview {
     AppView(environment: .preview)
         .frame(width: 980, height: 620)
-        .modelContainer(AppEnvironment.previewContainer)
 }
 #endif

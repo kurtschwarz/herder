@@ -1,13 +1,13 @@
 import Core
 import Foundation
 import Observation
-import Storage
 
 /// Everything about the workspace list that is not the list itself.
 ///
-/// The workspaces come from `@Query`, so this never caches them. What it holds
-/// is derived or ephemeral: each workspace's worktrees as last read, which
-/// workspaces the user has folded away, and which row is being renamed.
+/// The list itself comes from ``RepositoryStore``, which this never caches.
+/// What it holds is derived or ephemeral: each repository's worktrees as last
+/// read, which repositories the user has folded away, and which row is being
+/// renamed.
 ///
 /// **Not** which worktree is active. That is the window's, in `WindowModel`,
 /// because two windows can show different checkouts and a model held once per
@@ -25,7 +25,7 @@ public final class WorkspacesModel {
 
     private static let collapsedKey = "collapsedWorkspaces"
 
-    private let store: SwiftDataRepositoryStore
+    private let store: RepositoryStore
     private let git: any GitClient
     private let picker: any FolderPickerClient
     private let defaults: UserDefaults
@@ -59,7 +59,7 @@ public final class WorkspacesModel {
     public var isModalPresented: Bool { adding != nil || newSession != nil }
 
     public init(
-        store: SwiftDataRepositoryStore,
+        store: RepositoryStore,
         git: any GitClient,
         picker: any FolderPickerClient,
         defaults: UserDefaults = .standard
@@ -174,24 +174,15 @@ public final class WorkspacesModel {
         }
     }
 
-    public func commitRename(_ workspace: Repository, to name: String) {
+    public func commitRename(_ workspace: Repository, to name: String) async {
         renaming = nil
-        do {
-            try store.rename(workspace, to: name)
-            names[workspace.id] = workspace.name
-        } catch {
-            assertionFailure("Could not rename workspace: \(error)")
-        }
+        await store.rename(workspace, to: name)
+        names[workspace.id] = store[workspace.id]?.name ?? workspace.name
     }
 
-    public func remove(_ workspace: Repository) {
+    public func remove(_ workspace: Repository) async {
         let id = workspace.id
-        do {
-            try store.delete(workspace)
-        } catch {
-            assertionFailure("Could not remove workspace: \(error)")
-            return
-        }
+        await store.delete(workspace)
         listings[id] = nil
         names[id] = nil
         if collapsed.remove(id) != nil { persistCollapsed() }

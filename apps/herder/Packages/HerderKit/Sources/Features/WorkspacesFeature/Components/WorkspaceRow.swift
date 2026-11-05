@@ -1,7 +1,7 @@
 import AppKit
+import Core
 import DesignSystem
 import PhosphorSwift
-import Storage
 import SwiftUI
 
 struct WorkspaceRow: View {
@@ -38,7 +38,9 @@ struct WorkspaceRow: View {
                 .foregroundStyle(isAvailable ? Theme.Palette.secondaryText : Theme.Palette.warning)
 
             if model.renaming == workspace.id {
-                RenameField(name: workspace.name) { model.commitRename(workspace, to: $0) }
+                RenameField(name: workspace.name) { name in
+                    Task { await model.commitRename(workspace, to: name) }
+                }
             } else {
                 Text(workspace.name)
                     .font(.system(size: 13, weight: .semibold))
@@ -80,7 +82,9 @@ struct WorkspaceRow: View {
 
             Divider()
 
-            Button("Remove", role: .destructive) { model.remove(workspace) }
+            Button("Remove", role: .destructive) {
+                Task { await model.remove(workspace) }
+            }
         }
     }
 }

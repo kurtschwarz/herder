@@ -1,4 +1,4 @@
-import Storage
+import Services
 import TestSupport
 import Testing
 
@@ -20,7 +20,7 @@ import Testing
             folderPicker: StubFolderPickerClient(),
             watcher: StubFileWatcherClient(),
             clock: VirtualClockClient(),
-            container: try WorkspaceContainer.inMemory()
+            persistence: try PersistenceStack.inMemory()
         )
     }
 
@@ -28,8 +28,8 @@ import Testing
         #expect(files.files.isEmpty)
     }
 
-    @Test func startsWithNoWorkspaces() throws {
-        environment.start()
-        #expect(try environment.workspaces.workspaces().isEmpty)
+    @Test func startsWithNoRepositories() async throws {
+        await environment.start()
+        #expect(environment.repositories.repositories.isEmpty)
     }
 }

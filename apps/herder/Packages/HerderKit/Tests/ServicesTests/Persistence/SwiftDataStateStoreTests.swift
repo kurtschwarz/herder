@@ -1,6 +1,6 @@
 import Core
 import Foundation
-import Storage
+import Services
 import SwiftData
 import Testing
 
@@ -110,18 +110,18 @@ private nonisolated struct Snapshot: Codable, Sendable, Equatable {
     }
 
     /// Adding `StoredState` in schema V2 must not have disturbed the table the
-    /// user's workspaces live in. They cannot be rebuilt from disk.
-    @Test func workspacesAndStateShareOneStore() async throws {
+    /// legacy repository rows live in. They cannot be rebuilt from disk.
+    @Test func legacyRowsAndStateShareOneStore() async throws {
         let container = try WorkspaceContainer.inMemory()
         let store = SwiftDataStateStore(container: container)
 
         try await store.save(Snapshot(openTabs: ["a"]), forKey: "workspace")
 
         let context = ModelContext(container)
-        context.insert(Repository(name: "herder", path: "/herder", bookmark: Data(), order: 0))
+        context.insert(LegacyRepository(name: "herder", path: "/herder", bookmark: Data(), order: 0))
         try context.save()
 
-        #expect(try context.fetch(FetchDescriptor<Repository>()).count == 1)
+        #expect(try context.fetch(FetchDescriptor<LegacyRepository>()).count == 1)
         #expect(try await store.load(Snapshot.self, forKey: "workspace")?.openTabs == ["a"])
     }
 }

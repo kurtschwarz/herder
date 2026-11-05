@@ -1,25 +1,21 @@
 import Core
 import Foundation
-import Storage
-import SwiftData
 import TestSupport
 import Testing
 
 @testable import WorkspacesFeature
 
-@Suite struct WorkspacesModelTests {
+@Suite @MainActor struct WorkspacesModelTests {
     let bookmarks = InMemoryBookmarkClient()
     let git = StubGitClient()
-    let container: ModelContainer
-    let store: SwiftDataRepositoryStore
+    let store: RepositoryStore
     let picker = StubFolderPickerClient()
     let defaults: UserDefaults
     let suite: String
     let model: WorkspacesModel
 
     init() throws {
-        container = try WorkspaceContainer.inMemory()
-        store = SwiftDataRepositoryStore(context: ModelContext(container), bookmarks: bookmarks, git: git)
+        store = RepositoryStore(bookmarks: bookmarks, git: git, state: InMemoryStateStore())
         suite = "WorkspacesModelTests-\(UUID().uuidString)"
         defaults = try #require(UserDefaults(suiteName: suite))
         model = WorkspacesModel(store: store, git: git, picker: picker, defaults: defaults)
@@ -52,7 +48,7 @@ import Testing
     }
 
     @Test func anUnavailableWorkspaceIsNeitherReadNorExpanded() async throws {
-        let workspace = try await addWorkspace("/code/api")
+        var workspace = try await addWorkspace("/code/api")
         workspace.isAvailable = false
 
         await model.refresh([workspace])
@@ -101,9 +97,9 @@ import Testing
         await model.refresh([workspace])
         await model.toggle(workspace)
 
-        model.remove(workspace)
+        await model.remove(workspace)
 
-        #expect(try store.workspaces().isEmpty)
+        #expect(store.repositories.isEmpty)
         #expect(model.listings[id] == nil)
         #expect(!model.collapsed.contains(id))
     }
@@ -112,20 +108,20 @@ import Testing
         let workspace = try await addWorkspace("/code/api")
         model.renaming = workspace.id
 
-        model.commitRename(workspace, to: "Gateway")
+        await model.commitRename(workspace, to: "Gateway")
 
         #expect(model.renaming == nil)
-        #expect(workspace.name == "Gateway")
+        #expect(store.repositories.first?.name == "Gateway")
     }
 
     @Test func committingABlankRenameKeepsTheName() async throws {
         let workspace = try await addWorkspace("/code/api")
         model.renaming = workspace.id
 
-        model.commitRename(workspace, to: "")
+        await model.commitRename(workspace, to: "")
 
         #expect(model.renaming == nil)
-        #expect(workspace.name == "api")
+        #expect(store.repositories.first?.name == "api")
     }
 
     @Test func beginningToAddOpensTheModalOnce() {
@@ -153,7 +149,7 @@ import Testing
         await model.submitAdding()
 
         #expect(model.adding == nil)
-        #expect(try store.workspaces().count == 1)
+        #expect(store.repositories.count == 1)
     }
 
     @Test func aRefusedSubmitLeavesTheModalUp() async throws {
@@ -181,7 +177,7 @@ import Testing
     }
 
     @Test func anUnavailableWorkspaceCannotStartASession() async throws {
-        let workspace = try await addWorkspace("/code/api")
+        var workspace = try await addWorkspace("/code/api")
         workspace.isAvailable = false
 
         model.beginNewSession(in: workspace)
@@ -283,7 +279,7 @@ import Testing
         ], at: URL(filePath: "/code/api"))
         await model.refresh(workspace)
 
-        model.remove(workspace)
+        await model.remove(workspace)
 
         #expect(!model.isKnown(URL(filePath: "/code/api")))
     }
@@ -296,7 +292,7 @@ import Testing
         ], at: URL(filePath: "/code/api"))
         await model.refresh(workspace)
 
-        model.commitRename(workspace, to: "API")
+        await model.commitRename(workspace, to: "API")
 
         #expect(model.nameOfWorkspace(holding: URL(filePath: "/code/api")) == "API")
     }
