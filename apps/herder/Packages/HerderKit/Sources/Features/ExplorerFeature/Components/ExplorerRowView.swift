@@ -31,7 +31,14 @@ struct ExplorerRowView: View {
     private var content: some View {
         switch row.kind {
         case .entry(let entry):
-            EntryLine(entry: entry, parent: row.parent, model: model, focus: focus, isHovering: $isHovering)
+            EntryLine(
+                entry: entry,
+                parent: row.parent,
+                isIgnored: row.isIgnored,
+                model: model,
+                focus: focus,
+                isHovering: $isHovering
+            )
         case .creating(let isDirectory):
             CreatingLine(isDirectory: isDirectory, model: model, focus: focus)
         case .unreadable:
@@ -47,6 +54,7 @@ struct ExplorerRowView: View {
 private struct EntryLine: View {
     let entry: DirectoryEntry
     let parent: URL
+    let isIgnored: Bool
     let model: ExplorerModel
     let focus: FocusState<ExplorerFocus?>.Binding
     @Binding var isHovering: Bool
@@ -86,6 +94,7 @@ private struct EntryLine: View {
 
             Spacer(minLength: 0)
         }
+        .opacity(isIgnored ? Theme.Opacity.ignored : 1)
         .padding(.horizontal, Theme.Spacing.normal)
         .padding(.vertical, Theme.Spacing.tight + 2)
         .background {

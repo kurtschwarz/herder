@@ -55,6 +55,41 @@ import Testing
         return url
     }
 
+    @Test func ignoredFindsWhatGitIgnoresIncludingFoldersAndNestedRules() async throws {
+        let repo = try makeRepository("repo")
+        try Data("*.log\nbuild/\n!keep.log\n".utf8).write(to: repo.appending(path: ".gitignore"))
+        try FileManager.default.createDirectory(at: repo.appending(path: "build"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: repo.appending(path: "sub"), withIntermediateDirectories: true)
+        try Data("*.tmp\n".utf8).write(to: repo.appending(path: "sub/.gitignore"))
+        for name in ["a.txt", "debug.log", "keep.log"] {
+            try Data("x".utf8).write(to: repo.appending(path: name))
+        }
+        for name in ["x.tmp", "y.txt"] {
+            try Data("x".utf8).write(to: repo.appending(path: "sub/\(name)"))
+        }
+        func entry(_ name: String, in folder: URL, isDirectory: Bool = false) -> DirectoryEntry {
+            DirectoryEntry(url: folder.appending(path: name), isDirectory: isDirectory)
+        }
+        let top = [
+            entry("a.txt", in: repo), entry("debug.log", in: repo), entry("keep.log", in: repo),
+            entry("build", in: repo, isDirectory: true),
+        ]
+        let sub = repo.appending(path: "sub")
+
+        let ignoredTop = try await client.ignored(top, in: repo)
+        let ignoredSub = try await client.ignored([entry("x.tmp", in: sub), entry("y.txt", in: sub)], in: sub)
+
+        #expect(ignoredTop.map(\.lastPathComponent).sorted() == ["build", "debug.log"])
+        #expect(ignoredSub.map(\.lastPathComponent) == ["x.tmp"])
+    }
+
+    @Test func ignoredIsEmptyOutsideARepository() async throws {
+        let plain = try makeDirectory("plain-ignored")
+        let entry = DirectoryEntry(url: plain.appending(path: "a.log"), isDirectory: false)
+
+        #expect(try await client.ignored([entry], in: plain).isEmpty)
+    }
+
     @Test func plainFolderIsNotARepository() async throws {
         let url = try makeDirectory("plain")
         #expect(try await client.repositoryKind(at: url) == .notARepository)

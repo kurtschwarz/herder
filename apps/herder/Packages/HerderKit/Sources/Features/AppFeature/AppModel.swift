@@ -39,7 +39,7 @@ public final class AppModel {
         let workspaces = WorkspaceStore(context: context, bookmarks: bookmarks, git: git)
         self.workspaces = workspaces
         self.workspaceList = WorkspacesModel(store: workspaces, git: git, picker: folderPicker)
-        self.explorer = ExplorerModel(files: files)
+        self.explorer = ExplorerModel(files: files, git: git)
     }
 
     /// Opens the add-workspace modal. Here rather than on the sidebar because a

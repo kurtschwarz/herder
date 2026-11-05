@@ -21,6 +21,9 @@ public struct ExplorerRow: Identifiable, Equatable {
     /// finished" flag, and never commits.
     var creation: UUID?
 
+    /// Git ignores it, or a folder around it. Drawn faded.
+    var isIgnored = false
+
     public var id: String {
         switch kind {
         case .entry(let entry): entry.url.absoluteString
@@ -54,6 +57,7 @@ public final class ExplorerModel {
     private static let hidden: Set<String> = [".git", ".bare"]
 
     private let files: any FileClient
+    private let git: any GitClient
 
     /// The folder the tree is rooted at. Always open; `nil` shows nothing.
     public private(set) var root: URL?
@@ -78,8 +82,12 @@ public final class ExplorerModel {
 
     public private(set) var creating: Creation?
 
-    public init(files: any FileClient) {
+    /// Everything in the folders read so far that git ignores.
+    public private(set) var ignored: Set<URL> = []
+
+    public init(files: any FileClient, git: any GitClient) {
         self.files = files
+        self.git = git
     }
 
     /// Whether a name field is open. Return belongs to that field, not to the
@@ -101,6 +109,7 @@ public final class ExplorerModel {
         guard url != root else { return }
         root = url
         listings = [:]
+        ignored = []
         expanded = []
         selected = nil
         await refresh()
@@ -131,8 +140,10 @@ public final class ExplorerModel {
     public func beginCreating(in folder: URL, isDirectory: Bool) async {
         renaming = nil
         if folder != root { expanded.insert(folder) }
-        if listings[folder] == nil { await read(folder) }
+        // Before the read, so the field appears as the listing does and not
+        // after git has answered as well.
         creating = Creation(parent: folder, isDirectory: isDirectory)
+        if listings[folder] == nil { await read(folder) }
     }
 
     public func cancelCreating() {
@@ -217,25 +228,74 @@ public final class ExplorerModel {
         }
     }
 
+    /// Reads `folder` and shows it, then fades what git ignores. The listing
+    /// goes up before git is asked, so a slow git delays the fade and not the
+    /// folder.
     private func read(_ folder: URL) async {
         let origin = root
-        let listing: Listing
+        let entries: [DirectoryEntry]
         do {
-            let entries = try await files.children(of: folder)
-            listing = .loaded(Self.sorted(entries))
+            entries = Self.sorted(try await files.children(of: folder))
         } catch {
             // The task that asked was cancelled, which says nothing about the
             // folder.
-            guard !Task.isCancelled else { return }
-            listing = .unreadable
+            guard !Task.isCancelled, root == origin else { return }
+            forgetIgnored(in: folder)
+            listings[folder] = .unreadable
+            return
         }
         // The root changed while the read was out: its answer is for a tree
         // that is no longer showing.
         guard root == origin else { return }
-        listings[folder] = listing
+        let before = listings[folder]
+        listings[folder] = .loaded(entries)
+
+        // Inside an ignored folder everything is faded already, so asking git
+        // about each child of `node_modules` would be wasted.
+        if isInsideIgnored(folder) {
+            ignored.subtract(entries.map(\.url))
+            return
+        }
+        let flagged: Set<URL>
+        do {
+            flagged = try await git.ignored(entries, in: folder)
+        } catch {
+            // Git could not be asked, which says nothing about the files: keep
+            // what was faded.
+            return
+        }
+        // A newer read of this folder, or another root, overtook this one.
+        guard root == origin, listings[folder] == .loaded(entries) else { return }
+        if case .loaded(let old)? = before { ignored.subtract(old.map(\.url)) }
+        ignored.subtract(entries.map(\.url))
+        ignored.formUnion(flagged)
     }
 
-    private func rows(in folder: URL, depth: Int) -> [ExplorerRow] {
+    private func forgetIgnored(in folder: URL) {
+        if case .loaded(let old)? = listings[folder] { ignored.subtract(old.map(\.url)) }
+    }
+
+    /// Whether `folder`, or a folder between it and the root, is ignored.
+    private func isInsideIgnored(_ folder: URL) -> Bool {
+        // A folder's URL may or may not end in a slash, depending on where it
+        // came from, so compare paths without one.
+        func key(_ url: URL) -> String {
+            var path = url.path(percentEncoded: false)
+            while path.count > 1, path.hasSuffix("/") { path.removeLast() }
+            return path
+        }
+        let paths = Set(ignored.map(key))
+        let rootPath = root.map(key)
+        var current = folder
+        while true {
+            let path = key(current)
+            if paths.contains(path) { return true }
+            if path == rootPath || path == "/" { return false }
+            current = current.deletingLastPathComponent()
+        }
+    }
+
+    private func rows(in folder: URL, depth: Int, underIgnored: Bool = false) -> [ExplorerRow] {
         switch listings[folder] {
         case .loaded(let entries):
             let field = creating.flatMap { $0.parent == folder ? $0 : nil }
@@ -250,9 +310,13 @@ public final class ExplorerModel {
                     result.append(field)
                     placed = true
                 }
-                result.append(ExplorerRow(kind: .entry(entry), depth: depth, parent: folder))
+                // Everything inside an ignored folder is ignored with it.
+                let isIgnored = underIgnored || ignored.contains(entry.url)
+                var row = ExplorerRow(kind: .entry(entry), depth: depth, parent: folder)
+                row.isIgnored = isIgnored
+                result.append(row)
                 if entry.isDirectory, expanded.contains(entry.url) {
-                    result += rows(in: entry.url, depth: depth + 1)
+                    result += rows(in: entry.url, depth: depth + 1, underIgnored: isIgnored)
                 }
             }
             if !placed, let field { result.append(field) }

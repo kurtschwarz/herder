@@ -41,6 +41,11 @@ public enum Theme {
         public static let treeIndent: CGFloat = 14
     }
 
+    public enum Opacity {
+        /// A file git ignores: still there, but not what the work is about.
+        public static let ignored: Double = 0.45
+    }
+
     public enum Radius {
         /// Matches the window's own corner so the two read as one shape.
         ///

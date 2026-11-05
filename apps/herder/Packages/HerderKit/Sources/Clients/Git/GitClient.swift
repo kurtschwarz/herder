@@ -87,4 +87,10 @@ public protocol GitClient: Sendable {
     /// Changes the repository, unlike everything else here, so it runs `git`
     /// itself rather than reproducing what `git worktree add` writes.
     func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws
+
+    /// Which of `entries`, the contents of `folder`, git ignores. Asks git
+    /// rather than reading `.gitignore` files, so nested ignore files, negated
+    /// patterns and the repository's own exclude file all count. Empty for a
+    /// folder outside any repository.
+    func ignored(_ entries: [DirectoryEntry], in folder: URL) async throws -> Set<URL>
 }

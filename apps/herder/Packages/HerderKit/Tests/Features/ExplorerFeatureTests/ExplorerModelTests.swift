@@ -7,11 +7,12 @@ import Testing
 
 @Suite struct ExplorerModelTests {
     let files = InMemoryFileClient()
+    let git = StubGitClient()
     let model: ExplorerModel
     let root = URL(filePath: "/code/api")
 
     init() {
-        model = ExplorerModel(files: files)
+        model = ExplorerModel(files: files, git: git)
     }
 
     func dir(_ name: String, in parent: URL? = nil) -> DirectoryEntry {
@@ -351,5 +352,112 @@ import Testing
 
         #expect(model.rows.isEmpty)
         #expect(files.creations.isEmpty)
+    }
+
+    func ignoredNames(_ model: ExplorerModel) -> [String] {
+        model.rows.compactMap {
+            if case .entry(let entry) = $0.kind, $0.isIgnored { entry.name } else { nil }
+        }
+    }
+
+    @Test func anIgnoredEntryIsFlagged() async {
+        files.seed(children: [file("a.txt"), file("debug.log")], of: root)
+        git.seed(ignored: ["debug.log"], in: root)
+
+        await model.setRoot(root)
+
+        #expect(ignoredNames(model) == ["debug.log"])
+    }
+
+    @Test func everythingInsideAnIgnoredFolderIsIgnoredWithIt() async {
+        let build = dir("build")
+        files.seed(children: [build, file("a.txt")], of: root)
+        files.seed(children: [file("out.o", in: build.url)], of: build.url)
+        git.seed(ignored: ["build"], in: root)
+        await model.setRoot(root)
+
+        await model.toggle(build.url)
+
+        #expect(ignoredNames(model) == ["build", "out.o"])
+    }
+
+    @Test func gitIsNotAskedAboutWhatIsInsideAnIgnoredFolder() async {
+        let build = dir("build")
+        let deeper = dir("obj", in: build.url)
+        files.seed(children: [build], of: root)
+        files.seed(children: [deeper], of: build.url)
+        files.seed(children: [file("a.o", in: deeper.url)], of: deeper.url)
+        git.seed(ignored: ["build"], in: root)
+        await model.setRoot(root)
+
+        await model.toggle(build.url)
+        await model.toggle(deeper.url)
+
+        #expect(git.ignoredLookups == [root])
+        #expect(ignoredNames(model) == ["build", "obj", "a.o"])
+    }
+
+    @Test func gitIsAskedAboutFoldersThatAreNotIgnored() async {
+        let sources = dir("Sources")
+        files.seed(children: [sources], of: root)
+        files.seed(children: [file("a.swift", in: sources.url)], of: sources.url)
+        await model.setRoot(root)
+
+        await model.toggle(sources.url)
+
+        #expect(git.ignoredLookups == [root, sources.url])
+    }
+
+    @Test func aFolderIgnoredOnlyInsideItselfFlagsOnlyThatEntry() async {
+        let sources = dir("Sources")
+        files.seed(children: [sources], of: root)
+        files.seed(children: [file("a.swift", in: sources.url), file("b.log", in: sources.url)], of: sources.url)
+        git.seed(ignored: ["b.log"], in: sources.url)
+        await model.setRoot(root)
+
+        await model.toggle(sources.url)
+
+        #expect(ignoredNames(model) == ["b.log"])
+    }
+
+    @Test func theListingShowsBeforeGitHasAnswered() async {
+        files.seed(children: [file("a.txt"), file("debug.log")], of: root)
+        git.seed(ignored: ["debug.log"], in: root)
+        git.holdIgnoredLookups()
+
+        let reading = Task { await model.setRoot(root) }
+        while git.ignoredLookups.isEmpty { await Task.yield() }
+
+        #expect(names(model) == ["a.txt", "debug.log"])
+        #expect(ignoredNames(model).isEmpty)
+
+        git.releaseIgnoredLookups()
+        await reading.value
+
+        #expect(ignoredNames(model) == ["debug.log"])
+    }
+
+    @Test func aFailedGitLookupKeepsTheFadeAndStillShowsTheFiles() async {
+        files.seed(children: [file("debug.log")], of: root)
+        git.seed(ignored: ["debug.log"], in: root)
+        await model.setRoot(root)
+
+        files.seed(children: [file("debug.log"), file("new.txt")], of: root)
+        git.failIgnoredLookups()
+        await model.refresh()
+
+        #expect(names(model) == ["debug.log", "new.txt"])
+        #expect(ignoredNames(model) == ["debug.log"])
+    }
+
+    @Test func anEntryNoLongerIgnoredLosesTheFlagOnRefresh() async {
+        files.seed(children: [file("debug.log")], of: root)
+        git.seed(ignored: ["debug.log"], in: root)
+        await model.setRoot(root)
+
+        git.seed(ignored: [], in: root)
+        await model.refresh()
+
+        #expect(ignoredNames(model).isEmpty)
     }
 }

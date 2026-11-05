@@ -168,7 +168,60 @@ public struct LiveGitClient: GitClient {
         ])
     }
 
+    public func ignored(_ entries: [DirectoryEntry], in folder: URL) async throws -> Set<URL> {
+        var result: Set<URL> = []
+        // Arguments rather than stdin: git answers as it reads, so feeding a
+        // long list through a pipe while nobody drains the answers can stall.
+        for chunk in stride(from: 0, to: entries.count, by: 500) {
+            let batch = entries[chunk..<min(chunk + 500, entries.count)]
+            // A trailing slash is how git is told a path is a folder, which
+            // patterns like `build/` need.
+            let names = batch.map { $0.name + ($0.isDirectory ? "/" : "") }
+            let byName = Dictionary(batch.map { ($0.name, $0.url) }, uniquingKeysWith: { first, _ in first })
+
+            let (status, output) = try runGit(
+                ["-C", folder.path(percentEncoded: false), "-c", "core.quotePath=false", "check-ignore", "--"] + names,
+                allowing: [1]
+            )
+            // 1 is "nothing here is ignored"; 128 is "not a repository".
+            guard status == 0 else { continue }
+            // A name git has to quote (a quote or newline in it) will not match,
+            // and so stays unfaded: a missed fade, not a wrong answer.
+            for path in output.split(separator: "\n") {
+                let name = path.hasSuffix("/") ? String(path.dropLast()) : String(path)
+                if let url = byName[name] { result.insert(url) }
+            }
+        }
+        return result
+    }
+
     // MARK: - Running git
+
+    /// Runs git and hands back its status and standard output. Any status
+    /// other than 0 or those in `allowing` throws, except 128, which is
+    /// returned: that is git saying the folder is not a repository, a normal
+    /// answer for callers that ask about arbitrary folders.
+    private func runGit(_ arguments: [String], allowing: Set<Int32>) throws -> (Int32, String) {
+        let process = Process()
+        process.executableURL = URL(filePath: "/usr/bin/git")
+        process.arguments = arguments
+        process.environment = ProcessInfo.processInfo.environment
+            .merging(["GIT_TERMINAL_PROMPT": "0"]) { _, new in new }
+
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        let status = process.terminationStatus
+        guard status == 0 || status == 128 || allowing.contains(status) else {
+            throw GitClientError.commandFailed("git exited with \(status)")
+        }
+        return (status, String(decoding: data, as: UTF8.self))
+    }
 
     private func runGit(_ arguments: [String]) throws {
         let process = Process()

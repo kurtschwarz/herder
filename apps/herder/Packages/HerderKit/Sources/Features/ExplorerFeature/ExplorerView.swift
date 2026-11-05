@@ -148,11 +148,19 @@ struct RevealInFinder: View {
 
 #if DEBUG
 #Preview {
-    ExplorerView(model: ExplorerModel(files: PreviewFiles()))
+    ExplorerView(model: ExplorerModel(files: PreviewFiles(), git: PreviewGit()))
         .frame(width: Theme.Size.sidebarWidth, height: 420)
         .glassPaneBackground()
         .padding(Theme.Spacing.windowPadding)
         .background(Theme.Palette.window)
+}
+
+private struct PreviewGit: GitClient {
+    func repositoryKind(at url: URL) async throws -> GitRepositoryKind { .notARepository }
+    func worktrees(at url: URL) async throws -> [GitWorktree] { [] }
+    func branches(at url: URL) async throws -> [String] { [] }
+    func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {}
+    func ignored(_ entries: [DirectoryEntry], in folder: URL) async throws -> Set<URL> { [] }
 }
 
 private struct PreviewFiles: FileClient {
