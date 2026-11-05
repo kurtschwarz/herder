@@ -47,7 +47,7 @@ AppFeature            composition root: windows, menus, builds real services
 3. **Services** may import `Core` and `RustBridge`.
 4. **Core** imports only `Foundation` and `Observation`. Never SwiftUI, AppKit, SwiftData, or RustBridge.
 5. **Only `AppFeature`** knows concrete service types. It constructs them in `AppEnvironment`.
-6. **SwiftData**, while it exists, is imported only under `Services/Persistence/`.
+6. **SwiftData is not imported at all.** It is gone, as of Phase 7; state is JSON files behind `StateStore`. Reaching for a `@Model` is reintroducing a dependency the app deliberately dropped.
 7. **RustBridge types never leave Services.** Services translate FFI types to Core types at the boundary.
 
 Rules 1, 2, 3 and 5 are enforced by target dependencies in `Package.swift`. Rules 4 and 6 (and the no-singletons rule below) are enforced by `scripts/check-boundaries.sh`, which must pass before any merge. Rule 7 is enforced in review.
@@ -349,39 +349,43 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 - `StateStore` (protocol in Core) loads and saves `Codable & Sendable` values by key.
 - Live `@Observable` state converts to and from snapshot structs (`AppSnapshot`, `WorkspaceSnapshot`). Never make `@Observable` classes `Codable` directly; the macro's underscored backing storage leaks into the encoded keys.
 - Snapshots carry a `version` field. New fields use `decodeIfPresent` with defaults. That's the whole migration strategy.
-- Saves are debounced (a few hundred milliseconds after changes settle). Writes are atomic.
+- Saves are debounced (a few hundred milliseconds after changes settle) **by their callers, not by the store**. A workspace waits 400ms after its UI state settles; the repository list does not wait at all, for the reason two lines down. A debounce inside `StateStore` would flatten that distinction and delay the one thing that must not be delayed. Writes are atomic.
 - **Nothing is saved on termination.** `willTerminate` is a synchronous callback and writing is not, so a task started there races the process exiting. The debounce is short for that reason. If a change ever matters enough to guarantee, the answer is `applicationShouldTerminate` returning `.terminateLater`, not a save in `stop()`.
 - The repository list is the exception: it saves immediately on every change, because each addition mints a security-scoped bookmark that cannot be remade.
 - Which workspace a window shows is stored with `@SceneStorage`.
 - Agent transcripts are not stored by Herder. Store an `AgentSessionRef` (the Claude Code session ID plus any Herder label) so sessions can be resumed.
-- Secrets go in the Keychain, never a file.
+- **Secrets go in the Keychain, never a file. A capability is not a secret.** A credential that grants access to something otherwise out of reach — an API token — is a secret. A security-scoped bookmark is a handle to a folder the user themselves picked, sitting in a file in their own home directory, and anything running as them can already read that folder without it. So the bookmark lives in `state.json` as base64, where it stays in one atomic write with the record it belongs to (D13 in `REALIGNMENT.md`). Splitting it out would put one repository in two stores and double the window in which a crash leaves a record with no bookmark.
 - Searchable indexes and history, when needed, use SQLite on the Rust side.
 
-### Never rename a `@Model` class
+### A name that reaches disk cannot be renamed by a rename
 
-**The class name is the stored entity name.** SwiftData derives the SQLite table from it, and the store records the schema it was written against. Renaming the class renames the entity, so the existing store becomes a version the migration plan has never heard of — SwiftData refuses it with "Cannot use staged migration with an unknown model version" and every row is unreachable. The data is still in the file; nothing in the app can read it.
+There is no SwiftData left, so the specific rule this section held — never rename a `@Model` class, because the class name *is* the stored entity name — no longer has anything to apply to. It is kept because the lesson outlived the technology, and it cost a day: see the 4a incident in `realignment/notes.md`.
 
-This has already happened once: see `realignment/notes.md`. The repository model is therefore still the class `Workspace` inside `WorkspaceSchemaV1`, with `Repository` as a typealias over it — the vocabulary the architecture wants, over the name the store recorded.
+The general form: **an identifier that is also a key on disk is data, and renaming it is a migration.** What is left in the codebase that this still binds:
 
-Two rules follow:
+- `PersistedWorkspaceUIState.persistenceKey`. The file tree's is still `"explorer.expanded"` after the feature was renamed to `FileTreeFeature`, because changing it would leave every saved blob unreachable and close every folder the user had open.
+- `AppSnapshot.persistenceKey` and the file names derived from `WorkspaceSnapshot.persistenceKey(for:)`.
+- `Codable` `CodingKeys` on any snapshot. Renaming a property renames the JSON field; add a new one with `decodeIfPresent` instead.
 
-- A `@Model` is renamed only with a `custom` migration stage that copies the rows, and never as part of other work.
-- **Schema changes are tested against a store this build did not write.** An in-memory container is created at the current version every time, so it cannot catch a change that strands what is already on the user's disk. `StorageTests` keeps a committed V1 store as a fixture for exactly this; a test that builds its "old" store from today's schema proves nothing, because both sides move together.
+And the test rule, which also outlived SwiftData: **storage changes are tested against bytes this build did not write.** A fixture encoded by the current types proves nothing, because both sides move together.
 
 ### A `Repository` cannot be recreated from disk
 
-`Repository` holds a **security-scoped bookmark**, plus a user-chosen name and sidebar order. None of that is recoverable from disk or git: the bookmark cannot be regenerated without the user re-picking the folder in an `NSOpenPanel`. So the repository list is the one piece of Herder's state where losing the store costs the user real work, and it gets a migration rather than a fresh start whenever its storage changes. Where the bookmark lives once `FileStateStore` lands is still open — see `REALIGNMENT.md`.
+`Repository` holds a **security-scoped bookmark**, plus a user-chosen name and sidebar order. None of that is recoverable from disk or git: the bookmark cannot be regenerated without the user re-picking the folder in an `NSOpenPanel`. So the repository list is the one piece of Herder's state where losing the store costs the user real work. It saves immediately on every change, it is written in one atomic write with the bookmark inside it, and `RepositoryStore.save()` reads the key before writing it so that nothing sharing the key can drop it.
 
-### Implementations
+The bookmark's storage was the open question here. It is settled: base64 in `state.json` (D13).
 
-- **Transitional:** `SwiftDataStateStore` in `Services/Persistence/`, storing snapshot JSON blobs in a single `@Model`. `PersistenceStack` is the seam in front of it: it hands back a `StateStore`, and the `ModelContainer` never leaves the module. That is what keeps `import SwiftData` out of the App target, and what makes the swap below a new type rather than a change to `AppEnvironment`.
-- **Target:** `FileStateStore` writing JSON:
+### Implementation
+
+`FileStateStore` in `Services/Persistence/`, writing JSON. `PersistenceStack` is the seam in front of it, and the reason the SwiftData store it replaced could be deleted rather than unpicked: `AppEnvironment` has never named a storage type.
 
 ```
 ~/Library/Application Support/Herder/
-├── state.json                  # AppSnapshot: adopted repositories, open workspaces, recents
-└── workspaces/<id>.json        # WorkspaceSnapshot: tabs, UI state, agent session refs
+├── state.json                       # AppSnapshot: adopted repositories, open workspaces, recents
+└── workspaces/<name>-<hash>.json    # WorkspaceSnapshot: tabs, UI state, agent session refs
 ```
+
+**The file name is not the id.** A `WorkspaceID` is an absolute path, which cannot be a file name: it contains separators, and a deep enough one runs past the 255-byte limit and fails the save. So the name is the last path component — readable, so the directory can be looked through by eye — plus six bytes of SHA-256 of the whole key, because two worktrees called `main` under different repositories would otherwise overwrite each other. **SHA-256 and not `hashValue`:** Swift's hashing is seeded per process, so a store built on it would look for every file under a name it had never written.
 
 This is the shape it grows into, not the shape it has. Fields arrive with the features that need them — an editor showing one read-only file has no tab list to write down — as new fields with defaults, decoded with `decodeIfPresent`. Today it is `version`, `id` and `uiState`. There is no separate `root`: the id *is* the path.
 

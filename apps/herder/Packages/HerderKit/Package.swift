@@ -111,12 +111,6 @@ let package = Package(
         .testTarget(
             name: "ServicesTests",
             dependencies: ["Services", "TestSupport"],
-            // A real store written by a build that only knew schema V1. An
-            // in-memory container is always created at the current version, so
-            // nothing else here can catch a schema change that strands the
-            // store already on the user's disk — which is where the one piece
-            // of unrecoverable state lives. See WorkspaceMigrationTests.
-            resources: [.copy("Fixtures")],
             swiftSettings: core
         ),
         .testTarget(

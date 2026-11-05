@@ -20,7 +20,7 @@ import Testing
             folderPicker: StubFolderPickerClient(),
             watcher: StubFileWatcherClient(),
             clock: VirtualClockClient(),
-            persistence: try PersistenceStack.inMemory()
+            persistence: PersistenceStack.temporary()
         )
     }
 

@@ -38,8 +38,12 @@ check "Singleton in HerderKit" \
 check "Rust module imported outside Services" \
   -e "^import $RUST_MODULE\$" --type swift --glob '!**/Services/**' "$SRC" "$APP_DIR"
 
-check "SwiftData imported outside Services/Persistence" \
-  -e '^import SwiftData' --type swift --glob '!**/Services/Persistence/**' "$SRC" "$APP_DIR"
+# Phase 7 removed SwiftData altogether, so this is no longer "only under
+# Services/Persistence" — it is "not at all". State is JSON files behind
+# `StateStore`; anything reaching for a @Model is reintroducing a dependency
+# the app deliberately dropped.
+check "SwiftData imported anywhere" \
+  -e '^import SwiftData' --type swift "$SRC" "$APP_DIR"
 
 if [[ $fail -eq 0 ]]; then echo "✓ boundaries OK"; fi
 exit $fail

@@ -1,5 +1,0 @@
-# A fixture store is one file. Reading one — with sqlite3, or by opening it
-# without copying it first — recreates these sidecars beside it, and they are
-# not part of the fixture.
-*.store-shm
-*.store-wal

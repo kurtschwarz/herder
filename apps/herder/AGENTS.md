@@ -31,8 +31,8 @@ rationale.
 | A design token | `DesignSystem/Theme.swift` |
 | A colour for a token kind | `DesignSystem/Theme.swift`, paired in `Features/Editor/Platform/SyntaxAttributes.swift` |
 | Anything that constructs a concrete service | `AppFeature` — nowhere else |
-| Something the app persists about itself | nothing — encode it to a snapshot and put it through `StateStore`. No schema version, no migration. |
-| A new SwiftData model (rare; prefer the above) | `Services/Persistence/`, in a new `WorkspaceSchemaV<n>` with a migration stage. **Never rename an existing `@Model` class** — the class name is the stored entity name. |
+| Something the app persists about itself | nothing new — add a field to a snapshot, decoded with `decodeIfPresent`, and put it through `StateStore`. No schema, no migration. |
+| A key the app stores state under | a `static let persistenceKey` beside the snapshot. **Never rename one** — it is a file name on the user's disk, so a rename is a migration. |
 | Live state two features both read | `Core/Workspace/`, on the `Workspace`, not whichever feature needed it first |
 | A language for the editor to highlight | `../../packages/syntax-highlighter`, not here. See its `AGENTS.md`. |
 

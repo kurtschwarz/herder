@@ -84,15 +84,6 @@ public final class RepositoryStore {
         }
     }
 
-    /// Adopts rows recovered from the SwiftData store the app used to keep.
-    /// One-shot, and only when the list is empty: see `LegacyRepositoryImport`.
-    public func adopt(_ imported: [Repository]) async {
-        guard repositories.isEmpty else { return }
-        repositories = Self.sorted(imported)
-        openFolders()
-        await save()
-    }
-
     // MARK: - Changing
 
     /// Whether a folder could be added, without adding it. Runs exactly the

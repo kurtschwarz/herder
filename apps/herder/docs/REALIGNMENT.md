@@ -91,6 +91,10 @@ The survey raised ten questions. These are the answers; they are settled and not
 - **D9. Phase 4 only moves what exists.** No `DocumentStore`, `AgentSessionStore`, tabs, dirty state or saving: those features don't exist, and building them is product work, not realignment. Phase 4 is now the workspace rename, UI state, snapshots, restoration and per-window active workspace. The smoke test above is rewritten to match.
 - **D12. `WindowModel` stays in the App target**, and the repository list reaches the window through an action rather than the other way round. Reading needs nothing new: a feature takes `@Environment(Workspace.self)` and gets whichever workspace the window resolved, so nothing ever asks "which one is active?" — which is what stops two windows disagreeing. Writing goes through `OpenWorkspaceAction` in `Core`, supplied by App as an environment value, shaped like SwiftUI's own `openWindow`. The `@Entry` declaring the key lives in `DesignSystem`, because `Core` may not import SwiftUI and App setting a key declared inside one feature would be worse. `DesignSystem` therefore gains a dependency on `Core`, which the template did not have.
 - **D11. `WorkspaceID` is the folder's canonical path**, wrapping `PathKey`, not a `UUID`. A workspace is a folder, the registry already keys on the path, and a generated id would need persisting beside the path and keeping in step with it. `WorkspaceSnapshot` therefore has no separate `root` field — the id is the path — which is one change to `ARCHITECTURE.md`'s example. The other is that the example is now labelled as the shape it grows into: `openTabs`, `activeTab` and `agentSessions` arrive with their features, per D9. **Made while implementing 4b rather than asked; reverse it if you disagree.**
+- **D13. The security-scoped bookmark lives in `state.json`, base64.** Asked and answered at the top of Phase 7, which is where D6 deferred it to. A bookmark is a **capability, not a secret**: it is a handle to a folder the user picked themselves, in a file in their own home directory, and anything running as them can already read that folder without it — Herder is not sandboxed. The Keychain would protect against a process that can read `state.json` but not the folder it points at, which is not a case that exists here, and would cost a protocol, an implementation, a fake, and one repository record split across two stores that must stay in step. Keeping it in the snapshot keeps adding a repository a single atomic write. `ARCHITECTURE.md`'s "secrets go in the Keychain" now distinguishes a secret from a capability.
+
+- **D14. Phase 7 step 4, the migration, is skipped.** Kurt's call, made during the task with the consequence in front of him: the repository list starts empty on the next launch and the folders get re-picked. Unshipped app, one machine, and he keeps his own backups under Application Support. What it bought is that step 5 landed in the same commit — with nothing needing to read SwiftData, removing it was a deletion rather than a release-gated two-step. `LegacyRepositoryImport` (the pre-4e `ZWORKSPACE` path added in 4e) went with it, and so did `RepositoryStore.adopt(_:)`, its only caller. **The old `Workspaces.store` is left on disk untouched**, per rule 7.
+
 - **D10. Smaller corrections** are all folded into `ARCHITECTURE.md`: `just test` not `swift test`, clippy is part of green, `PhosphorSwift` is in the `Package.swift` template, `UITests/` and the generated project are in the layout diagram, `NonisolatedNonsendingByDefault` is in the concurrency section, offsets are already UTF-16 from the crate, and the bindings are hand-written rather than generated. The untracked `default.profraw` droppings are a `.gitignore` line in Phase 8.
 
 ---
@@ -385,13 +389,15 @@ The highlighter stays in `packages/syntax-highlighter`. This phase changes how S
 
 ---
 
-## Phase 7: Persistence swap (optional, ask Kurt first)
+## Phase 7: Persistence swap — done
 
-1. Decide where the security-scoped bookmark lives: base64 in JSON, the Keychain, or SwiftData kept for just this (D6). `ARCHITECTURE.md` says secrets go in the Keychain; a bookmark is a capability rather than a secret, so this is a real decision.
-2. Implement `FileStateStore` (JSON, atomic writes, debounced) behind `StateStore`, using the layout in `ARCHITECTURE.md`.
-3. Swap it in `AppEnvironment`.
-4. **Migrate the repository list.** Not a fresh start: the bookmarks, names and order are the user's work and can't be regenerated (D6).
-5. Delete `SwiftDataStateStore`, `StoredState` and the container, and remove SwiftData from the project.
+1. **Decided: base64 in `state.json`.** See D13.
+2. **`FileStateStore` in `Services/Persistence/`**, an `actor` writing one JSON file per key, atomically. **Not debounced**, which is a correction to this step rather than an omission: the debouncing already exists above the store and differs on purpose — a workspace waits 400ms after its UI state settles, and the repository list waits not at all, because each addition mints a bookmark that cannot be remade. A debounce in the store would have overridden that and delayed the one thing that must not be delayed. `ARCHITECTURE.md`'s persistence section now says where the debounce belongs.
+
+   **The file name is not the id.** A `WorkspaceID` is an absolute path, and a path cannot be a file name: separators aside, a deep enough one passes the 255-byte limit and the save throws. So it is the last path component plus six bytes of SHA-256 of the key — readable enough to look through by eye, unique enough that two worktrees called `main` do not overwrite each other. SHA-256 and *not* `hashValue`, which is seeded per process and would have the next launch look for every file under a name it had never written.
+3. **Swapped**, and nothing in the App target changed to do it: `PersistenceStack` was built in 4e precisely so this would be a new type behind the seam.
+4. **Skipped**, per D14.
+5. **Done, in the same commit as the rest**, which is what skipping step 4 bought. Gone: `SwiftDataStateStore`, `StoredState`, `WorkspaceSchemaV1`, `WorkspaceSchemaV2`, `WorkspaceContainer`, `WorkspaceMigrationPlan`, `LegacyRepositoryImport`, the committed V1 fixture and the `resources:` entry that carried it, and `RepositoryStore.adopt(_:)`. The boundary check hardened from "SwiftData imported outside `Services/Persistence`" to "SwiftData imported anywhere".
 
 ---
 
@@ -403,7 +409,7 @@ The highlighter stays in `packages/syntax-highlighter`. This phase changes how S
 4. Run `scripts/check-boundaries.sh` in a pre-commit hook. There is no CI in this repo to add a job to.
 5. Update `ARCHITECTURE.md` and `AGENTS.md` with anything learned along the way.
 6. Ask about the root `README.md`, which describes the old structure and is outside `apps/herder/`.
-7. Move this file and `docs/realignment/` to `docs/archive/`.
+7. Delete this file and `docs/realignment/`
 
 ---
 
@@ -462,5 +468,5 @@ added to docs/realignment/notes.md.
   - [x] FileTree
   - [x] Editor
 - [x] **P6** Syntax highlighter boundary
-- [ ] **P7** Persistence swap *(optional)*
+- [x] **P7** Persistence swap
 - [ ] **P8** Cleanup

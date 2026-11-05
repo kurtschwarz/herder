@@ -20,9 +20,9 @@ import Services
 /// `@MainActor` is implicit: this target's default isolation is `MainActor`.
 @Observable
 public final class AppEnvironment {
-    /// Where the app's own state is kept. Whatever is behind it — SwiftData
-    /// today, JSON files after Phase 7 — stays inside `Services`, which is why
-    /// this target no longer imports SwiftData at all.
+    /// Where the app's own state is kept. What is behind it stays inside
+    /// `Services`: this target has never named a storage type, which is what
+    /// let JSON files replace SwiftData without a line changing here.
     private let persistence: PersistenceStack
 
     /// Where the app keeps its own state: open workspaces, tabs, expanded
@@ -55,11 +55,11 @@ public final class AppEnvironment {
     /// The live app: every service is the real one.
     ///
     /// There is no app without its repositories, and nothing useful to fall back
-    /// to, so a container that cannot be opened is fatal: an in-memory store
-    /// would silently throw away everything the user adds, and carrying on
-    /// would invite them to add folders to a store that is not there.
+    /// to, so a store that cannot be opened is fatal: carrying on would hand the
+    /// user an empty sidebar and invite them to add folders to state that is not
+    /// there.
     ///
-    /// The store is never deleted to recover. It holds security-scoped
+    /// Nothing is ever deleted to recover. The state holds security-scoped
     /// bookmarks, which cannot be regenerated without the user re-picking every
     /// folder, so a store that will not open is a bug to fix rather than state
     /// to discard — hence the message naming the file and saying so.
@@ -71,19 +71,18 @@ public final class AppEnvironment {
             let path = (try? PersistenceStack.storeURL().path(percentEncoded: false)) ?? "unknown"
             fatalError(
                 """
-                Could not open the repository store, so Herder has nothing to \
-                show and will not start.
+                Could not open Herder's state, so it has nothing to show and \
+                will not start.
 
-                  store: \(path)
+                  state: \(path)
                   error: \(error)
 
-                The data in that file is intact. This is a schema problem, not a \
-                corrupt store: the most likely cause is a change to a @Model \
-                type or to WorkspaceMigrationPlan that no longer describes what \
-                is on disk. Do not delete the store to recover — it holds the \
-                security-scoped bookmarks, and they cannot be regenerated \
-                without re-picking every folder. Fix the schema instead, and see \
-                WorkspaceMigrationTests.
+                Do not delete anything under that folder to recover — it holds \
+                the security-scoped bookmarks, and they cannot be regenerated \
+                without re-picking every folder. The only way this fails is \
+                Application Support being unreachable or unwritable, because \
+                nothing is read at this point: an absent state file is a first \
+                launch, not an error.
                 """
             )
         }
@@ -133,13 +132,11 @@ public final class AppEnvironment {
         repositoryList.beginAdding()
     }
 
-    /// Reads the repository list, takes access to every folder, and brings
-    /// across the rows the SwiftData store used to hold.
+    /// Reads the repository list, takes access to every folder, and reopens the
+    /// worktrees that were open last time.
     ///
-    /// `async`, unlike the `start()` it replaces: the list now comes from
-    /// ``StateStore``. The window renders before this finishes, showing an empty
-    /// sidebar for the moment it takes — which is why the import happens here
-    /// and not lazily behind a first read.
+    /// `async`, because the list comes from ``StateStore``. The window renders
+    /// before this finishes, showing an empty sidebar for the moment it takes.
     public func start() async {
         // Compiling the editor's grammars takes a few hundred milliseconds in
         // total, and all of it is paid the first time a file of each language
@@ -149,17 +146,6 @@ public final class AppEnvironment {
         Task.detached { await TreeSitterHighlighter.warmUp() }
 
         await repositories.load()
-
-        // One-shot: the rows the SwiftData store used to hold carry
-        // security-scoped bookmarks that cannot be regenerated, so they are
-        // copied across rather than abandoned, and the table is left exactly as
-        // it was. Guarded on the list being empty rather than on a flag — a
-        // user who has deleted every repository since migrating must not have
-        // them all come back — which also means SwiftData is not touched at all
-        // on any launch after the first.
-        if repositories.repositories.isEmpty {
-            await repositories.adopt(persistence.legacyRepositories())
-        }
 
         // Reopens the worktrees that were open last time. Cheap: none of them
         // drains until a window shows one, so this is a watcher apiece and no

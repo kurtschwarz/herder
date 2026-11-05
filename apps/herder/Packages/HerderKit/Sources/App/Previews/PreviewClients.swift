@@ -65,18 +65,10 @@ struct PreviewFileWatcherClient: FileWatcherClient {
 extension AppEnvironment {
     /// An app environment over fakes, with two repositories already adopted.
     ///
-    /// The store is in-memory and nothing queries it; the repositories go in
-    /// through the state store, which is where they live now. Traps rather than
-    /// returning an optional: a preview that cannot build its store has nothing
-    /// to show, and the message is what tells you why the canvas is blank.
+    /// State goes to a throwaway directory under the system temporary
+    /// directory, one per preview, so a canvas never reads or writes the real
+    /// app's files.
     @MainActor static var preview: AppEnvironment {
-        let persistence: PersistenceStack
-        do {
-            persistence = try PersistenceStack.inMemory()
-        } catch {
-            fatalError("Could not build the preview store: \(error)")
-        }
-
         let environment = AppEnvironment(
             files: PreviewFileClient(),
             bookmarks: PreviewBookmarkClient(),
@@ -84,7 +76,7 @@ extension AppEnvironment {
             folderPicker: PreviewFolderPickerClient(),
             watcher: PreviewFileWatcherClient(),
             clock: LiveClockClient(),
-            persistence: persistence
+            persistence: PersistenceStack.temporary()
         )
 
         Task {

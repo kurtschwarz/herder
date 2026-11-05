@@ -401,3 +401,43 @@ whatever the code currently says and pass.
   `fatalError` already say so). Both are wrong names rather than wrong rules, so
   they are Phase 8 step 5's job rather than a quiet edit to the rulebook. An
   agent looking for either test today looks in a target that does not exist.
+
+## From Phase 7 (persistence swap)
+
+- **The decision was already half-made by 4e.** Phase 7 step 1 reads as an open
+  choice between JSON, the Keychain and keeping SwiftData, but since 4e the
+  bookmark has been inside a `Codable` `Repository` encoded by `JSONEncoder` —
+  which emits `Data` as base64 — stored as a blob. So it was already JSON; the
+  only question was which container the JSON sat in. Worth knowing when a plan
+  step and the code have drifted: read the code before framing the question.
+- **"Debounced" was wrong in the step, and following it would have been a bug.**
+  The debouncing lives above the store and is deliberately uneven: 400ms for a
+  workspace's UI state, nothing at all for the repository list, because
+  `ARCHITECTURE.md` says the list saves immediately on every change. A debounce
+  inside `FileStateStore` would have applied one timer to both and delayed the
+  only state in the app that cannot be rebuilt.
+- **No date or data strategy on the encoder, deliberately.** It is tempting to
+  set `.iso8601` for readability. Both the encoder and decoder must agree, and
+  anything already written used the defaults, so a strategy added later is a
+  silent migration. There is a comment saying so at the encoder.
+- **`hashValue` would have been a quiet disaster.** Swift's hashing is seeded per
+  process, so a file name derived from it is stable within one launch and
+  different on the next: every workspace would have forgotten its state every
+  time, and nothing would have failed. SHA-256 instead, with a test that
+  relaunches by building a second store over the same directory.
+- **A path is not a file name.** Separators, the 255-byte limit, two worktrees
+  called `main` under different repositories, and a `.config` folder turning into
+  a hidden file. All four have a test.
+- **Skipping the migration (D14) collapsed the phase into one commit.** With the
+  migration in, steps 4 and 5 cannot share a build — you cannot both read
+  SwiftData and not depend on it — so it would have been: migrate, launch once,
+  then delete. Dropping step 4 removed the only reader and made step 5 pure
+  subtraction. The cost is Kurt re-picking his folders once.
+- **The old store is still on disk**, at
+  `~/Library/Application Support/Herder/Workspaces.store`. Nothing deletes it
+  (rule 7) and nothing reads it. It is his to remove.
+- **`PersistenceStack.inMemory()` became `temporary()`.** It writes files now, and
+  a name saying "in memory" over a directory on disk is the kind of thing that
+  gets believed. Nothing cleans those directories up; they go under the system
+  temporary directory, one per test or preview, because the suites run in
+  parallel and a shared root would have them reading each other's state.
