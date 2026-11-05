@@ -5,7 +5,7 @@ import Testing
 import Worktrees
 
 @Suite struct WorktreeStatusTests {
-    let root = PathKey(resolved: "/code/api")
+    let root = PathKey(canonical: "/code/api")
 
     func status(_ entries: [String: GitStatus]) -> WorktreeStatus {
         WorktreeStatus(GitWorktreeStatus(
@@ -57,7 +57,7 @@ import Worktrees
     @Test func nothingOutsideTheRootInheritsAnything() {
         let status = status(["build": .ignored])
 
-        #expect(status.status(of: PathKey(resolved: "/elsewhere/build/out.o")) == nil)
+        #expect(status.status(of: PathKey(canonical: "/elsewhere/build/out.o")) == nil)
     }
 
     @Test func aChangeMarksEveryFolderBetweenItAndTheRoot() {

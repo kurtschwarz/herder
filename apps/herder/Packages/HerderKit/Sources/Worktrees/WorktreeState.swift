@@ -200,8 +200,8 @@ public final class WorktreeState {
     /// not re-read the whole subtree.
     public func move(_ source: URL, to destination: URL) async throws {
         try await files.move(source, to: destination)
-        let old = PathKey(resolved: source.path(percentEncoded: false))
-        let new = PathKey(resolved: destination.path(percentEncoded: false))
+        let old = PathKey(canonical: source.path(percentEncoded: false))
+        let new = PathKey(canonical: destination.path(percentEncoded: false))
         listings = Dictionary(
             listings.map { (Self.moved($0.key, from: old, to: new), $0.value) },
             uniquingKeysWith: { first, _ in first }

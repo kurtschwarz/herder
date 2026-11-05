@@ -14,9 +14,12 @@ public struct PathKey: Hashable, Sendable, Comparable, CustomStringConvertible {
     /// Absolute, resolved, with no trailing slash. The volume root keeps its.
     public let path: String
 
-    /// Resolves `url`. Costs a `stat` per component that is not there and a
-    /// `realpath` on the rest, so prefer `appending(_:)` when building many
-    /// keys below a root that is already resolved.
+    /// Canonicalises `url`. The only way to make a key from a path that came
+    /// from anywhere else.
+    ///
+    /// Costs a `stat` per component that is not there and a `realpath` on the
+    /// rest, so prefer `appending(_:)` when building many keys below a root
+    /// that is already canonical.
     ///
     /// `resolvingSymlinksInPath()` alone is not enough: handed a path whose
     /// last components do not exist it gives up and resolves nothing, not even
@@ -31,7 +34,7 @@ public struct PathKey: Hashable, Sendable, Comparable, CustomStringConvertible {
         while true {
             let path = current.path(percentEncoded: false)
             if path == "/" || FileManager.default.fileExists(atPath: path) {
-                var key = PathKey(resolved: current.resolvingSymlinksInPath().path(percentEncoded: false))
+                var key = PathKey(canonical: current.resolvingSymlinksInPath().path(percentEncoded: false))
                 for name in missing.reversed() { key = key.appending(name) }
                 self = key
                 return
@@ -41,7 +44,7 @@ public struct PathKey: Hashable, Sendable, Comparable, CustomStringConvertible {
             // Nowhere left to walk up to: a relative path, or one so odd that
             // the best available answer is what was handed in.
             guard name.isEmpty == false, parent.path(percentEncoded: false) != path else {
-                self.init(resolved: path)
+                self.init(canonical: path)
                 return
             }
             missing.append(name)
@@ -49,9 +52,16 @@ public struct PathKey: Hashable, Sendable, Comparable, CustomStringConvertible {
         }
     }
 
-    /// For a path already in this spelling: `git` output, a watcher callback,
-    /// or something built from one of those.
-    public init(resolved path: String) {
+    /// For a path already known to be in this spelling, normalising only the
+    /// trailing slash.
+    ///
+    /// Only for paths derived from a key that is already canonical — a child of
+    /// a canonicalised folder, say. A path handed over by the system is *not*
+    /// canonical, however resolved it looks: FSEvents reports
+    /// `/private/var/folders/…` where this type's canonical form, and
+    /// `resolvingSymlinksInPath()`, is `/var/folders/…`. Trusting one of those
+    /// produces a key that matches nothing, silently.
+    public init(canonical path: String) {
         var path = path
         while path.count > 1, path.hasSuffix("/") { path.removeLast() }
         self.path = path
@@ -61,13 +71,13 @@ public struct PathKey: Hashable, Sendable, Comparable, CustomStringConvertible {
     /// already in the one spelling, and a path git reports for a file it has
     /// seen deleted has nothing left on disk to resolve.
     public func appending(_ relative: String) -> PathKey {
-        PathKey(resolved: path == "/" ? "/" + relative : path + "/" + relative)
+        PathKey(canonical: path == "/" ? "/" + relative : path + "/" + relative)
     }
 
     /// The folder holding this one, or `nil` at the root of the volume.
     public var parent: PathKey? {
         guard path != "/", let slash = path.lastIndex(of: "/") else { return nil }
-        return PathKey(resolved: slash == path.startIndex ? "/" : String(path[..<slash]))
+        return PathKey(canonical: slash == path.startIndex ? "/" : String(path[..<slash]))
     }
 
     public var name: String {

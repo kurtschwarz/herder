@@ -169,7 +169,12 @@ private func deliverEvents(
         // a change to the volume rather than to anything in it.
         if flag & kFSEventStreamEventFlagHistoryDone != 0 { continue }
 
-        let key = PathKey(resolved: paths[index])
+        // Canonicalised, not trusted. FSEvents reports `/private/var/folders/…`
+        // where the canonical form is `/var/folders/…`, so a trusted key would
+        // match no folder the app has read — the watcher would look like it
+        // worked and update nothing. One `realpath` per changed folder, on this
+        // queue rather than the main one, is the price.
+        let key = PathKey(URL(filePath: paths[index]))
         if flag & kFSEventStreamEventFlagRootChanged != 0 {
             vanished.insert(key)
         } else {

@@ -4,12 +4,12 @@ import Testing
 
 @Suite struct PathKeyTests {
     @Test func aTrailingSlashIsNotPartOfTheKey() {
-        #expect(PathKey(resolved: "/code/api/") == PathKey(resolved: "/code/api"))
-        #expect(PathKey(resolved: "/code/api///").path == "/code/api")
+        #expect(PathKey(canonical: "/code/api/") == PathKey(canonical: "/code/api"))
+        #expect(PathKey(canonical: "/code/api///").path == "/code/api")
     }
 
     @Test func theVolumeRootKeepsItsSlash() {
-        #expect(PathKey(resolved: "/").path == "/")
+        #expect(PathKey(canonical: "/").path == "/")
     }
 
     /// The case this type exists for: a bookmark keeps the path the user picked,
@@ -29,36 +29,50 @@ import Testing
         #expect(link.standardizedFileURL != real.standardizedFileURL)
     }
 
+    /// The divergence that makes a trusted key dangerous. FSEvents reports
+    /// `/private/var/folders/…`; `resolvingSymlinksInPath()` goes the other way
+    /// and strips the `/private`, so the canonical form is `/var/folders/…` and
+    /// the system's own spelling is not it.
+    @Test func aPathTheSystemReportsWithAPrivatePrefixCanonicalisesToTheSameKey() throws {
+        let canonical = PathKey(URL.temporaryDirectory)
+        let asReported = "/private" + canonical.path
+        try #require(FileManager.default.fileExists(atPath: asReported))
+
+        #expect(PathKey(URL(filePath: asReported)) == canonical)
+        // And trusting it would have silently produced a key matching nothing.
+        #expect(PathKey(canonical: asReported) != canonical)
+    }
+
     @Test func appendingJoinsWithoutResolvingAnything() {
-        let root = PathKey(resolved: "/code/api")
+        let root = PathKey(canonical: "/code/api")
 
         #expect(root.appending("Sources/App.swift").path == "/code/api/Sources/App.swift")
-        #expect(PathKey(resolved: "/").appending("etc").path == "/etc")
+        #expect(PathKey(canonical: "/").appending("etc").path == "/etc")
     }
 
     @Test func theParentIsTheFolderAboveAndRunsOutAtTheVolumeRoot() {
-        #expect(PathKey(resolved: "/code/api/a.txt").parent == PathKey(resolved: "/code/api"))
-        #expect(PathKey(resolved: "/code").parent == PathKey(resolved: "/"))
-        #expect(PathKey(resolved: "/").parent == nil)
+        #expect(PathKey(canonical: "/code/api/a.txt").parent == PathKey(canonical: "/code/api"))
+        #expect(PathKey(canonical: "/code").parent == PathKey(canonical: "/"))
+        #expect(PathKey(canonical: "/").parent == nil)
     }
 
     @Test func theNameIsTheLastComponent() {
-        #expect(PathKey(resolved: "/code/api/a.txt").name == "a.txt")
-        #expect(PathKey(resolved: "/code").name == "code")
+        #expect(PathKey(canonical: "/code/api/a.txt").name == "a.txt")
+        #expect(PathKey(canonical: "/code").name == "code")
     }
 
     @Test func aKeyIsInsideItselfAndEveryFolderAboveIt() {
-        let path = PathKey(resolved: "/code/api/Sources/App.swift")
+        let path = PathKey(canonical: "/code/api/Sources/App.swift")
 
         #expect(path.isInside(path))
-        #expect(path.isInside(PathKey(resolved: "/code/api")))
-        #expect(path.isInside(PathKey(resolved: "/")))
-        #expect(!path.isInside(PathKey(resolved: "/code/apifoo")))
-        #expect(!path.isInside(PathKey(resolved: "/elsewhere")))
+        #expect(path.isInside(PathKey(canonical: "/code/api")))
+        #expect(path.isInside(PathKey(canonical: "/")))
+        #expect(!path.isInside(PathKey(canonical: "/code/apifoo")))
+        #expect(!path.isInside(PathKey(canonical: "/elsewhere")))
     }
 
     @Test func parentsRunNearestFirstAndStopAtTheRoot() {
-        let root = PathKey(resolved: "/code/api")
+        let root = PathKey(canonical: "/code/api")
         let path = root.appending("Sources/deep/App.swift")
 
         #expect(path.parents(upTo: root) == [
@@ -67,13 +81,13 @@ import Testing
     }
 
     @Test func aKeyHasNoParentsBelowItselfOrOutsideTheRoot() {
-        let root = PathKey(resolved: "/code/api")
+        let root = PathKey(canonical: "/code/api")
 
         #expect(root.parents(upTo: root).isEmpty)
-        #expect(PathKey(resolved: "/elsewhere/a.txt").parents(upTo: root).isEmpty)
+        #expect(PathKey(canonical: "/elsewhere/a.txt").parents(upTo: root).isEmpty)
     }
 
     @Test func theUrlRoundTripsWithoutATrailingSlash() {
-        #expect(PathKey(resolved: "/code/api/").url.path(percentEncoded: false) == "/code/api")
+        #expect(PathKey(canonical: "/code/api/").url.path(percentEncoded: false) == "/code/api")
     }
 }

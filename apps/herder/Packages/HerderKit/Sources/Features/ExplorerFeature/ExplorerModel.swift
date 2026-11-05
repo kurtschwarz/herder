@@ -240,7 +240,7 @@ public final class ExplorerModel {
     /// another `realpath`: the root was canonicalised when it was selected, and
     /// everything under it was built by appending to that.
     private static func key(_ url: URL) -> PathKey {
-        PathKey(resolved: url.path(percentEncoded: false))
+        PathKey(canonical: url.path(percentEncoded: false))
     }
 
     /// Drops a selection or a rename whose file has gone.
