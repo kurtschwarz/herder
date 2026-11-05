@@ -160,6 +160,11 @@ public final class AppEnvironment {
         if repositories.repositories.isEmpty {
             await repositories.adopt(persistence.legacyRepositories())
         }
+
+        // Reopens the worktrees that were open last time. Cheap: none of them
+        // drains until a window shows one, so this is a watcher apiece and no
+        // subprocesses.
+        await worktrees.restore()
     }
 
     /// Hands back every folder the sandbox is holding open and stops watching

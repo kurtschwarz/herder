@@ -261,3 +261,31 @@ whatever the code currently says and pass.
   two writers to one key is how updates get lost. `order` was the precedent.
 - **`Workspace` now takes a `StateStore`**, so every test that builds a registry
   needed one. Worth knowing before 4g touches the same constructor.
+
+## From Phase 4g (several live workspaces)
+
+- **`@SceneStorage` cannot be verified by killing the process.** macOS only
+  writes window restoration state on a clean quit, so every `pkill`-based run in
+  this realignment left it unexercised. The active-worktree-per-window restore
+  is therefore the one piece of Phase 4 that only Kurt's smoke test can confirm
+  — step 8, with ⌘Q.
+- **A stale `collapsedWorkspaces` key is still in the app's preferences**, an
+  empty array left behind when collapse moved onto the repository record in 4f.
+  Inert, and it is the user's prefs rather than ours to clear, but it is cruft:
+  Phase 8 should remove it on first launch or leave it documented.
+- **Tests had to learn to say what is on screen.** A workspace nothing displays
+  does not drain, so suites that drive the watcher now declare a window —
+  `ExplorerModelTests` and `EditorModelTests` do it once in `init`, and
+  `WorkspaceTests` has a `show(_:)` helper. A drain test that forgets this
+  watches nothing happen and passes for the wrong reason, which is worth
+  remembering when writing the next one.
+- **Three tests asserted the old behaviour and were rewritten, not deleted.**
+  `switchingWorktreeStopsWatchingTheOldOne` became
+  `switchingWorktreeKeepsTheOldOneOpen` plus two about what a background
+  worktree costs; `comingBackToAWorktreeKeepsWhatWasAlreadyRead` had been
+  asserting the opposite of its own name, and now asserts the name;
+  `comingBackToAWorktreeReplaysWhatItMissed` now closes explicitly, because
+  replay only matters for a worktree that was actually put away.
+- **Nothing closes a workspace except the folder vanishing or the app quitting.**
+  There is no UI for it. That is fine while a workspace costs a watcher, and
+  wants revisiting when one can hold an agent session.

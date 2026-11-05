@@ -255,7 +255,9 @@ WindowModel                one per window (AppFeature)
 - **`Workspace` is the single source of truth for one checkout.** If two places hold the same fact, one of them is a bug.
 - **Switching workspaces or worktrees changes `WindowModel.activeWorkspaceID` and nothing else.** Never tear down documents, terminals, or agent sessions on a switch. Background worktrees keep running.
 - **"Active" is per window, not global.** Multiple windows can show different workspaces.
-- Opening and closing go through `WorkspaceRegistry.open(_:)` and `close(_:)`. Closing must prompt for dirty documents and running agents.
+- Opening and closing go through `WorkspaceRegistry.open(_:)` and `close(_:)`. Opening is idempotent; nothing but `close(_:)` ever drops a workspace. Closing must prompt for dirty documents and running agents.
+- **A workspace drains only while a frontmost window is showing it.** Holding a worktree open costs a file watcher; *refreshing* it costs a `git status` for the whole repository, so only what is on screen refreshes. Background workspaces accumulate their events and act on them in one go when they come forward. Windows declare what they show with `display(_:from:)`, keyed by window identity rather than counted, so saying it twice is harmless.
+- **No cap on how many workspaces are held.** A cap means closing one the user did not ask to close. If it becomes a problem, the answer is a visible "close worktree", not an eviction they cannot see.
 - Stores are `@MainActor @Observable public final class` with `public private(set)` state. Mutation happens only through methods (`workspace.documents.open(url)`, never `workspace.documents.tabs.append(...)`).
 - Features receive their `Workspace` from the environment (`@Environment(Workspace.self)`). They never look up "the active workspace" themselves.
 - Keep stores small and focused so Observation tracking stays precise. No god objects.

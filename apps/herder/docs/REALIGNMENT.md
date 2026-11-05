@@ -56,9 +56,12 @@ Written against what the app can actually do. Extend it as features land.
 3. Expand folders. Create a file, rename it, delete it in a terminal. The tree and the git marks keep up.
 4. Create a new worktree from the new-session modal. It appears under its repository.
 5. Rename and reorder repositories. Collapse one.
-6. Switch between worktrees. The file tree's expanded folders and selection come back as they were. *(after Phase 4)*
-7. Quit and relaunch. Repositories, their names, their order, the collapsed ones and the selected worktree all restore. *(after Phase 4)*
-8. Open a second window. Each window shows its own worktree. *(after Phase 4)*
+6. Switch between worktrees and back. The file tree's expanded folders are still open — the worktree was never put away. Switching should be instant: no folder is read again.
+7. Expand a folder, switch away, work in another worktree for a while, come back. Still expanded.
+8. **Quit with ⌘Q** (not a force quit) and relaunch. Repositories, their names, their order and the collapsed ones all come back, and so does the worktree each window was showing. *`@SceneStorage` only saves on a clean quit, so killing the process does not exercise it — this step cannot be verified any other way.*
+9. Open a second window. Each window shows its own worktree, and both stay fresh.
+10. `git worktree remove` the worktree on screen. Its window empties and the workspace closes.
+11. Put another app in front, change files in a worktree, come back. The tree catches up in one go.
 
 ## Parallelization
 
@@ -315,7 +318,17 @@ Verified against the real store: the `herder` row arrived in the snapshot with i
 
 Verified against the real store: `herder` carries `isCollapsed`, and switching between `main` and `feat/test` left a snapshot apiece under its own key.
 
-**4g. Several live workspaces at once.** The one deliberate behavior change in this phase, so it goes last and alone. `WorkspaceRegistry.select` today **stops** every worktree but the selected one, keeping only the watcher position; the target architecture wants background workspaces to keep running. Each live workspace costs a watcher and a git status call, which is why `WorktreeStateStore`'s own doc comment calls widening it "a deliberate step and not a side effect". Confirm with tests that a background workspace's listings and git state survive a switch.
+**4g. Several live workspaces at once. Done.**
+
+`select(_:)` is gone, replaced by `open(_:)` and `close(_:)`. Opening is idempotent and closes nothing, so switching away keeps a worktree's listings, its git state and — when there are any — its terminals and agent sessions. That is what makes 4d's file-tree expansion visible within a session rather than only across a relaunch.
+
+What makes it affordable is the draining rule: **a workspace drains only while a frontmost window is showing it.** Draining is what costs a subprocess — a drain asks git once for the whole repository — so the ceiling stays at about one `git status` a second for what is on screen, however many are held. Background workspaces accumulate their watcher's events and act on them in one go when they come forward.
+
+Windows say what they are showing by identity (`display(_:from:)`), not by a counted begin/end pair: a window may say the same thing twice, there is nothing to get wrong, and two windows showing the same workspace both keep it fresh.
+
+**No cap on how many are held**, deliberately. A cap means closing one the user did not ask to close, which is the thing this step exists to stop; if it ever becomes a problem it wants a visible "close worktree" rather than an eviction they cannot see.
+
+`AppSnapshot.openWorkspaces` is now written and read: `restore()` reopens what was open, which costs a watcher apiece and no subprocesses, because nothing is on screen yet.
 
 **Gate:** Kurt runs the full smoke test before Phase 5 starts.
 
@@ -428,7 +441,7 @@ added to docs/realignment/notes.md.
   - [ ] `WorkspaceAccess` behind a protocol
   - [ ] `RepositoryStore`
   - [ ] `StateStore` (SwiftData-backed)
-- [ ] **P4** Workspace state *(gate: smoke test)*
+- [x] **P4** Workspace state *(gate: smoke test — awaiting Kurt)*
   - [x] 4a rename to `Workspace` / `WorkspaceRegistry` / `Repository`
   - [x] 4a′ `RepositoryStore` owns the list; `RepositoryAccess` moved to `Core`
   - [x] 4b snapshot and UI-state types + tests
@@ -439,7 +452,7 @@ added to docs/realignment/notes.md.
     - [x] repository list → `AppSnapshot` *(4e)*
   - [x] 4e persistence off `@Query`, `Storage` → `Services/Persistence/`
   - [x] 4f restoration *(`openWorkspaces` moved to 4g)*
-  - [ ] 4g several live workspaces at once, and restoring them from `AppSnapshot`
+  - [x] 4g several live workspaces at once, and restoring them from `AppSnapshot`
 - [ ] **P5** Features
   - [ ] Repositories
   - [ ] FileTree

@@ -63,10 +63,15 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
     }
 
     /// Selects `root` with `names` in it, each holding its own name as text.
+    /// Stands in for the window showing this worktree: a workspace drains only
+    /// while something displays it.
+    let window = NSObject()
+
     func start(with names: [String]) async throws -> Workspace {
         for name in names { files.seed(path(name), "contents of \(name)") }
         files.seed(children: names.map(file), of: root)
-        let state = try #require(await store.select(root))
+        store.display(WorkspaceID(root), from: window)
+        let state = try #require(await store.open(WorkspaceID(root)))
         await state.refresh()
         return state
     }

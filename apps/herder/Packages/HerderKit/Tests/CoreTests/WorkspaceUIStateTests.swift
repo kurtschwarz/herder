@@ -51,7 +51,7 @@ private final class UnencodableState: PersistedWorkspaceUIState {
             clock: VirtualClockClient(),
             state: InMemoryStateStore()
         )
-        return try #require(await registry.select(URL(filePath: path)))
+        return try #require(await registry.open(WorkspaceID(URL(filePath: path))))
     }
 
     @Test func askingTwiceGivesTheSameInstance() async throws {

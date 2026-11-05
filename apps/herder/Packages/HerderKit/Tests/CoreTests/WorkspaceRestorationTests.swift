@@ -35,43 +35,46 @@ private final class PaneState: PersistedWorkspaceUIState {
         WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
     }
 
-    /// The registry writes a workspace's snapshot before it lets go of it, so
-    /// coming back to a worktree finds what the user had opened in it.
-    @Test func switchingAwayWritesTheSnapshot() async throws {
+    /// Closing is what puts a workspace away, so closing is what writes it
+    /// down. Since 4g, switching away does not: the workspace stays open and
+    /// nothing has been lost yet.
+    @Test func closingWritesTheSnapshot() async throws {
         let registry = makeRegistry()
-        let workspace = try #require(await registry.select(api))
+        let workspace = try #require(await registry.open(WorkspaceID(api)))
         workspace.uiState(PaneState.self).expanded = ["Sources"]
 
-        await registry.select(web)
+        await registry.close(WorkspaceID(api))
 
         let saved = try await state.load(
             WorkspaceSnapshot.self,
-            forKey: WorkspaceSnapshot.persistenceKey(for: WorkspaceID(PathKey(api)))
+            forKey: WorkspaceSnapshot.persistenceKey(for: WorkspaceID(api))
         )
         #expect(saved?.uiState["pane"] != nil)
     }
 
-    /// Coming back to a worktree in the same session.
-    @Test func comingBackRestoresWhatWasOpen() async throws {
+    /// Switching away and back in one session needs no snapshot at all: it is
+    /// the same object, never put away.
+    @Test func comingBackInTheSameSessionIsTheSameWorkspace() async throws {
         let registry = makeRegistry()
-        let first = try #require(await registry.select(api))
+        let first = try #require(await registry.open(WorkspaceID(api)))
         first.uiState(PaneState.self).expanded = ["Sources", "Tests"]
 
-        await registry.select(web)
-        let again = try #require(await registry.select(api))
+        await registry.open(WorkspaceID(web))
+        let again = try #require(await registry.open(WorkspaceID(api)))
 
+        #expect(again === first)
         #expect(again.uiState(PaneState.self).expanded == ["Sources", "Tests"])
     }
 
-    /// And across a launch, which is the same thing through a second registry.
+    /// Across a launch, which is the same thing through a second registry.
     @Test func aRelaunchRestoresWhatWasOpen() async throws {
         let registry = makeRegistry()
-        let workspace = try #require(await registry.select(api))
+        let workspace = try #require(await registry.open(WorkspaceID(api)))
         workspace.uiState(PaneState.self).expanded = ["Sources"]
-        await registry.select(nil)
+        await registry.close(WorkspaceID(api))
 
         let relaunched = makeRegistry()
-        let restored = try #require(await relaunched.select(api))
+        let restored = try #require(await relaunched.open(WorkspaceID(api)))
 
         #expect(restored.uiState(PaneState.self).expanded == ["Sources"])
     }
@@ -79,27 +82,27 @@ private final class PaneState: PersistedWorkspaceUIState {
     /// Two worktrees keep separate snapshots, under separate keys.
     @Test func eachWorktreeRemembersItsOwn() async throws {
         let registry = makeRegistry()
-        let first = try #require(await registry.select(api))
+        let first = try #require(await registry.open(WorkspaceID(api)))
         first.uiState(PaneState.self).expanded = ["Sources"]
-        let second = try #require(await registry.select(web))
+        let second = try #require(await registry.open(WorkspaceID(web)))
         second.uiState(PaneState.self).expanded = ["docs", "bin"]
-        await registry.select(nil)
+        await registry.close(WorkspaceID(api))
+        await registry.close(WorkspaceID(web))
 
         let relaunched = makeRegistry()
-        #expect(try #require(await relaunched.select(api)).uiState(PaneState.self).expanded == ["Sources"])
-        #expect(try #require(await relaunched.select(web)).uiState(PaneState.self).expanded == ["docs", "bin"])
+        #expect(try #require(await relaunched.open(WorkspaceID(api))).uiState(PaneState.self).expanded == ["Sources"])
+        #expect(try #require(await relaunched.open(WorkspaceID(web))).uiState(PaneState.self).expanded == ["docs", "bin"])
     }
 
-    /// A workspace nothing has been opened in writes nothing, so a first visit
-    /// does not leave a row behind for every folder the user glances at.
+    /// A workspace nothing has been opened in has nothing to write down.
     @Test func aWorkspaceWithNothingToSayWritesAnEmptySnapshot() async throws {
         let registry = makeRegistry()
-        _ = await registry.select(api)
-        await registry.select(nil)
+        _ = await registry.open(WorkspaceID(api))
+        await registry.close(WorkspaceID(api))
 
         let saved = try await state.load(
             WorkspaceSnapshot.self,
-            forKey: WorkspaceSnapshot.persistenceKey(for: WorkspaceID(PathKey(api)))
+            forKey: WorkspaceSnapshot.persistenceKey(for: WorkspaceID(api))
         )
         #expect(saved?.uiState.isEmpty == true)
     }
@@ -110,36 +113,35 @@ private final class PaneState: PersistedWorkspaceUIState {
     /// cannot wait for it. It happens shortly after the change settles instead.
     @Test func changesAreWrittenShortlyAfterTheySettle() async throws {
         let registry = makeRegistry()
-        let workspace = try #require(await registry.select(api))
+        let workspace = try #require(await registry.open(WorkspaceID(api)))
 
         workspace.uiState(PaneState.self).expanded = ["Sources"]
         workspace.scheduleSnapshotSave()
 
         // The virtual clock returns from a sleep at once, so the debounce plays
         // out immediately; a few yields let the task that was waiting on it run.
-        for _ in 0..<50 where await state.keys.isEmpty { await Task.yield() }
+        let snapshotKey = WorkspaceSnapshot.persistenceKey(for: WorkspaceID(api))
+        for _ in 0..<50 where !(await state.keys.contains(snapshotKey)) { await Task.yield() }
 
-        #expect(await state.keys.contains(WorkspaceSnapshot.persistenceKey(for: WorkspaceID(PathKey(api)))))
+        #expect(await state.keys.contains(snapshotKey))
         #expect(clock.sleeps.contains(Workspace.saveDebounce))
     }
 
     /// A folder opened ten times in a second is one write, not ten.
     @Test func severalChangesCollapseIntoOneWrite() async throws {
         let registry = makeRegistry()
-        let workspace = try #require(await registry.select(api))
+        let workspace = try #require(await registry.open(WorkspaceID(api)))
 
         for name in ["a", "b", "c", "d"] {
             workspace.uiState(PaneState.self).expanded.insert(name)
             workspace.scheduleSnapshotSave()
         }
-        for _ in 0..<50 where await state.keys.isEmpty { await Task.yield() }
+        let snapshotKey = WorkspaceSnapshot.persistenceKey(for: WorkspaceID(api))
+        for _ in 0..<50 where !(await state.keys.contains(snapshotKey)) { await Task.yield() }
 
         // Whatever the count of sleeps asked for, only one save survived to
         // write, and it wrote the final state rather than an intermediate one.
-        let saved = try await state.load(
-            WorkspaceSnapshot.self,
-            forKey: WorkspaceSnapshot.persistenceKey(for: WorkspaceID(PathKey(api)))
-        )
+        let saved = try await state.load(WorkspaceSnapshot.self, forKey: snapshotKey)
         let decoded = try JSONDecoder().decode([String].self, from: try #require(saved?.uiState["pane"]))
         #expect(Set(decoded) == ["a", "b", "c", "d"])
     }

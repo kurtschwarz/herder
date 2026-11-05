@@ -14,14 +14,21 @@ import Testing
     let model: ExplorerModel
     let root = URL(filePath: "/code/api")
 
+    /// Stands in for the window showing this worktree. Since 4g a workspace
+    /// drains only while something is displaying it, so a suite driving the
+    /// watcher has to say what is on screen or it would watch nothing happen.
+    let window = NSObject()
+
     init() {
-        model = ExplorerModel(store: WorkspaceRegistry(
+        let registry = WorkspaceRegistry(
             files: files,
             git: git,
             watcher: watcher,
             clock: clock,
             state: state
-        ))
+        )
+        registry.display(WorkspaceID(root), from: window)
+        model = ExplorerModel(store: registry)
     }
 
     func dir(_ name: String, in parent: URL? = nil) -> DirectoryEntry {

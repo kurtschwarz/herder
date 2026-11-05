@@ -133,7 +133,10 @@ public final class ExplorerModel {
         renaming = nil
         creating = nil
 
-        let state = await store.select(key?.url)
+        // Opening is idempotent, and it no longer closes anything: the
+        // worktree being left stays open and keeps its listings, so coming back
+        // to it costs nothing and shows what it showed.
+        let state = if let key { await store.open(WorkspaceID(key)) } else { nil as Workspace? }
         // Weak, or the state would hold this model which holds the store which
         // holds the state.
         registration = state?.observe(onChange: { [weak self] in self?.dropWhatHasGone() })
@@ -143,12 +146,12 @@ public final class ExplorerModel {
         await state?.refresh()
     }
 
-    /// Whether drains may run for the worktree. Suspended while the window is
-    /// not in front: changes keep accumulating and are acted on in one go when
-    /// it comes back, because the worst storms happen while the user is in a
+    /// Whether the app is in front. Suspends drains for every workspace while
+    /// it is not: changes keep accumulating and are acted on in one go when it
+    /// comes back, because the worst storms happen while the user is in a
     /// terminal running the build that causes them.
     public func setWatching(_ enabled: Bool) {
-        store.setDraining(enabled)
+        store.setFrontmost(enabled)
     }
 
     public func isExpanded(_ folder: URL) -> Bool {

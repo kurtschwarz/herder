@@ -30,13 +30,30 @@ import Testing
         DirectoryEntry(url: (parent ?? root).appending(path: name), isDirectory: false)
     }
 
-    /// Opens `root` with `children` in it and reads it, the starting point for
-    /// every test here.
+    /// Stands in for a window. A workspace drains only while one is showing
+    /// it, so the tests about draining need something to be the window.
+    let window = NSObject()
+
+    /// Opens `root` with `children` in it, puts it on screen and reads it: the
+    /// starting point for every test here.
+    ///
+    /// Showing it is not incidental. Since 4g a workspace nothing is displaying
+    /// accumulates its events without acting on them, so a drain test that
+    /// forgot this would watch nothing happen.
     func start(with children: [DirectoryEntry] = []) async throws -> Workspace {
         files.seed(children: children, of: root)
-        let state = try #require(await store.select(root))
+        let state = try #require(await store.open(WorkspaceID(PathKey(root))))
+        store.display(WorkspaceID(PathKey(root)), from: window)
         await state.refresh()
         return state
+    }
+
+    /// Opens `url` and shows it instead of whatever was shown before.
+    @discardableResult
+    func show(_ url: URL) async -> Workspace? {
+        let workspace = await store.open(WorkspaceID(PathKey(url)))
+        store.display(WorkspaceID(PathKey(url)), from: window)
+        return workspace
     }
 
     /// Lets the watcher's events be taken in and any drain run to the end.
@@ -258,21 +275,50 @@ import Testing
         #expect(state.listing(of: state.root) == .loaded([file("a.txt"), file("b.txt")]))
     }
 
-    @Test func switchingWorktreeStopsWatchingTheOldOne() async throws {
+    /// The point of 4g: switching away keeps the worktree open. Nothing is torn
+    /// down, so nothing has to be read again.
+    @Test func switchingWorktreeKeepsTheOldOneOpen() async throws {
         let other = URL(filePath: "/code/web")
         files.seed(children: [], of: other)
         let state = try await start(with: [file("a.txt")])
 
-        await store.select(other)
+        await show(other)
 
-        #expect(store.state(for: root) == nil)
+        #expect(store.state(for: root) != nil)
         #expect(store.state(for: other) != nil)
-        // The old state's watcher is cancelled, so its events go nowhere.
+        #expect(state.listing(of: state.root) == .loaded([file("a.txt")]))
+    }
+
+    /// What a background worktree costs: a watcher, and no subprocesses. Its
+    /// events accumulate rather than being acted on, because draining is what
+    /// asks git.
+    @Test func aBackgroundWorktreeDoesNotDrain() async throws {
+        let other = URL(filePath: "/code/web")
+        files.seed(children: [], of: other)
+        _ = try await start(with: [file("a.txt")])
+        await show(other)
+
         let before = git.statusLookups.count
         watcher.change([root])
         await settle()
+
         #expect(git.statusLookups.count == before)
-        #expect(state.listing(of: state.root) != nil)
+    }
+
+    /// And comes forward with what accumulated, in one go.
+    @Test func comingForwardActsOnWhatAccumulated() async throws {
+        let other = URL(filePath: "/code/web")
+        files.seed(children: [], of: other)
+        _ = try await start(with: [file("a.txt")])
+        await show(other)
+        watcher.change([root])
+        await settle()
+        let before = git.statusLookups.count
+
+        await show(root)
+        await settle()
+
+        #expect(git.statusLookups.count > before)
     }
 
     @Test func comingBackToAWorktreeKeepsWhatWasAlreadyRead() async throws {
@@ -280,11 +326,12 @@ import Testing
         files.seed(children: [], of: other)
         _ = try await start(with: [file("a.txt")])
 
-        await store.select(other)
-        let returned = try #require(await store.select(root))
+        await show(other)
+        let returned = try #require(await show(root))
 
-        // A fresh state, because the old one stopped watching.
-        #expect(returned.listing(returned.root) == nil)
+        // The same state, still read: it was never put away.
+        #expect(returned.listing(of: returned.root) == .loaded([file("a.txt")]))
+        #expect(files.childReads.filter { $0 == root }.count == 1)
     }
 
     /// Replaying from where the last stream stopped is the only thing that
@@ -297,12 +344,13 @@ import Testing
         await settle()
         let reached = try #require(store.state(for: root)?.position)
 
-        await store.select(other)
-        await store.select(root)
+        // Closing is what drops a worktree now, and closing is what makes
+        // replay matter: a worktree merely switched away from never stopped.
+        await store.close(WorkspaceID(PathKey(root)))
+        await show(root)
 
-        // Watched three times: this worktree blind, the other one blind, then
-        // this one again from where it had got to.
-        #expect(watcher.resumedFrom == [nil, nil, reached])
+        // Watched twice: blind the first time, then from where it had got to.
+        #expect(watcher.resumedFrom == [nil, reached])
     }
 }
 
@@ -328,7 +376,7 @@ private extension Workspace {
 
     func start() async throws -> Workspace {
         files.seed(children: [DirectoryEntry(url: root.appending(path: "a.txt"), isDirectory: false)], of: root)
-        let state = try #require(await store.select(root))
+        let state = try #require(await store.open(WorkspaceID(PathKey(root))))
         await state.refresh()
         return state
     }

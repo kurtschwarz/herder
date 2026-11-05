@@ -118,11 +118,11 @@ import Testing
     /// and finds the last run's expansion already in it.
     @Test func aRestoredWorkspaceHandsExpansionBackOnFirstAsk() async throws {
         files.seed(children: [], of: root)
-        let before = try #require(await registry.select(root))
+        let before = try #require(await registry.open(WorkspaceID(root)))
         before.uiState(ExplorerUIState.self).expanded = [PathKey(canonical: "/code/api/Sources")]
 
         let fresh = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
-        let after = try #require(await fresh.select(root))
+        let after = try #require(await fresh.open(WorkspaceID(root)))
         after.restore(from: before.snapshot)
 
         #expect(after.uiState(ExplorerUIState.self).expanded == [PathKey(canonical: "/code/api/Sources")])

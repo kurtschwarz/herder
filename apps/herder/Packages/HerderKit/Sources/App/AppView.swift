@@ -68,11 +68,23 @@ public struct AppView: View {
             environment.editor.close()
             await environment.explorer.setRoot(window.activeWorkspaceID?.url)
         }
+        // Tells the registry what this window is showing, which is what
+        // decides whether that workspace drains. Idempotent, so saying it
+        // again on every change is the whole protocol.
+        .onChange(of: window.activeWorkspaceID, initial: true) { _, id in
+            environment.worktrees.display(id, from: window)
+        }
+        .onDisappear {
+            environment.worktrees.stopDisplaying(from: window)
+        }
         // A worktree removed in a terminal takes its window's selection with
-        // it. The workspace marks itself unavailable when its folder goes, so
-        // this is the one place that has to notice.
+        // it, and the workspace with it: there is nothing left to keep open.
+        // The workspace marks itself unavailable when its folder goes, so this
+        // is the one place that has to notice.
         .onChange(of: activeWorkspace?.isAvailable) { _, isAvailable in
-            if isAvailable == false { window.activate(nil) }
+            guard isAvailable == false, let id = window.activeWorkspaceID else { return }
+            window.activate(nil)
+            Task { await environment.worktrees.close(id) }
         }
         // Selection only ever opens. A file that goes from disk loses its
         // selection but not its pane: the editor keeps it, struck through.
