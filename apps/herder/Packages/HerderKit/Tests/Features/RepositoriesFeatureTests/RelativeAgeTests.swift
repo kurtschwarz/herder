@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import WorkspacesFeature
+@testable import RepositoriesFeature
 
 @Suite struct RelativeAgeTests {
     let now = Date(timeIntervalSince1970: 1_000_000)

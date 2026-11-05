@@ -3,7 +3,7 @@ import Foundation
 import TestSupport
 import Testing
 
-@testable import WorkspacesFeature
+@testable import RepositoriesFeature
 
 @Suite struct NewSessionModelTests {
     let git = StubGitClient()
@@ -11,7 +11,7 @@ import Testing
     let model: NewSessionModel
 
     init() {
-        model = NewSessionModel(workspaceName: "api", repository: repository, git: git)
+        model = NewSessionModel(repositoryName: "api", repository: repository, git: git)
     }
 
     func seed(
@@ -123,7 +123,7 @@ import Testing
 
     // MARK: - Creating
 
-    @Test func createsTheWorktreeInsideTheWorkspace() async {
+    @Test func createsTheWorktreeInsideTheRepository() async {
         seed()
         await model.load()
         model.editBranchName("agent/add-minimap")

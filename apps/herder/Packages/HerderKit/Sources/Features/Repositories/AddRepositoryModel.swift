@@ -2,16 +2,16 @@ import Core
 import Foundation
 import Observation
 
-/// The add-workspace modal's state: the folder picked, the name, and whether
+/// The add-repository modal's state: the folder picked, the name, and whether
 /// the store would take them.
 ///
 /// A folder is validated the moment it is picked, so Add is only ever enabled
 /// for something that should succeed. `submit()` still validates again, because
 /// the folder can change between the pick and the click.
 @Observable
-public final class AddWorkspaceModel {
+final class AddRepositoryModel {
     /// Why the picked folder cannot be added.
-    public enum Refusal: Equatable {
+    enum Refusal: Equatable {
         case notARepository
         /// A `git worktree add` folder. Worktrees appear under their
         /// repository, so the repository is what to add.
@@ -38,21 +38,21 @@ public final class AddWorkspaceModel {
     /// Once the user has typed a name, picking another folder leaves it alone.
     private var isNameEdited = false
 
-    public private(set) var folder: URL?
-    public private(set) var name = ""
-    public private(set) var refusal: Refusal?
-    public private(set) var isSubmitting = false
+    private(set) var folder: URL?
+    private(set) var name = ""
+    private(set) var refusal: Refusal?
+    private(set) var isSubmitting = false
 
-    public var canAdd: Bool { kind != nil && refusal == nil && !isSubmitting }
+    var canAdd: Bool { kind != nil && refusal == nil && !isSubmitting }
 
-    public init(store: RepositoryStore, picker: any FolderPickerClient) {
+    init(store: RepositoryStore, picker: any FolderPickerClient) {
         self.store = store
         self.picker = picker
     }
 
     /// Opens the folder picker and validates what comes back. Cancelling leaves
     /// everything as it was.
-    public func browse(startingAt start: URL? = nil) async {
+    func browse(startingAt start: URL? = nil) async {
         guard let url = await picker.pickFolder(startingAt: start) else { return }
         await select(url)
     }
@@ -60,19 +60,19 @@ public final class AddWorkspaceModel {
     /// Reopens the picker where the refused worktree's repository lives. The
     /// app cannot take the repository itself: the sandbox only let it see the
     /// folder the user chose.
-    public func chooseMainRepository() async {
+    func chooseMainRepository() async {
         guard case .linkedWorktree(let main) = refusal else { return }
         await browse(startingAt: main)
     }
 
-    public func editName(_ name: String) {
+    func editName(_ name: String) {
         self.name = name
         isNameEdited = true
     }
 
-    /// Adds the workspace. Returns whether it was added; on `false`, `refusal`
+    /// Adds the repository. Returns whether it was added; on `false`, `refusal`
     /// says why.
-    public func submit() async -> Bool {
+    func submit() async -> Bool {
         guard canAdd, let folder else { return false }
         isSubmitting = true
         defer { isSubmitting = false }

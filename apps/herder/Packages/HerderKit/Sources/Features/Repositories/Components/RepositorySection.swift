@@ -2,10 +2,10 @@ import Core
 import DesignSystem
 import SwiftUI
 
-/// A workspace row and, while it is open, the worktrees beneath it.
-struct WorkspaceSection: View {
-    let workspace: Repository
-    let model: WorkspacesModel
+/// A repository row and, while it is open, the worktrees beneath it.
+struct RepositorySection: View {
+    let repository: Repository
+    let model: RepositoriesModel
 
     /// Whichever workspace this window resolved, or `nil` for none. How a row
     /// knows it is the active one, without anything asking "which is active?".
@@ -17,11 +17,11 @@ struct WorkspaceSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            WorkspaceRow(workspace: workspace, model: model)
+            RepositoryRow(repository: repository, model: model)
 
-            if model.isExpanded(workspace) {
+            if model.isExpanded(repository) {
                 VStack(alignment: .leading, spacing: 0) {
-                    switch model.listings[workspace.id] {
+                    switch model.listings[repository.id] {
                     case .loaded(let worktrees):
                         ForEach(worktrees) { worktree in
                             WorktreeRow(
@@ -42,7 +42,7 @@ struct WorkspaceSection: View {
                 .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.15), value: model.isExpanded(workspace))
+        .animation(.easeOut(duration: 0.15), value: model.isExpanded(repository))
         .clipped()
     }
 }

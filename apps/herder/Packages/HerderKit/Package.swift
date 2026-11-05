@@ -69,12 +69,14 @@ let package = Package(
         // `DesignSystem` and `TestSupport` and no other feature; the concrete
         // services are `AppFeature`'s business alone.
         .target(
-            name: "WorkspacesFeature",
+            name: "RepositoriesFeature",
             dependencies: ["Core", "DesignSystem", "TestSupport", icons],
-            path: "Sources/Features/WorkspacesFeature",
+            path: "Sources/Features/Repositories",
             swiftSettings: ui
         ),
 
+        // Still the old name and the old folder: it becomes `FileTreeFeature`
+        // at `Sources/Features/FileTree` in Phase 5, types included (D3).
         .target(
             name: "ExplorerFeature",
             dependencies: ["Core", "DesignSystem", "TestSupport", icons],
@@ -82,6 +84,8 @@ let package = Package(
             swiftSettings: ui
         ),
 
+        // The module name is already right; the folder still repeats the
+        // suffix. It becomes `Sources/Features/Editor` in Phase 5.
         .target(
             name: "EditorFeature",
             dependencies: ["Core", "DesignSystem", "TestSupport"],
@@ -97,7 +101,7 @@ let package = Package(
             name: "AppFeature",
             dependencies: [
                 "Core", "Services", "DesignSystem", "TestSupport",
-                "WorkspacesFeature", "ExplorerFeature", "EditorFeature",
+                "RepositoriesFeature", "ExplorerFeature", "EditorFeature",
             ],
             path: "Sources/App",
             swiftSettings: ui
@@ -120,9 +124,9 @@ let package = Package(
             swiftSettings: core
         ),
         .testTarget(
-            name: "WorkspacesFeatureTests",
-            dependencies: ["WorkspacesFeature", "Core", "TestSupport"],
-            path: "Tests/Features/WorkspacesFeatureTests",
+            name: "RepositoriesFeatureTests",
+            dependencies: ["RepositoriesFeature", "Core", "TestSupport"],
+            path: "Tests/Features/RepositoriesFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(

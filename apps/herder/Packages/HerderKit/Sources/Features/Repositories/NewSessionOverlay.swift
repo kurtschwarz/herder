@@ -3,12 +3,12 @@ import DesignSystem
 import PhosphorSwift
 import SwiftUI
 
-/// The new-session modal, drawn over the whole window like the add-workspace
+/// The new-session modal, drawn over the whole window like the add-repository
 /// one, and for the same reason: the scrim has to cover both panes.
 public struct NewSessionOverlay: View {
-    private let model: WorkspacesModel
+    private let model: RepositoriesModel
 
-    public init(model: WorkspacesModel) {
+    public init(model: RepositoriesModel) {
         self.model = model
     }
 
@@ -77,7 +77,7 @@ private struct NewSessionCard: View {
                     .font(.title2.bold())
                     .foregroundStyle(Theme.Palette.text)
             }
-            Text("in \(model.workspaceName)")
+            Text("in \(model.repositoryName)")
                 .foregroundStyle(Theme.Palette.secondaryText)
         }
     }

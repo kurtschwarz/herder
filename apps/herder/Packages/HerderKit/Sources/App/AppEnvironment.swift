@@ -3,8 +3,8 @@ import EditorFeature
 import ExplorerFeature
 import Foundation
 import Observation
+import RepositoriesFeature
 import Services
-import WorkspacesFeature
 
 /// Composition root.
 ///
@@ -44,7 +44,7 @@ public final class AppEnvironment {
     public let worktrees: WorkspaceRegistry
 
     /// What the sidebar shows beside the list itself.
-    public let workspaceList: WorkspacesModel
+    public let repositoryList: RepositoriesModel
 
     /// The file tree of the worktree selected in the sidebar.
     public let explorer: ExplorerModel
@@ -118,7 +118,7 @@ public final class AppEnvironment {
         self.state = persistence.state
         let repositories = RepositoryStore(bookmarks: bookmarks, git: git, state: persistence.state)
         self.repositories = repositories
-        self.workspaceList = WorkspacesModel(store: repositories, git: git, picker: folderPicker)
+        self.repositoryList = RepositoriesModel(store: repositories, git: git, picker: folderPicker)
         let worktrees = WorkspaceRegistry(
             files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
         )
@@ -127,10 +127,10 @@ public final class AppEnvironment {
         self.editor = EditorModel(store: worktrees, files: files, highlighter: highlighter)
     }
 
-    /// Opens the add-workspace modal. Here rather than on the sidebar because a
+    /// Opens the add-repository modal. Here rather than on the sidebar because a
     /// menu command, not just the sidebar's button, asks for it.
-    public func beginAddingWorkspace() {
-        workspaceList.beginAdding()
+    public func beginAddingRepository() {
+        repositoryList.beginAdding()
     }
 
     /// Reads the repository list, takes access to every folder, and brings

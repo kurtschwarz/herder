@@ -3,18 +3,18 @@ import Foundation
 import TestSupport
 import Testing
 
-@testable import WorkspacesFeature
+@testable import RepositoriesFeature
 
-@Suite @MainActor struct AddWorkspaceModelTests {
+@Suite @MainActor struct AddRepositoryModelTests {
     let bookmarks = InMemoryBookmarkClient()
     let git = StubGitClient()
     let picker = StubFolderPickerClient()
     let store: RepositoryStore
-    let model: AddWorkspaceModel
+    let model: AddRepositoryModel
 
     init() throws {
         store = RepositoryStore(bookmarks: bookmarks, git: git, state: InMemoryStateStore())
-        model = AddWorkspaceModel(store: store, picker: picker)
+        model = AddRepositoryModel(store: store, picker: picker)
     }
 
     @discardableResult
@@ -132,7 +132,7 @@ import Testing
         #expect(model.name == "web")
     }
 
-    @Test func submittingAddsTheWorkspaceWithTheTypedName() async throws {
+    @Test func submittingAddsTheRepositoryWithTheTypedName() async throws {
         picker.script(repository("/code/api"))
         await model.browse()
         model.editName("  Gateway ")

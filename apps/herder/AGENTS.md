@@ -32,7 +32,7 @@ rationale.
 | A colour for a token kind | `DesignSystem/Theme.swift`, paired in `EditorFeature/Platform/SyntaxAttributes.swift` |
 | Anything that constructs a concrete service | `AppFeature` — nowhere else |
 | Something the app persists about itself | nothing — encode it to a snapshot and put it through `StateStore`. No schema version, no migration. |
-| A new SwiftData model (rare; prefer the above) | `Storage/`, in a new `WorkspaceSchemaV<n>` with a migration stage. **Never rename an existing `@Model` class** — the class name is the stored entity name. |
+| A new SwiftData model (rare; prefer the above) | `Services/Persistence/`, in a new `WorkspaceSchemaV<n>` with a migration stage. **Never rename an existing `@Model` class** — the class name is the stored entity name. |
 | Live state two features both read | `Core/Workspace/`, on the `Workspace`, not whichever feature needed it first |
 | A language for the editor to highlight | `../../packages/syntax-highlighter`, not here. See its `AGENTS.md`. |
 
@@ -45,14 +45,16 @@ A new feature target needs `path: "Sources/Features/<Name>"` and its test target
 
 ## Not yet moved
 
-One module still sits outside the target layout, and `Package.swift` says so at
-the target. Don't file new code in it without reading the plan:
+Two feature folders still carry their old names, and `Package.swift` says so at
+each target. Phase 5 renames them one at a time; don't rename them as part of
+other work:
 
-- **`Storage/`** — SwiftData models, schema, container, and `SwiftDataStateStore`.
-  Goes to `Services/Persistence/` in Phase 4, once `WorkspacesFeature` stops
-  passing `@Model` objects around and can drop `import Storage`. Until then a
-  feature still reaches SwiftData through it, which is why the boundary check
-  for that is the one still commented out.
+- **`Sources/Features/ExplorerFeature/`** — becomes `Sources/Features/FileTree/`,
+  module `FileTreeFeature`, with `ExplorerModel` and friends renamed to match
+  (D3).
+- **`Sources/Features/EditorFeature/`** — the module name is right, the folder
+  repeats the suffix. Becomes `Sources/Features/Editor/`.
+
 `AppFeature` sits at `Sources/App/`, outside `Sources/Features/`, because it is
 the composition root rather than a feature. `AppEnvironment` there is the only
 place in the codebase that names a concrete service type, and the one HerderKit

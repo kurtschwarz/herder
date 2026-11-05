@@ -36,7 +36,7 @@ struct HerderApp: App {
         .commands {
             // ⌘N already opens a new window.
             CommandGroup(after: .newItem) {
-                Button("Add Repository…") { environment.beginAddingWorkspace() }
+                Button("Add Repository…") { environment.beginAddingRepository() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
             }
         }

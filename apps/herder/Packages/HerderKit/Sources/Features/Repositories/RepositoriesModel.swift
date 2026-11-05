@@ -2,7 +2,7 @@ import Core
 import Foundation
 import Observation
 
-/// Everything about the workspace list that is not the list itself.
+/// Everything about the repository list that is not the list itself.
 ///
 /// The list itself comes from ``RepositoryStore``, which this never caches.
 /// What it holds is derived or ephemeral: each repository's worktrees as last
@@ -15,10 +15,10 @@ import Observation
 /// the `Workspace` in the environment, and ask for a change through
 /// ``OpenWorkspaceAction``.
 @Observable
-public final class WorkspacesModel {
-    /// What reading a workspace's worktrees came to. A failed read is its own
+public final class RepositoriesModel {
+    /// What reading a repository's worktrees came to. A failed read is its own
     /// state because an empty list would claim the repository has none.
-    public enum Listing: Equatable {
+    enum Listing: Equatable {
         case loaded([GitWorktree])
         case unreadable
     }
@@ -27,26 +27,26 @@ public final class WorkspacesModel {
     private let git: any GitClient
     private let picker: any FolderPickerClient
 
-    public private(set) var listings: [UUID: Listing] = [:]
+    private(set) var listings: [UUID: Listing] = [:]
 
-    /// Each workspace's name, as last read. Kept beside ``listings`` so that
-    /// naming the workspace a worktree belongs to costs no fetch: a view asks
+    /// Each repository's name, as last read. Kept beside ``listings`` so that
+    /// naming the repository a worktree belongs to costs no fetch: a view asks
     /// for it on every redraw, and the old code cached a whole record to avoid
     /// exactly that.
     private var names: [UUID: String] = [:]
 
-    /// The workspace whose name is being edited in place.
-    public var renaming: UUID?
+    /// The repository whose name is being edited in place.
+    var renaming: UUID?
 
-    /// The add-workspace modal's state while it is up, `nil` otherwise.
-    public private(set) var adding: AddWorkspaceModel?
+    /// The add-repository modal's state while it is up, `nil` otherwise.
+    private(set) var adding: AddRepositoryModel?
 
     /// The new-session modal's state while it is up, `nil` otherwise.
-    public private(set) var newSession: NewSessionModel?
+    private(set) var newSession: NewSessionModel?
 
-    /// The workspace the new-session modal is open for, so its worktrees can be
+    /// The repository the new-session modal is open for, so its worktrees can be
     /// re-read once one is created.
-    private var newSessionWorkspace: Repository?
+    private var newSessionRepository: Repository?
 
     /// Whether a modal is covering the window.
     public var isModalPresented: Bool { adding != nil || newSession != nil }
@@ -61,16 +61,16 @@ public final class WorkspacesModel {
         self.picker = picker
     }
 
-    /// What the workspace holding the worktree at `path` is called.
+    /// What the repository holding the worktree at `path` is called.
     ///
     /// For a pane that wants to say what it is showing: a worktree's own folder
     /// is often `main`, which says nothing about what it belongs to. `nil` when
-    /// no workspace on show claims it.
+    /// no repository on show claims it.
     ///
     /// Derived rather than remembered. The association used to be a stored
     /// `selectedWorkspace` kept in step with the selection by hand; the
-    /// listings already know which workspace each worktree came from.
-    public func nameOfWorkspace(holding path: URL) -> String? {
+    /// listings already know which repository each worktree came from.
+    public func nameOfRepository(holding path: URL) -> String? {
         let key = PathKey(path)
         for (id, listing) in listings {
             guard case .loaded(let worktrees) = listing else { continue }
@@ -82,79 +82,79 @@ public final class WorkspacesModel {
 
     /// Whether the worktree at `path` is one this list is showing. Used to stop
     /// a window holding on to a worktree that has been removed in a terminal.
-    public func isKnown(_ path: URL) -> Bool {
-        nameOfWorkspace(holding: path) != nil
+    func isKnown(_ path: URL) -> Bool {
+        nameOfRepository(holding: path) != nil
     }
 
     public func beginAdding() {
         guard !isModalPresented else { return }
-        adding = AddWorkspaceModel(store: store, picker: picker)
+        adding = AddRepositoryModel(store: store, picker: picker)
     }
 
-    public func cancelAdding() {
+    func cancelAdding() {
         adding = nil
     }
 
     /// Adds the folder the modal has validated and closes it. A refusal at this
     /// point leaves the modal up, showing why.
-    public func submitAdding() async {
+    func submitAdding() async {
         guard let adding, await adding.submit() else { return }
         self.adding = nil
     }
 
-    public func beginNewSession(in workspace: Repository) {
-        guard !isModalPresented, workspace.isAvailable else { return }
-        newSessionWorkspace = workspace
+    func beginNewSession(in repository: Repository) {
+        guard !isModalPresented, repository.isAvailable else { return }
+        newSessionRepository = repository
         newSession = NewSessionModel(
-            workspaceName: workspace.name,
-            repository: URL(filePath: workspace.path),
+            repositoryName: repository.name,
+            repository: URL(filePath: repository.path),
             git: git
         )
     }
 
-    public func cancelNewSession() {
+    func cancelNewSession() {
         newSession = nil
-        newSessionWorkspace = nil
+        newSessionRepository = nil
     }
 
     /// Creates the worktree the modal describes, closes it, and shows the new
-    /// worktree under its workspace. A failure leaves the modal up with the
+    /// worktree under its repository. A failure leaves the modal up with the
     /// reason.
-    public func submitNewSession() async {
+    func submitNewSession() async {
         guard let newSession, await newSession.create() else { return }
-        let workspace = newSessionWorkspace
+        let repository = newSessionRepository
         cancelNewSession()
-        if let workspace { await refresh(workspace) }
+        if let repository { await refresh(repository) }
     }
 
-    public func isExpanded(_ workspace: Repository) -> Bool {
+    func isExpanded(_ repository: Repository) -> Bool {
         // Read off the store, not off the copy the caller is holding: the row
         // is the one place that knows, and it is what gets persisted.
-        workspace.isAvailable && !(store[workspace.id]?.isCollapsed ?? workspace.isCollapsed)
+        repository.isAvailable && !(store[repository.id]?.isCollapsed ?? repository.isCollapsed)
     }
 
-    public func toggle(_ workspace: Repository) async {
+    func toggle(_ repository: Repository) async {
         // Showing becomes folding, and folding becomes showing.
-        await store.setCollapsed(workspace, isExpanded(workspace))
-        await refresh(workspace)
+        await store.setCollapsed(repository, isExpanded(repository))
+        await refresh(repository)
     }
 
-    /// Re-reads the worktrees of every workspace that is showing them. A
-    /// collapsed or unavailable workspace costs nothing: nobody is looking.
-    public func refresh(_ workspaces: [Repository]) async {
-        for workspace in workspaces {
-            await refresh(workspace)
+    /// Re-reads the worktrees of every repository that is showing them. A
+    /// collapsed or unavailable repository costs nothing: nobody is looking.
+    func refresh(_ repositories: [Repository]) async {
+        for repository in repositories {
+            await refresh(repository)
         }
     }
 
-    public func refresh(_ workspace: Repository) async {
-        guard isExpanded(workspace) else { return }
-        let id = workspace.id
+    func refresh(_ repository: Repository) async {
+        guard isExpanded(repository) else { return }
+        let id = repository.id
 
         do {
-            let worktrees = try await git.worktrees(at: URL(filePath: workspace.path))
+            let worktrees = try await git.worktrees(at: URL(filePath: repository.path))
             listings[id] = .loaded(worktrees)
-            names[id] = workspace.name
+            names[id] = repository.name
         } catch {
             // The task that asked was cancelled, which says nothing about the
             // folder.
@@ -163,15 +163,15 @@ public final class WorkspacesModel {
         }
     }
 
-    public func commitRename(_ workspace: Repository, to name: String) async {
+    func commitRename(_ repository: Repository, to name: String) async {
         renaming = nil
-        await store.rename(workspace, to: name)
-        names[workspace.id] = store[workspace.id]?.name ?? workspace.name
+        await store.rename(repository, to: name)
+        names[repository.id] = store[repository.id]?.name ?? repository.name
     }
 
-    public func remove(_ workspace: Repository) async {
-        let id = workspace.id
-        await store.delete(workspace)
+    func remove(_ repository: Repository) async {
+        let id = repository.id
+        await store.delete(repository)
         listings[id] = nil
         names[id] = nil
     }

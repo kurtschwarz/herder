@@ -2,8 +2,8 @@ import Core
 import DesignSystem
 import EditorFeature
 import ExplorerFeature
+import RepositoriesFeature
 import SwiftUI
-import WorkspacesFeature
 
 /// Root view. Owns the window layout and composes features; holds no feature logic.
 ///
@@ -35,7 +35,7 @@ public struct AppView: View {
 
     public var body: some View {
         HStack(spacing: Theme.Spacing.paneGap) {
-            Sidebar(workspaces: environment.workspaceList, repositories: environment.repositories)
+            Sidebar(model: environment.repositoryList, store: environment.repositories)
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
 
@@ -94,7 +94,7 @@ public struct AppView: View {
         }
         // The modal's scrim swallows clicks; this stops the keyboard reaching
         // what it covers.
-        .disabled(environment.workspaceList.isModalPresented)
+        .disabled(environment.repositoryList.isModalPresented)
         .padding(Theme.Spacing.windowPadding)
         .frame(minWidth: 960, minHeight: 460)
         .background { WindowGlass() }
@@ -105,8 +105,8 @@ public struct AppView: View {
         .ignoresSafeArea()
         // After the safe area is ignored, so the scrim covers the whole window,
         // title bar included.
-        .overlay { AddWorkspaceOverlay(model: environment.workspaceList) }
-        .overlay { NewSessionOverlay(model: environment.workspaceList) }
+        .overlay { AddRepositoryOverlay(model: environment.repositoryList) }
+        .overlay { NewSessionOverlay(model: environment.repositoryList) }
         .preferredColorScheme(.dark)
     }
 
@@ -115,7 +115,7 @@ public struct AppView: View {
     /// what it belongs to.
     private var activeWorkspaceName: String? {
         guard let url = window.activeWorkspaceID?.url else { return nil }
-        return environment.workspaceList.nameOfWorkspace(holding: url)
+        return environment.repositoryList.nameOfRepository(holding: url)
     }
 }
 

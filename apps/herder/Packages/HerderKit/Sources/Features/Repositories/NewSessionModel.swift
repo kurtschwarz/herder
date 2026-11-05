@@ -9,14 +9,14 @@ import Observation
 /// worktree waits for a session runtime, so that choice can be made but not
 /// submitted.
 @Observable
-public final class NewSessionModel {
-    public enum Choice: Equatable {
+final class NewSessionModel {
+    enum Choice: Equatable {
         case newWorktree
         case existing(GitWorktree.ID)
     }
 
     /// Why the typed branch name cannot be used.
-    public enum NameProblem: Equatable {
+    enum NameProblem: Equatable {
         case invalid(String)
         case alreadyExists
     }
@@ -24,26 +24,26 @@ public final class NewSessionModel {
     private let git: any GitClient
     private let repository: URL
 
-    public let workspaceName: String
+    let repositoryName: String
 
-    public private(set) var worktrees: [GitWorktree] = []
-    public private(set) var branches: [String] = []
-    public private(set) var isLoading = true
-    public private(set) var isCreating = false
+    private(set) var worktrees: [GitWorktree] = []
+    private(set) var branches: [String] = []
+    private(set) var isLoading = true
+    private(set) var isCreating = false
 
     /// What went wrong reading the repository or creating the worktree, in
     /// git's own words where git had some.
-    public private(set) var failure: String?
+    private(set) var failure: String?
 
-    public private(set) var choice: Choice = .newWorktree
-    public private(set) var branchName = ""
-    public var baseBranch = ""
-    public var filter = ""
+    private(set) var choice: Choice = .newWorktree
+    private(set) var branchName = ""
+    var baseBranch = ""
+    var filter = ""
 
     private var kind: GitRepositoryKind = .notARepository
 
-    public init(workspaceName: String, repository: URL, git: any GitClient) {
-        self.workspaceName = workspaceName
+    init(repositoryName: String, repository: URL, git: any GitClient) {
+        self.repositoryName = repositoryName
         self.repository = repository
         self.git = git
     }
@@ -52,7 +52,7 @@ public final class NewSessionModel {
 
     /// Reads the worktrees and branches the lists are made of. A repository
     /// that cannot be read leaves them empty and says so in `failure`.
-    public func load() async {
+    func load() async {
         defer { isLoading = false }
 
         do {
@@ -79,28 +79,28 @@ public final class NewSessionModel {
 
     // MARK: - Choosing
 
-    public func selectNewWorktree() {
+    func selectNewWorktree() {
         choice = .newWorktree
     }
 
-    public func select(_ worktree: GitWorktree) {
+    func select(_ worktree: GitWorktree) {
         choice = .existing(worktree.id)
     }
 
     /// Typing a branch name means the new worktree is the one wanted.
-    public func editBranchName(_ name: String) {
+    func editBranchName(_ name: String) {
         branchName = name
         choice = .newWorktree
         failure = nil
     }
 
-    public var filteredWorktrees: [GitWorktree] {
+    var filteredWorktrees: [GitWorktree] {
         let query = filter.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return worktrees }
         return worktrees.filter { Self.label(of: $0).localizedCaseInsensitiveContains(query) }
     }
 
-    public static func label(of worktree: GitWorktree) -> String {
+    static func label(of worktree: GitWorktree) -> String {
         switch worktree.checkout {
         case .branch(let name): name
         case .detached(let sha): sha
@@ -110,7 +110,7 @@ public final class NewSessionModel {
     // MARK: - Creating
 
     /// `nil` for an empty name: nothing to complain about yet.
-    public var nameProblem: NameProblem? {
+    var nameProblem: NameProblem? {
         switch GitRefName.problem(in: branchName) {
         case .empty: nil
         case .invalid(let reason): .invalid(reason)
@@ -118,7 +118,7 @@ public final class NewSessionModel {
         }
     }
 
-    public var canCreate: Bool {
+    var canCreate: Bool {
         choice == .newWorktree
             && !branchName.isEmpty
             && nameProblem == nil
@@ -129,13 +129,13 @@ public final class NewSessionModel {
     }
 
     /// Where the worktree would go, shown so nobody is surprised by it.
-    public var location: URL? {
+    var location: URL? {
         GitWorktreeLocation.path(forBranch: branchName, inRepository: repository, kind: kind)
     }
 
     /// Creates the worktree. Returns whether it was created; on `false`,
     /// `failure` says why.
-    public func create() async -> Bool {
+    func create() async -> Bool {
         guard canCreate, let location else { return false }
         isCreating = true
         defer { isCreating = false }

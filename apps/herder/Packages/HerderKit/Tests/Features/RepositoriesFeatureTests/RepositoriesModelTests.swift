@@ -3,102 +3,102 @@ import Foundation
 import TestSupport
 import Testing
 
-@testable import WorkspacesFeature
+@testable import RepositoriesFeature
 
-@Suite @MainActor struct WorkspacesModelTests {
+@Suite @MainActor struct RepositoriesModelTests {
     let bookmarks = InMemoryBookmarkClient()
     let git = StubGitClient()
     let state = InMemoryStateStore()
     let store: RepositoryStore
     let picker = StubFolderPickerClient()
-    let model: WorkspacesModel
+    let model: RepositoriesModel
 
     init() throws {
         store = RepositoryStore(bookmarks: bookmarks, git: git, state: state)
-        model = WorkspacesModel(store: store, git: git, picker: picker)
+        model = RepositoriesModel(store: store, git: git, picker: picker)
     }
 
-    func addWorkspace(_ path: String) async throws -> Repository {
+    func addRepository(_ path: String) async throws -> Repository {
         let url = URL(filePath: path)
         git.seed(url, .mainWorkingTree)
         git.seed(worktrees: [GitWorktree(path: url, checkout: .branch("main"), isMainWorkingTree: true)], at: url)
         return try await store.add(url: url)
     }
 
-    @Test func refreshReadsTheWorktreesOfOpenWorkspaces() async throws {
-        let workspace = try await addWorkspace("/code/api")
+    @Test func refreshReadsTheWorktreesOfOpenRepositories() async throws {
+        let repository = try await addRepository("/code/api")
 
-        await model.refresh([workspace])
+        await model.refresh([repository])
 
-        #expect(model.listings[workspace.id] == .loaded([
+        #expect(model.listings[repository.id] == .loaded([
             GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true)
         ]))
     }
 
     @Test func aFolderThatCannotBeReadIsNotAnEmptyRepository() async throws {
-        let workspace = try await addWorkspace("/code/api")
+        let repository = try await addRepository("/code/api")
         git.seedUnreadable(URL(filePath: "/code/api"))
 
-        await model.refresh([workspace])
+        await model.refresh([repository])
 
-        #expect(model.listings[workspace.id] == .unreadable)
+        #expect(model.listings[repository.id] == .unreadable)
     }
 
-    @Test func anUnavailableWorkspaceIsNeitherReadNorExpanded() async throws {
-        var workspace = try await addWorkspace("/code/api")
-        workspace.isAvailable = false
+    @Test func anUnavailableRepositoryIsNeitherReadNorExpanded() async throws {
+        var repository = try await addRepository("/code/api")
+        repository.isAvailable = false
 
-        await model.refresh([workspace])
+        await model.refresh([repository])
 
-        #expect(model.listings[workspace.id] == nil)
-        #expect(!model.isExpanded(workspace))
+        #expect(model.listings[repository.id] == nil)
+        #expect(!model.isExpanded(repository))
     }
 
     @Test func workspacesStartExpanded() async throws {
-        let workspace = try await addWorkspace("/code/api")
-        #expect(model.isExpanded(workspace))
+        let repository = try await addRepository("/code/api")
+        #expect(model.isExpanded(repository))
     }
 
-    @Test func aCollapsedWorkspaceIsNotRead() async throws {
-        let workspace = try await addWorkspace("/code/api")
+    @Test func aCollapsedRepositoryIsNotRead() async throws {
+        let repository = try await addRepository("/code/api")
 
-        await model.toggle(workspace)
-        await model.refresh([workspace])
+        await model.toggle(repository)
+        await model.refresh([repository])
 
-        #expect(!model.isExpanded(workspace))
-        #expect(model.listings[workspace.id] == nil)
+        #expect(!model.isExpanded(repository))
+        #expect(model.listings[repository.id] == nil)
     }
 
     @Test func expandingAgainReadsTheWorktrees() async throws {
-        let workspace = try await addWorkspace("/code/api")
+        let repository = try await addRepository("/code/api")
 
-        await model.toggle(workspace)
-        await model.toggle(workspace)
+        await model.toggle(repository)
+        await model.toggle(repository)
 
-        #expect(model.isExpanded(workspace))
-        #expect(model.listings[workspace.id] != nil)
+        #expect(model.isExpanded(repository))
+        #expect(model.listings[repository.id] != nil)
     }
 
     /// Folding is the user's arrangement, so it is on the repository record and
     /// comes back with it rather than being redone every launch.
     @Test func collapsingSurvivesALaunch() async throws {
-        let workspace = try await addWorkspace("/code/api")
-        await model.toggle(workspace)
+        let repository = try await addRepository("/code/api")
+        await model.toggle(repository)
 
         let relaunched = RepositoryStore(bookmarks: bookmarks, git: git, state: state)
         await relaunched.load()
-        let next = WorkspacesModel(store: relaunched, git: git, picker: picker)
+        let next = RepositoriesModel(store: relaunched, git: git, picker: picker)
 
         #expect(!next.isExpanded(try #require(relaunched.repositories.first)))
     }
 
-    @Test func removingForgetsTheWorkspaceAndItsState() async throws {
-        let workspace = try await addWorkspace("/code/api")
-        let id = workspace.id
-        await model.refresh([workspace])
-        await model.toggle(workspace)
+    @Test func removingForgetsTheRepositoryAndItsState() async throws {
+        let repository = try await addRepository("/code/api")
+        let id = repository.id
+        await model.refresh([repository])
+        await model.toggle(repository)
 
-        await model.remove(workspace)
+        await model.remove(repository)
 
         #expect(store.repositories.isEmpty)
         #expect(model.listings[id] == nil)
@@ -106,20 +106,20 @@ import Testing
     }
 
     @Test func committingARenameEndsEditingAndSavesTheName() async throws {
-        let workspace = try await addWorkspace("/code/api")
-        model.renaming = workspace.id
+        let repository = try await addRepository("/code/api")
+        model.renaming = repository.id
 
-        await model.commitRename(workspace, to: "Gateway")
+        await model.commitRename(repository, to: "Gateway")
 
         #expect(model.renaming == nil)
         #expect(store.repositories.first?.name == "Gateway")
     }
 
     @Test func committingABlankRenameKeepsTheName() async throws {
-        let workspace = try await addWorkspace("/code/api")
-        model.renaming = workspace.id
+        let repository = try await addRepository("/code/api")
+        model.renaming = repository.id
 
-        await model.commitRename(workspace, to: "")
+        await model.commitRename(repository, to: "")
 
         #expect(model.renaming == nil)
         #expect(store.repositories.first?.name == "api")
@@ -140,7 +140,7 @@ import Testing
         #expect(model.adding == nil)
     }
 
-    @Test func submittingClosesTheModalOnceTheWorkspaceIsAdded() async throws {
+    @Test func submittingClosesTheModalOnceTheRepositoryIsAdded() async throws {
         let url = URL(filePath: "/code/api")
         git.seed(url, .mainWorkingTree)
         picker.script(url)
@@ -168,42 +168,42 @@ import Testing
 
     // MARK: - New session
 
-    @Test func aNewSessionOpensForAnAvailableWorkspace() async throws {
-        let workspace = try await addWorkspace("/code/api")
+    @Test func aNewSessionOpensForAnAvailableRepository() async throws {
+        let repository = try await addRepository("/code/api")
 
-        model.beginNewSession(in: workspace)
+        model.beginNewSession(in: repository)
 
-        #expect(model.newSession?.workspaceName == "api")
+        #expect(model.newSession?.repositoryName == "api")
         #expect(model.isModalPresented)
     }
 
-    @Test func anUnavailableWorkspaceCannotStartASession() async throws {
-        var workspace = try await addWorkspace("/code/api")
-        workspace.isAvailable = false
+    @Test func anUnavailableRepositoryCannotStartASession() async throws {
+        var repository = try await addRepository("/code/api")
+        repository.isAvailable = false
 
-        model.beginNewSession(in: workspace)
+        model.beginNewSession(in: repository)
 
         #expect(model.newSession == nil)
     }
 
     @Test func onlyOneModalAtATime() async throws {
-        let workspace = try await addWorkspace("/code/api")
+        let repository = try await addRepository("/code/api")
         model.beginAdding()
 
-        model.beginNewSession(in: workspace)
+        model.beginNewSession(in: repository)
         #expect(model.newSession == nil)
 
         model.cancelAdding()
-        model.beginNewSession(in: workspace)
+        model.beginNewSession(in: repository)
         model.beginAdding()
         #expect(model.adding == nil)
     }
 
     @Test func creatingAWorktreeClosesTheModalAndShowsIt() async throws {
-        let workspace = try await addWorkspace("/code/api")
+        let repository = try await addRepository("/code/api")
         let url = URL(filePath: "/code/api")
         git.seed(branches: ["main"], at: url)
-        model.beginNewSession(in: workspace)
+        model.beginNewSession(in: repository)
         let session = try #require(model.newSession)
         await session.load()
         session.editBranchName("fix")
@@ -215,14 +215,14 @@ import Testing
 
         #expect(model.newSession == nil)
         #expect(git.addedWorktrees.count == 1)
-        #expect(model.listings[workspace.id] == .loaded([created]))
+        #expect(model.listings[repository.id] == .loaded([created]))
     }
 
     @Test func aRefusedCreateLeavesTheModalUp() async throws {
-        let workspace = try await addWorkspace("/code/api")
+        let repository = try await addRepository("/code/api")
         git.seed(branches: ["main"], at: URL(filePath: "/code/api"))
         git.failAddingWorktrees(with: "no")
-        model.beginNewSession(in: workspace)
+        model.beginNewSession(in: repository)
         let session = try #require(model.newSession)
         await session.load()
         session.editBranchName("fix")
@@ -233,68 +233,68 @@ import Testing
         #expect(session.failure == "no")
     }
 
-    // MARK: - Which workspace a worktree belongs to
+    // MARK: - Which repository a worktree belongs to
     //
     // These replace four tests about `selectedWorktree`, which this model no
     // longer owns: which workspace is active is the window's, in `WindowModel`.
     // What is left here is the association the old selection kept by hand — and
     // which the listings already knew — plus the panes' need to name it.
 
-    @Test func aWorktreeIsNamedAfterTheWorkspaceHoldingIt() async throws {
-        let workspace = try await addWorkspace("/code/api")
+    @Test func aWorktreeIsNamedAfterTheRepositoryHoldingIt() async throws {
+        let repository = try await addRepository("/code/api")
         git.seed(worktrees: [
             GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
         ], at: URL(filePath: "/code/api"))
 
-        await model.refresh(workspace)
+        await model.refresh(repository)
 
-        #expect(model.nameOfWorkspace(holding: URL(filePath: "/code/api")) == workspace.name)
+        #expect(model.nameOfRepository(holding: URL(filePath: "/code/api")) == repository.name)
     }
 
     /// A worktree the list has never seen belongs to nothing it can name. This
     /// is what tells a window its worktree has been removed in a terminal.
-    @Test func aWorktreeNoWorkspaceClaimsIsNotKnown() async throws {
-        let workspace = try await addWorkspace("/code/api")
-        await model.refresh(workspace)
+    @Test func aWorktreeNoRepositoryClaimsIsNotKnown() async throws {
+        let repository = try await addRepository("/code/api")
+        await model.refresh(repository)
 
         #expect(!model.isKnown(URL(filePath: "/code/api-gone")))
-        #expect(model.nameOfWorkspace(holding: URL(filePath: "/code/api-gone")) == nil)
+        #expect(model.nameOfRepository(holding: URL(filePath: "/code/api-gone")) == nil)
     }
 
     @Test func aWorktreeThatIsStillThereStaysKnown() async throws {
-        let workspace = try await addWorkspace("/code/api")
+        let repository = try await addRepository("/code/api")
         git.seed(worktrees: [
             GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
         ], at: URL(filePath: "/code/api"))
 
-        await model.refresh(workspace)
-        await model.refresh(workspace)
+        await model.refresh(repository)
+        await model.refresh(repository)
 
         #expect(model.isKnown(URL(filePath: "/code/api")))
     }
 
-    @Test func removingAWorkspaceForgetsItsWorktrees() async throws {
-        let workspace = try await addWorkspace("/code/api")
+    @Test func removingARepositoryForgetsItsWorktrees() async throws {
+        let repository = try await addRepository("/code/api")
         git.seed(worktrees: [
             GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
         ], at: URL(filePath: "/code/api"))
-        await model.refresh(workspace)
+        await model.refresh(repository)
 
-        await model.remove(workspace)
+        await model.remove(repository)
 
         #expect(!model.isKnown(URL(filePath: "/code/api")))
     }
 
     /// A rename has to show in the pane header, which reads this.
-    @Test func renamingAWorkspaceChangesWhatItsWorktreesAreNamedAfter() async throws {
-        let workspace = try await addWorkspace("/code/api")
+    @Test func renamingARepositoryChangesWhatItsWorktreesAreNamedAfter() async throws {
+        let repository = try await addRepository("/code/api")
         git.seed(worktrees: [
             GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
         ], at: URL(filePath: "/code/api"))
-        await model.refresh(workspace)
+        await model.refresh(repository)
 
-        await model.commitRename(workspace, to: "API")
+        await model.commitRename(repository, to: "API")
 
-        #expect(model.nameOfWorkspace(holding: URL(filePath: "/code/api")) == "API")
+        #expect(model.nameOfRepository(holding: URL(filePath: "/code/api")) == "API")
     }
 }

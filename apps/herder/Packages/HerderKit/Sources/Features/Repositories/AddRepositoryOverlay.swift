@@ -2,14 +2,14 @@ import DesignSystem
 import PhosphorSwift
 import SwiftUI
 
-/// The add-workspace modal, drawn over the whole window.
+/// The add-repository modal, drawn over the whole window.
 ///
 /// Rendered by `AppView` rather than by the sidebar: an overlay inside the
 /// sidebar cannot reach past its edge, and the scrim has to cover both panes.
-public struct AddWorkspaceOverlay: View {
-    private let model: WorkspacesModel
+public struct AddRepositoryOverlay: View {
+    private let model: RepositoriesModel
 
-    public init(model: WorkspacesModel) {
+    public init(model: RepositoriesModel) {
         self.model = model
     }
 
@@ -24,7 +24,7 @@ public struct AddWorkspaceOverlay: View {
                     .onTapGesture { model.cancelAdding() }
                     .transition(.opacity)
 
-                AddWorkspaceCard(
+                AddRepositoryCard(
                     model: adding,
                     cancel: { model.cancelAdding() },
                     submit: { Task { await model.submitAdding() } }
@@ -36,8 +36,8 @@ public struct AddWorkspaceOverlay: View {
     }
 }
 
-private struct AddWorkspaceCard: View {
-    let model: AddWorkspaceModel
+private struct AddRepositoryCard: View {
+    let model: AddRepositoryModel
     let cancel: () -> Void
     let submit: () -> Void
 
@@ -148,7 +148,7 @@ private struct AddWorkspaceCard: View {
 }
 
 private struct RefusalMessage: View {
-    let refusal: AddWorkspaceModel.Refusal
+    let refusal: AddRepositoryModel.Refusal
     let chooseMainRepository: () -> Void
 
     var body: some View {

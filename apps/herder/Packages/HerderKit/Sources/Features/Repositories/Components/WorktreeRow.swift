@@ -53,7 +53,7 @@ struct WorktreeRow: View {
         .truncationMode(.tail)
         .padding(.horizontal, Theme.Spacing.normal)
         .padding(.vertical, Theme.Spacing.tight + 2)
-        // Past the guide line, landing the icon under the workspace's own:
+        // Past the guide line, landing the icon under the repository's own:
         // the line sits mid-chevron, and the icon a chevron's width past it.
         .padding(.leading, Theme.Size.chevron / 2 - 1)
         .background {

@@ -289,3 +289,35 @@ whatever the code currently says and pass.
 - **Nothing closes a workspace except the folder vanishing or the app quitting.**
   There is no UI for it. That is fine while a workspace costs a watcher, and
   wants revisiting when one can hold an agent session.
+
+## From Phase 5, Repositories
+
+- **The UI still says "workspace" where the code now says repository.** The
+  sidebar header is "Workspaces", the button and the modal are "Add workspace",
+  and the empty state reads "No workspaces yet". Under rule 3 those are
+  behaviour, so the rename stopped at the code and the strings were restored
+  verbatim. They are now the only place in the app where "workspace" means a
+  repository, which is exactly the collision D4 existed to remove — it wants a
+  copy pass, and that is Kurt's call rather than a mechanical one. Five strings,
+  in `RepositoriesView` and `AddRepositoryOverlay`.
+- **`RepositoriesModel.isKnown(_:)` has no caller outside its tests.** 4c
+  introduced it so a window could notice its worktree had been removed, and then
+  solved that through `Workspace.isAvailable` instead. It is `internal` now, so
+  it is dead code inside the module rather than unused API. Phase 8 either
+  deletes it or the next feature that needs it finds it.
+- **The feature's public surface is four names**, not everything it used to
+  export: `RepositoriesModel` (with `init`, `isModalPresented`,
+  `nameOfRepository(holding:)` and `beginAdding()`), `RepositoriesView`,
+  `AddRepositoryOverlay` and `NewSessionOverlay`. `AddRepositoryModel` and
+  `NewSessionModel` are internal; their tests already used `@testable`, so
+  nothing had to change to allow it. The overlays stay separate from the view
+  because `AppView` draws them past the sidebar's edge, over the whole window.
+- **`AppEnvironment.repositoryList` reads oddly beside `repositories`.** One is
+  the feature's model, the other the store it reads; the pair is
+  `RepositoriesModel` + `RepositoryStore` spelled out, and `Sidebar` takes them
+  as `model` and `store`. Worth a better name if a second app-scoped feature
+  arrives.
+- **One pre-existing warning fixed in passing**: `try?` on a
+  `@discardableResult` call in `PreviewClients` still warns, because `try?`
+  wraps the result in a new optional that `@discardableResult` does not cover.
+  `_ =` in front of it. It predates this task but the bar is zero warnings.
