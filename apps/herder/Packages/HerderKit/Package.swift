@@ -46,7 +46,7 @@ let package = Package(
 
         // Syntax highlighting. The grammars, their queries and the table
         // matching a file to a language are all in the `herder-syntax` Rust
-        // crate under `packages/syntax`; this is the Swift face of it.
+        // crate under `packages/syntax-highlighter`; this is the Swift face of it.
         //
         // An XCFramework because that is the only shape a `.binaryTarget`
         // takes. It is a build artifact, not a checked-in one: `just bootstrap`

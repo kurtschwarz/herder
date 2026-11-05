@@ -10,7 +10,7 @@ packages; this file is the rules.
 ## Layout
 
 ```
-packages/syntax/
+packages/syntax-highlighter/
 ├── Cargo.toml              # one dependency line per grammar
 ├── rust-toolchain.toml     # pinned, like Package.resolved
 ├── .cargo/config.toml      # macOS deployment target, matched to the app's
@@ -144,7 +144,7 @@ Adding a `Kind` is a bigger change: it has to be mirrored in
 
 ## Commands
 
-Run from this directory, or append `packages/syntax` to the root `justfile`
+Run from this directory, or append `packages/syntax-highlighter` to the root `justfile`
 equivalents.
 
 ```sh

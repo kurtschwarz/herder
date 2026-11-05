@@ -20,9 +20,9 @@ build/
 .swiftpm/
 
 # Rust build output, and the XCFramework copied out of it. Both are generated
-# from packages/syntax by `just build apps/herder`.
-target/
-Vendor/
+# from packages/syntax-highlighter by `just build apps/herder`.
+packages/syntax-highlighter/target/
+apps/herder/Packages/HerderKit/Vendor/
 
 # Tooling caches
 .xcodegen/

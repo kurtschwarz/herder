@@ -23,7 +23,7 @@ herder/
 New apps go in `apps/<name>/`. Services go in `services/<name>/`. A package under
 `packages/` is for code that does not belong inside one app: either because more
 than one of them uses it, or because it is not written in the app's language.
-`packages/syntax` is the second kind — Rust, consumed by the macOS app as an
+`packages/syntax-highlighter` is the second kind — Rust, consumed by the macOS app as an
 XCFramework.
 
 ## Getting started
@@ -39,7 +39,7 @@ Requires Xcode 26+, `brew install just xcodegen`, and a Rust toolchain
 targets it needs.
 
 `HerderKit` has a `.binaryTarget` pointing at an XCFramework built from
-`packages/syntax`, so a fresh clone must run `just bootstrap apps/herder` before
+`packages/syntax-highlighter`, so a fresh clone must run `just bootstrap apps/herder` before
 the Swift package will resolve. Every recipe that compiles Swift rebuilds the
 crate first: a stale static library would link without complaint and highlight
 with yesterday's grammars.
@@ -151,7 +151,7 @@ need to talk, that goes through `AppFeature` or a shared model.
 ### Syntax highlighting
 
 The editor's colours come from tree-sitter, which is a C library with a grammar
-per language. Those grammars are driven from Rust, in `packages/syntax`, rather
+per language. Those grammars are driven from Rust, in `packages/syntax-highlighter`, rather
 than from Swift, for one reason: the `tree-sitter-highlight` crate already does
 the two awkward parts. It resolves a grammar's capture names against a list of
 names you recognize, longest dotted prefix first, so `@keyword.control.conditional`
@@ -162,14 +162,14 @@ both hand-written.
 
 Three modules share the work, and none of them knows all of it:
 
-- `packages/syntax` owns the grammars, the queries and the table matching a file
+- `packages/syntax-highlighter` owns the grammars, the queries and the table matching a file
   to a language. It emits spans with a semantic kind and no opinion about colour.
 - `Syntax` is the Swift face of that: `SyntaxTokenKind`, `SyntaxToken`,
   `SourceText` and the `SyntaxHighlighter` protocol.
 - `EditorFeature` pairs a kind with a colour from `DesignSystem`.
 
 So adding a language touches one file in Rust and nothing in Swift, and retheming
-touches `Theme.swift` and nothing else. `packages/syntax/AGENTS.md` has the
+touches `Theme.swift` and nothing else. `packages/syntax-highlighter/AGENTS.md` has the
 procedure for both.
 
 The boundary speaks UTF-8 going in and UTF-16 offsets coming out, so neither side

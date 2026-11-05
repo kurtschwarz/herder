@@ -4,7 +4,7 @@ import HerderSyntaxFFI
 /// The real highlighter: tree-sitter, through the `herder-syntax` crate.
 ///
 /// The grammars, the queries and the table matching a file to a language all
-/// live in `packages/syntax`. Adding a language is a dependency in its
+/// live in `packages/syntax-highlighter`. Adding a language is a dependency in its
 /// `Cargo.toml` and a row in its `LANGUAGES` — nothing here changes, and
 /// nothing above here can tell.
 ///

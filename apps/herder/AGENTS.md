@@ -52,7 +52,7 @@ apps/herder/
 | Live state two features both read | `Worktrees/`, not whichever feature needed it first |
 | A plain value type | `Models/`, one type per file named after the type |
 | AppKit bridging | the feature's `Platform/` |
-| A language for the editor to highlight | `../../packages/syntax`, not here. See its `AGENTS.md`. |
+| A language for the editor to highlight | `../../packages/syntax-highlighter`, not here. See its `AGENTS.md`. |
 | A colour for a token kind | `DesignSystem/Theme.swift`, paired in `EditorFeature/Platform/SyntaxAttributes.swift` |
 
 Organise by feature, not by type: a feature's view, model and subviews sit together.
@@ -115,7 +115,7 @@ just syntax        # rebuild the Rust crate and refresh its XCFramework
 up by SwiftPM, so only changes to `Herder/` or `UITests/` need `just project`.
 
 `HerderKit` has a `.binaryTarget` on `Vendor/HerderSyntaxFFI.xcframework`, built
-from `../../packages/syntax` and gitignored like the project file. `test`, `build`
+from `../../packages/syntax-highlighter` and gitignored like the project file. `test`, `build`
 and `bootstrap` all depend on the `syntax` recipe, so it is never stale; a fresh
 clone needs `just bootstrap` before SwiftPM will resolve the package, and needs a
 Rust toolchain for that to work.

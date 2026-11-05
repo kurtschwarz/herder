@@ -9,7 +9,7 @@ kit := "Packages/HerderKit"
 
 # The syntax-highlighting crate. Its XCFramework is a `.binaryTarget` of
 # HerderKit, so it has to exist before SwiftPM will resolve the package at all.
-crate := "../../packages/syntax"
+crate := "../../packages/syntax-highlighter"
 vendor := kit + "/Vendor"
 
 # `platform=macOS` alone matches both arm64 and x86_64, which makes xcodebuild warn

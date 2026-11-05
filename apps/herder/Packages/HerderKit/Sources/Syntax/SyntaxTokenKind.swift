@@ -8,7 +8,7 @@
 /// apart from the others, which runs out long before the hundreds of capture
 /// names tree-sitter grammars use between them.
 ///
-/// Raw values match `Kind` in `packages/syntax/src/kind.rs`, and
+/// Raw values match `Kind` in `packages/syntax-highlighter/src/kind.rs`, and
 /// `SyntaxTests` asserts the two have the same number of cases.
 public enum SyntaxTokenKind: UInt32, Sendable, CaseIterable {
     case comment = 0

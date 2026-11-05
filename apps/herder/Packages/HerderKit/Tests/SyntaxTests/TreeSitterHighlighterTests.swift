@@ -3,7 +3,7 @@ import Syntax
 import Testing
 
 /// Covers the boundary, not the grammars. What each grammar produces is tested
-/// in `packages/syntax`, where a failure says which capture went wrong; these
+/// in `packages/syntax-highlighter`, where a failure says which capture went wrong; these
 /// check that the two sides agree on offsets, kinds and ownership.
 @Suite struct TreeSitterHighlighterTests {
     let highlighter = TreeSitterHighlighter()
