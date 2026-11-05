@@ -5,6 +5,7 @@ import Observation
 import SwiftData
 import Storage
 import WorkspacesFeature
+import Worktrees
 
 /// Composition root for the feature graph.
 ///
@@ -14,11 +15,14 @@ import WorkspacesFeature
 /// `@MainActor` is implicit: this target's default isolation is `MainActor`.
 @Observable
 public final class AppModel {
-    private let files: any FileClient
-
     /// Every change to the workspace list goes through here. Views read the list
     /// itself with `@Query` against the injected container.
     public let workspaces: WorkspaceStore
+
+    /// The authoritative file and git state of the worktrees being watched.
+    /// Held here rather than inside a feature because more than one pane reads
+    /// it and features never import each other.
+    public let worktrees: WorktreeStateStore
 
     /// What the sidebar shows beside the list itself.
     public let workspaceList: WorkspacesModel
@@ -33,13 +37,16 @@ public final class AppModel {
         bookmarks: any BookmarkClient,
         git: any GitClient,
         folderPicker: any FolderPickerClient,
+        watcher: any FileWatcherClient,
+        clock: any ClockClient,
         context: ModelContext
     ) {
-        self.files = files
         let workspaces = WorkspaceStore(context: context, bookmarks: bookmarks, git: git)
         self.workspaces = workspaces
         self.workspaceList = WorkspacesModel(store: workspaces, git: git, picker: folderPicker)
-        self.explorer = ExplorerModel(files: files, git: git)
+        let worktrees = WorktreeStateStore(files: files, git: git, watcher: watcher, clock: clock)
+        self.worktrees = worktrees
+        self.explorer = ExplorerModel(store: worktrees)
     }
 
     /// Opens the add-workspace modal. Here rather than on the sidebar because a
@@ -60,8 +67,10 @@ public final class AppModel {
         }
     }
 
-    /// Hands back every folder the sandbox is holding open. Balances `start()`.
+    /// Hands back every folder the sandbox is holding open, and stops watching
+    /// for changes. Balances `start()`.
     public func stop() {
+        worktrees.stop()
         workspaces.access.endAll()
     }
 }

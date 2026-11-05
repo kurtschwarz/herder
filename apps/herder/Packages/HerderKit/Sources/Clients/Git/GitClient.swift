@@ -88,6 +88,18 @@ public protocol GitClient: Sendable {
     /// itself rather than reproducing what `git worktree add` writes.
     func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws
 
+    /// Where the working tree at `url` keeps its `index` and its `HEAD`.
+    ///
+    /// Worth asking for separately because `git add` writes no file in the
+    /// working tree at all — it writes the index — so nothing a watcher sees
+    /// under the tree would ever report a change to what is staged. And for a
+    /// linked worktree the answer is not inside the tree either: it is
+    /// `<main repository>/.git/worktrees/<name>`, which no recursive watch on
+    /// the worktree could reach.
+    ///
+    /// `nil` for a folder that is not a working tree.
+    func gitDirectory(of url: URL) async throws -> URL?
+
     /// What git says about every path in the working tree at `worktree`.
     ///
     /// One call for the whole tree rather than a question per folder: the cost

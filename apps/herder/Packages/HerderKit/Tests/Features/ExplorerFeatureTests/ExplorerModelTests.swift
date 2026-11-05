@@ -3,18 +3,25 @@ import ClientsTestSupport
 import Foundation
 import Models
 import Testing
-import WorktreeState
+import Worktrees
 
 @testable import ExplorerFeature
 
 @Suite struct ExplorerModelTests {
     let files = InMemoryFileClient()
     let git = StubGitClient()
+    let watcher = StubFileWatcherClient()
+    let clock = VirtualClockClient()
     let model: ExplorerModel
     let root = URL(filePath: "/code/api")
 
     init() {
-        model = ExplorerModel(files: files, git: git)
+        model = ExplorerModel(store: WorktreeStateStore(
+            files: files,
+            git: git,
+            watcher: watcher,
+            clock: clock
+        ))
     }
 
     func dir(_ name: String, in parent: URL? = nil) -> DirectoryEntry {
@@ -102,7 +109,7 @@ import WorktreeState
 
         await model.toggle(secret.url)
 
-        #expect(model.listings[secret.url] == .unreadable)
+        #expect(model.listing(of: secret.url) == .unreadable)
         #expect(model.rows.last?.kind == .unreadable)
     }
 
@@ -469,6 +476,115 @@ import WorktreeState
         #expect(model.status.status(of: PathKey(fresh.url.appending(path: "a.txt"))) == .untracked)
         // Untracked is not ignored: it is the work, not the leftovers.
         #expect(ignoredNames(model).isEmpty)
+    }
+
+    func marks(_ model: ExplorerModel) -> [String: ExplorerMark] {
+        Dictionary(uniqueKeysWithValues: model.rows.compactMap { row in
+            guard case .entry(let entry) = row.kind, let mark = row.mark else { return nil }
+            return (entry.name, mark)
+        })
+    }
+
+    @Test func aFileWearsWhatGitSaysAboutIt() async {
+        files.seed(children: [file("a.txt"), file("b.txt"), file("c.txt"), file("d.log")], of: root)
+        git.seed(status: [
+            "a.txt": .untracked,
+            "b.txt": .tracked(staged: .unchanged, unstaged: .modified),
+            "c.txt": .unmerged,
+            "d.log": .ignored,
+        ], in: root)
+
+        await model.setRoot(root)
+
+        // Ignored is said with a fade, not with a letter.
+        #expect(marks(model) == ["a.txt": .untracked, "b.txt": .modified, "c.txt": .unmerged])
+        #expect(ignoredNames(model) == ["d.log"])
+    }
+
+    /// Staged and unstaged stay apart in the model but read as one "modified"
+    /// in the tree, which has no language yet for telling them apart.
+    @Test func stagedAndUnstagedBothReadAsModified() async {
+        files.seed(children: [file("a.txt"), file("b.txt")], of: root)
+        git.seed(status: [
+            "a.txt": .tracked(staged: .added, unstaged: .unchanged),
+            "b.txt": .tracked(staged: .unchanged, unstaged: .modified),
+        ], in: root)
+
+        await model.setRoot(root)
+
+        #expect(marks(model) == ["a.txt": .modified, "b.txt": .modified])
+        #expect(model.status.status(of: PathKey(file("a.txt").url))
+            == .tracked(staged: .added, unstaged: .unchanged))
+    }
+
+    /// A deletion draws no row, so the mark on the folder above it is the only
+    /// thing that says it happened.
+    @Test func aClosedFolderWearsWhatChangedInsideIt() async {
+        let sources = dir("Sources")
+        files.seed(children: [sources], of: root)
+        files.seed(children: [], of: sources.url)
+        git.seed(status: ["Sources/Gone.swift": .tracked(staged: .deleted, unstaged: .unchanged)], in: root)
+        await model.setRoot(root)
+
+        #expect(marks(model) == ["Sources": .modified])
+
+        // Open, and the rows inside say it better than a mark could — except
+        // here there are none, which is the one case Q10 cannot rescue.
+        await model.toggle(sources.url)
+
+        #expect(marks(model).isEmpty)
+    }
+
+    @Test func aSelectionIsDroppedWhenItsFileGoesAway() async {
+        files.seed(children: [file("a.txt")], of: root)
+        await model.setRoot(root)
+        model.select(file("a.txt").url)
+        model.beginRenaming(file("a.txt").url)
+
+        files.seed(children: [], of: root)
+        watcher.change([root])
+        for _ in 0..<500 { await Task.yield() }
+
+        #expect(model.selected == nil)
+        #expect(model.renaming == nil)
+    }
+
+    /// The user is part-way through typing and its path does not exist yet by
+    /// definition, so nothing about the tree moving should take the field away.
+    @Test func aNameFieldSurvivesTheTreeChangingUnderIt() async {
+        files.seed(children: [file("a.txt")], of: root)
+        await model.setRoot(root)
+        await model.beginCreating(in: root, isDirectory: false)
+
+        files.seed(children: [file("a.txt"), file("b.txt")], of: root)
+        watcher.change([root])
+        for _ in 0..<500 { await Task.yield() }
+
+        #expect(model.creating != nil)
+        #expect(names(model) == ["a.txt", "b.txt"])
+    }
+
+    @Test func aFileMadeInATerminalShowsUpWithoutTheWindowBeingTouched() async {
+        files.seed(children: [file("a.txt")], of: root)
+        await model.setRoot(root)
+
+        files.seed(children: [file("a.txt"), file("b.txt")], of: root)
+        git.seed(status: ["b.txt": .untracked], in: root)
+        watcher.change([root])
+        for _ in 0..<500 { await Task.yield() }
+
+        #expect(names(model) == ["a.txt", "b.txt"])
+        #expect(marks(model) == ["b.txt": .untracked])
+    }
+
+    @Test func aWorktreeRemovedUnderTheAppShowsNothing() async {
+        files.seed(children: [file("a.txt")], of: root)
+        await model.setRoot(root)
+
+        watcher.vanish(root)
+        for _ in 0..<500 { await Task.yield() }
+
+        #expect(model.rows.isEmpty)
     }
 
     @Test func aTrackedChangeInsideAClosedFolderMarksTheFolder() async {

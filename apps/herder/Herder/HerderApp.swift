@@ -19,6 +19,8 @@ struct HerderApp: App {
             bookmarks: LiveBookmarkClient(),
             git: LiveGitClient(),
             folderPicker: LiveFolderPickerClient(),
+            watcher: LiveFileWatcherClient(),
+            clock: LiveClockClient(),
             context: container.mainContext
         )
         // Before any scene exists: a view must never render a workspace the

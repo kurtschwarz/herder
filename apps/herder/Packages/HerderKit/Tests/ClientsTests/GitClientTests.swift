@@ -49,6 +49,10 @@ import Testing
         try git("init", "--initial-branch=main", in: url)
         try git("config", "user.email", "test@example.com", in: url)
         try git("config", "user.name", "Test", in: url)
+        // The developer's own git config may sign commits, and a signing agent
+        // asked for dozens of signatures by a parallel test run starts
+        // refusing. Nothing here is testing signatures.
+        try git("config", "commit.gpgsign", "false", in: url)
         try Data("x".utf8).write(to: url.appending(path: "README.md"))
         try git("add", ".", in: url)
         try git("commit", "-m", "first", in: url)

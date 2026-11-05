@@ -2,7 +2,7 @@ import Clients
 import Foundation
 import Models
 import Testing
-import WorktreeState
+import Worktrees
 
 @Suite struct WorktreeStatusTests {
     let root = PathKey(resolved: "/code/api")

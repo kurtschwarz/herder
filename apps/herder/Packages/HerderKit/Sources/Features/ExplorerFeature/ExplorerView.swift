@@ -4,6 +4,7 @@ import DesignSystem
 import Models
 import PhosphorSwift
 import SwiftUI
+import Worktrees
 
 /// The explorer pane's content: a header over the file tree of the selected
 /// worktree.
@@ -66,10 +67,15 @@ public struct ExplorerView: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        // Files are made and removed in a terminal, so coming back to the app is
-        // the moment they may have changed.
+        // A watcher keeps the tree honest while the window is in front. Behind,
+        // changes still accumulate but are not acted on: the worst storms
+        // happen while the user is in a terminal running the build causing
+        // them. Coming forward is when they are worth catching up on.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            Task { await model.refresh() }
+            model.setWatching(true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+            model.setWatching(false)
         }
     }
 }
@@ -149,7 +155,12 @@ struct RevealInFinder: View {
 
 #if DEBUG
 #Preview {
-    ExplorerView(model: ExplorerModel(files: PreviewFiles(), git: PreviewGit()))
+    ExplorerView(model: ExplorerModel(store: WorktreeStateStore(
+        files: PreviewFiles(),
+        git: PreviewGit(),
+        watcher: PreviewWatcher(),
+        clock: LiveClockClient()
+    )))
         .frame(width: Theme.Size.sidebarWidth, height: 420)
         .glassPaneBackground()
         .padding(Theme.Spacing.windowPadding)
@@ -161,7 +172,14 @@ private struct PreviewGit: GitClient {
     func worktrees(at url: URL) async throws -> [GitWorktree] { [] }
     func branches(at url: URL) async throws -> [String] { [] }
     func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {}
+    func gitDirectory(of url: URL) async throws -> URL? { nil }
     func status(in worktree: URL) async throws -> GitWorktreeStatus { GitWorktreeStatus(root: PathKey(worktree)) }
+}
+
+private struct PreviewWatcher: FileWatcherClient {
+    func watch(_ roots: [URL], from position: FileWatcherPosition?) -> AsyncStream<FileChangeBatch> {
+        AsyncStream { $0.finish() }
+    }
 }
 
 private struct PreviewFiles: FileClient {

@@ -44,6 +44,7 @@ struct PreviewGitClient: GitClient {
     func branches(at url: URL) async throws -> [String] { ["feature", "main"] }
     func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {}
     func repositoryKind(at url: URL) async throws -> GitRepositoryKind { .mainWorkingTree }
+    func gitDirectory(of url: URL) async throws -> URL? { url.appending(path: ".git") }
     func status(in worktree: URL) async throws -> GitWorktreeStatus {
         let root = PathKey(worktree)
         return GitWorktreeStatus(root: root, entries: [root.appending("Package.swift"): .ignored])
@@ -53,6 +54,12 @@ struct PreviewGitClient: GitClient {
             GitWorktree(path: url, checkout: .branch("main"), isMainWorkingTree: true),
             GitWorktree(path: url.appending(path: "feature"), checkout: .branch("feature"), isMainWorkingTree: false),
         ]
+    }
+}
+
+struct PreviewFileWatcherClient: FileWatcherClient {
+    func watch(_ roots: [URL], from position: FileWatcherPosition?) -> AsyncStream<FileChangeBatch> {
+        AsyncStream { $0.finish() }
     }
 }
 
@@ -84,6 +91,8 @@ extension AppModel {
             bookmarks: PreviewBookmarkClient(),
             git: PreviewGitClient(),
             folderPicker: PreviewFolderPickerClient(),
+            watcher: PreviewFileWatcherClient(),
+            clock: LiveClockClient(),
             context: previewContainer.mainContext
         )
     }

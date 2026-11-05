@@ -102,6 +102,10 @@ public enum Theme {
         public static let hairline = Color.white.opacity(0.09)
 
         public static let warning = Color(red: 255 / 255, green: 158 / 255, blue: 100 / 255)
+
+        /// Something that needs resolving before work can go on, such as a
+        /// merge conflict.
+        public static let danger = Color(red: 247 / 255, green: 118 / 255, blue: 142 / 255)
     }
 
     public enum Gradient {

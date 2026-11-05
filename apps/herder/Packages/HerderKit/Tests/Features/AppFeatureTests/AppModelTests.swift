@@ -19,6 +19,8 @@ import Testing
             bookmarks: bookmarks,
             git: git,
             folderPicker: StubFolderPickerClient(),
+            watcher: StubFileWatcherClient(),
+            clock: VirtualClockClient(),
             context: ModelContext(try WorkspaceContainer.inMemory())
         )
     }

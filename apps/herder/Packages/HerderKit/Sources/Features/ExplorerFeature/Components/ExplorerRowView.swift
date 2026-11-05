@@ -35,6 +35,7 @@ struct ExplorerRowView: View {
                 entry: entry,
                 parent: row.parent,
                 isIgnored: row.isIgnored,
+                mark: row.mark,
                 model: model,
                 focus: focus,
                 isHovering: $isHovering
@@ -55,6 +56,7 @@ private struct EntryLine: View {
     let entry: DirectoryEntry
     let parent: URL
     let isIgnored: Bool
+    let mark: ExplorerMark?
     let model: ExplorerModel
     let focus: FocusState<ExplorerFocus?>.Binding
     @Binding var isHovering: Bool
@@ -93,6 +95,13 @@ private struct EntryLine: View {
             }
 
             Spacer(minLength: 0)
+
+            if let mark {
+                Text(mark.letter)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(isSelected ? Theme.Palette.onViolet : markColor(mark))
+                    .help(markHelp(mark))
+            }
         }
         .opacity(isIgnored ? Theme.Opacity.ignored : 1)
         .padding(.horizontal, Theme.Spacing.normal)
@@ -128,6 +137,24 @@ private struct EntryLine: View {
     private var fill: Color {
         if isSelected { return Theme.Palette.violet }
         return isHovering ? Theme.Palette.control : .clear
+    }
+
+    private func markColor(_ mark: ExplorerMark) -> Color {
+        switch mark {
+        case .untracked: Theme.Palette.accent
+        case .modified: Theme.Palette.warning
+        case .unmerged: Theme.Palette.danger
+        }
+    }
+
+    /// A closed folder's mark is about what is inside it, not about the folder.
+    private func markHelp(_ mark: ExplorerMark) -> String {
+        let inside = entry.isDirectory
+        switch mark {
+        case .untracked: return inside ? "Untracked files inside" : "Untracked"
+        case .modified: return inside ? "Changes inside" : "Changed"
+        case .unmerged: return inside ? "Conflicts inside" : "Conflicted"
+        }
     }
 
     private var iconColor: Color {

@@ -1,14 +1,19 @@
 import Clients
 import Foundation
+import Models
 import Synchronization
 
 /// In-memory `FileClient` for tests, so no test touches disk.
 ///
+/// Folders are keyed by `PathKey`, not by `URL`. The real file system does not
+/// care whether a folder URL came with a trailing slash or how it was built, and
+/// a fake that did would fail tests the live client passes.
+///
 /// All state sits behind a lock because Swift Testing runs tests in parallel.
 public final class InMemoryFileClient: FileClient {
     private struct Folders {
-        var children: [URL: [DirectoryEntry]] = [:]
-        var unreadable: Set<URL> = []
+        var children: [PathKey: [DirectoryEntry]] = [:]
+        var unreadable: Set<PathKey> = []
         var reads: [URL] = []
         var moves: [Move] = []
         var creations: [DirectoryEntry] = []
@@ -46,15 +51,16 @@ public final class InMemoryFileClient: FileClient {
 
     /// Sets what `children(of:)` returns for `url`. Replaces any earlier seed.
     public func seed(children: [DirectoryEntry], of url: URL) {
+        let key = PathKey(url)
         folders.withLock {
-            $0.children[url] = children
-            $0.unreadable.remove(url)
+            $0.children[key] = children
+            $0.unreadable.remove(key)
         }
     }
 
     /// Makes `children(of:)` throw for `url`.
     public func seedUnreadable(_ url: URL) {
-        folders.withLock { $0.unreadable.insert(url) }
+        folders.withLock { $0.unreadable.insert(PathKey(url)) }
     }
 
     /// Every folder `children(of:)` has been asked about, in order.
@@ -63,9 +69,10 @@ public final class InMemoryFileClient: FileClient {
     }
 
     public func children(of url: URL) async throws -> [DirectoryEntry] {
-        try folders.withLock {
+        let key = PathKey(url)
+        return try folders.withLock {
             $0.reads.append(url)
-            guard !$0.unreadable.contains(url), let children = $0.children[url] else {
+            guard !$0.unreadable.contains(key), let children = $0.children[key] else {
                 throw FileClientError.unreadable(path: url.path(percentEncoded: false))
             }
             return children
@@ -73,26 +80,24 @@ public final class InMemoryFileClient: FileClient {
     }
 
     public func move(_ source: URL, to destination: URL) async throws {
-        let parent = source.deletingLastPathComponent()
-        let path = destination.path(percentEncoded: false)
+        let from = PathKey(source)
+        let to = PathKey(destination)
+        guard let parent = from.parent else {
+            throw FileClientError.notFound(path: source.path(percentEncoded: false))
+        }
         try folders.withLock { state in
-            // Seeded and asked-for URLs may differ by a trailing slash.
-            func key(_ url: URL) -> URL {
-                state.children.keys.first { $0.path == url.path } ?? url
-            }
-            let parentKey = key(parent)
-            var siblings = state.children[parentKey] ?? []
-            guard siblings.contains(where: { $0.url.path == source.path }) else {
+            var siblings = state.children[parent] ?? []
+            guard siblings.contains(where: { PathKey($0.url) == from }) else {
                 throw FileClientError.notFound(path: source.path(percentEncoded: false))
             }
-            guard !siblings.contains(where: { $0.url.path == destination.path }) else {
-                throw FileClientError.alreadyExists(path: path)
+            guard !siblings.contains(where: { PathKey($0.url) == to }) else {
+                throw FileClientError.alreadyExists(path: destination.path(percentEncoded: false))
             }
             siblings = siblings.map {
-                $0.url.path == source.path ? DirectoryEntry(url: destination, isDirectory: $0.isDirectory) : $0
+                PathKey($0.url) == from ? DirectoryEntry(url: destination, isDirectory: $0.isDirectory) : $0
             }
-            state.children[parentKey] = siblings
-            state.children[destination] = state.children.removeValue(forKey: key(source))
+            state.children[parent] = siblings
+            state.children[to] = state.children.removeValue(forKey: from)
             state.moves.append(Move(source: source, destination: destination))
         }
     }
@@ -113,16 +118,18 @@ public final class InMemoryFileClient: FileClient {
     }
 
     public func create(_ url: URL, isDirectory: Bool) async throws {
-        let parent = url.deletingLastPathComponent()
+        let key = PathKey(url)
+        guard let parent = key.parent else {
+            throw FileClientError.unreadable(path: url.path(percentEncoded: false))
+        }
         try folders.withLock { state in
-            let parentKey = state.children.keys.first { $0.path == parent.path } ?? parent
-            var siblings = state.children[parentKey] ?? []
-            guard !siblings.contains(where: { $0.url.path == url.path }) else {
+            var siblings = state.children[parent] ?? []
+            guard !siblings.contains(where: { PathKey($0.url) == key }) else {
                 throw FileClientError.alreadyExists(path: url.path(percentEncoded: false))
             }
             siblings.append(DirectoryEntry(url: url, isDirectory: isDirectory))
-            state.children[parentKey] = siblings
-            if isDirectory { state.children[url] = [] }
+            state.children[parent] = siblings
+            if isDirectory { state.children[key] = [] }
             state.creations.append(DirectoryEntry(url: url, isDirectory: isDirectory))
         }
     }

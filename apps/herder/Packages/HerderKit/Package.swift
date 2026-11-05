@@ -42,7 +42,7 @@ let package = Package(
         // The authoritative file and git state of a worktree, watched and kept
         // fresh. Above the clients and below the features, because more than
         // one feature reads it and features never import each other.
-        .target(name: "WorktreeState", dependencies: ["Models", "Clients"], swiftSettings: ui),
+        .target(name: "Worktrees", dependencies: ["Models", "Clients"], swiftSettings: ui),
 
         // Shared views, styles, tokens.
         .target(
@@ -68,7 +68,7 @@ let package = Package(
         .target(
             name: "ExplorerFeature",
             dependencies: [
-                "Models", "Clients", "DesignSystem", "WorktreeState",
+                "Models", "Clients", "DesignSystem", "Worktrees",
                 .product(name: "PhosphorSwift", package: "swift"),
             ],
             path: "Sources/Features/ExplorerFeature",
@@ -78,7 +78,7 @@ let package = Package(
         .target(
             name: "AppFeature",
             dependencies: [
-                "Models", "Clients", "DesignSystem", "Storage",
+                "Models", "Clients", "DesignSystem", "Storage", "Worktrees",
                 "WorkspacesFeature", "ExplorerFeature",
             ],
             path: "Sources/Features/AppFeature",
@@ -101,8 +101,8 @@ let package = Package(
             swiftSettings: ui
         ),
         .testTarget(
-            name: "WorktreeStateTests",
-            dependencies: ["WorktreeState", "Clients", "ClientsTestSupport"],
+            name: "WorktreesTests",
+            dependencies: ["Worktrees", "Models", "Clients", "ClientsTestSupport"],
             swiftSettings: ui
         ),
         .testTarget(
@@ -113,7 +113,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ExplorerFeatureTests",
-            dependencies: ["ExplorerFeature", "Models", "Clients", "ClientsTestSupport", "WorktreeState"],
+            dependencies: ["ExplorerFeature", "Models", "Clients", "ClientsTestSupport", "Worktrees"],
             path: "Tests/Features/ExplorerFeatureTests",
             swiftSettings: ui
         ),

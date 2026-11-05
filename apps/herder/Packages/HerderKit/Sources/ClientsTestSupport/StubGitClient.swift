@@ -14,6 +14,7 @@ public final class StubGitClient: GitClient {
     private let added = Mutex<[AddedWorktree]>([])
     private let addFailure = Mutex<String?>(nil)
     private let unreadable = Mutex<Set<String>>([])
+    private let gitDirectories = Mutex<[String: URL?]>([:])
     private let statuses = Mutex<[String: [String: GitStatus]]>([:])
     private let statusAsked = Mutex<[URL]>([])
     private let statusFails = Mutex(false)
@@ -67,6 +68,17 @@ public final class StubGitClient: GitClient {
     /// vanished between being listed and being read.
     public func seedUnreadable(_ url: URL) {
         unreadable.withLock { _ = $0.insert(FolderKey.of(url)) }
+    }
+
+    /// Declares where the working tree at `worktree` keeps its index.
+    public func seed(gitDirectory: URL?, of worktree: URL) {
+        gitDirectories.withLock { $0[FolderKey.of(worktree)] = gitDirectory }
+    }
+
+    /// `<worktree>/.git` unless seeded otherwise, which is the layout of an
+    /// ordinary repository.
+    public func gitDirectory(of url: URL) async throws -> URL? {
+        gitDirectories.withLock { $0[FolderKey.of(url)] } ?? url.appending(path: ".git")
     }
 
     /// Declares what git would say about the working tree at `worktree`, keyed

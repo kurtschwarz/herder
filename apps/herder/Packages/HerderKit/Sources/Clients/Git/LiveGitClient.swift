@@ -170,6 +170,24 @@ public struct LiveGitClient: GitClient {
         ])
     }
 
+    @concurrent
+    public func gitDirectory(of url: URL) async throws -> URL? {
+        let url = url.resolvingSymlinksInPath()
+        let dotGit = url.appending(path: ".git")
+
+        switch entryKind(at: dotGit) {
+        case .directory:
+            return isGitDirectory(dotGit) ? dotGit : nil
+        case .file:
+            // A `.git` file naming a bare repository is the folder that holds
+            // the checkouts, not a checkout: it has no index of its own.
+            guard let directory = linkedGitDirectory(at: dotGit, relativeTo: url) else { return nil }
+            return isGitDirectory(directory) && isBare(directory) ? nil : directory
+        case .missing:
+            return nil
+        }
+    }
+
     /// `--untracked-files=normal` is the load-bearing flag: it collapses an
     /// untracked or ignored folder into one line instead of walking into it, so
     /// the output stays small no matter what a build has written. `-z` is the
