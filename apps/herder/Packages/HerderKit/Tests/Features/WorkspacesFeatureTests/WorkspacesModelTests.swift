@@ -8,17 +8,14 @@ import Testing
 @Suite @MainActor struct WorkspacesModelTests {
     let bookmarks = InMemoryBookmarkClient()
     let git = StubGitClient()
+    let state = InMemoryStateStore()
     let store: RepositoryStore
     let picker = StubFolderPickerClient()
-    let defaults: UserDefaults
-    let suite: String
     let model: WorkspacesModel
 
     init() throws {
-        store = RepositoryStore(bookmarks: bookmarks, git: git, state: InMemoryStateStore())
-        suite = "WorkspacesModelTests-\(UUID().uuidString)"
-        defaults = try #require(UserDefaults(suiteName: suite))
-        model = WorkspacesModel(store: store, git: git, picker: picker, defaults: defaults)
+        store = RepositoryStore(bookmarks: bookmarks, git: git, state: state)
+        model = WorkspacesModel(store: store, git: git, picker: picker)
     }
 
     func addWorkspace(_ path: String) async throws -> Repository {
@@ -82,13 +79,17 @@ import Testing
         #expect(model.listings[workspace.id] != nil)
     }
 
+    /// Folding is the user's arrangement, so it is on the repository record and
+    /// comes back with it rather than being redone every launch.
     @Test func collapsingSurvivesALaunch() async throws {
         let workspace = try await addWorkspace("/code/api")
         await model.toggle(workspace)
 
-        let next = WorkspacesModel(store: store, git: git, picker: picker, defaults: defaults)
+        let relaunched = RepositoryStore(bookmarks: bookmarks, git: git, state: state)
+        await relaunched.load()
+        let next = WorkspacesModel(store: relaunched, git: git, picker: picker)
 
-        #expect(!next.isExpanded(workspace))
+        #expect(!next.isExpanded(try #require(relaunched.repositories.first)))
     }
 
     @Test func removingForgetsTheWorkspaceAndItsState() async throws {
@@ -101,7 +102,7 @@ import Testing
 
         #expect(store.repositories.isEmpty)
         #expect(model.listings[id] == nil)
-        #expect(!model.collapsed.contains(id))
+        #expect(store[id] == nil)
     }
 
     @Test func committingARenameEndsEditingAndSavesTheName() async throws {

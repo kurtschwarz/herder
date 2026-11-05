@@ -10,6 +10,7 @@ import Testing
     let git = StubGitClient()
     let watcher = StubFileWatcherClient()
     let clock = VirtualClockClient()
+    let state = InMemoryStateStore()
     let model: ExplorerModel
     let root = URL(filePath: "/code/api")
 
@@ -18,7 +19,8 @@ import Testing
             files: files,
             git: git,
             watcher: watcher,
-            clock: clock
+            clock: clock,
+            state: state
         ))
     }
 

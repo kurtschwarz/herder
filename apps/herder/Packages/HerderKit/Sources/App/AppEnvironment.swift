@@ -119,7 +119,9 @@ public final class AppEnvironment {
         let repositories = RepositoryStore(bookmarks: bookmarks, git: git, state: persistence.state)
         self.repositories = repositories
         self.workspaceList = WorkspacesModel(store: repositories, git: git, picker: folderPicker)
-        let worktrees = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock)
+        let worktrees = WorkspaceRegistry(
+            files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
+        )
         self.worktrees = worktrees
         self.explorer = ExplorerModel(store: worktrees)
         self.editor = EditorModel(store: worktrees, files: files, highlighter: highlighter)
@@ -160,8 +162,12 @@ public final class AppEnvironment {
         }
     }
 
-    /// Hands back every folder the sandbox is holding open, and stops watching
-    /// for changes. Balances `start()`.
+    /// Hands back every folder the sandbox is holding open and stops watching
+    /// for changes. Balances ``start()``.
+    ///
+    /// Synchronous because `willTerminate` is. Nothing here writes: the
+    /// repository list is saved on every change, and workspace snapshots are
+    /// saved as their UI state settles.
     public func stop() {
         worktrees.stop()
         repositories.access.endAll()

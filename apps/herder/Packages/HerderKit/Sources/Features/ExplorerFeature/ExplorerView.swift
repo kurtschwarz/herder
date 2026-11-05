@@ -163,7 +163,8 @@ struct RevealInFinder: View {
         files: PreviewFiles(),
         git: PreviewGit(),
         watcher: PreviewWatcher(),
-        clock: VirtualClockClient()
+        clock: VirtualClockClient(),
+        state: InMemoryStateStore()
     )))
         .frame(width: Theme.Size.sidebarWidth, height: 420)
         .glassPaneBackground()

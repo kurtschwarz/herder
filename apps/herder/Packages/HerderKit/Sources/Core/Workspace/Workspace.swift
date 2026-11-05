@@ -84,6 +84,7 @@ public final class Workspace {
     private let git: any GitClient
     private let watcher: any FileWatcherClient
     private let clock: any ClockClient
+    private let state: any StateStore
 
     public private(set) var listings: [PathKey: Listing] = [:]
     public private(set) var status: WorktreeStatus = .empty
@@ -168,7 +169,8 @@ public final class Workspace {
         files: any FileClient,
         git: any GitClient,
         watcher: any FileWatcherClient,
-        clock: any ClockClient
+        clock: any ClockClient,
+        state: any StateStore
     ) {
         self.root = root
         self.gitDirectory = gitDirectory
@@ -177,6 +179,53 @@ public final class Workspace {
         self.git = git
         self.watcher = watcher
         self.clock = clock
+        self.state = state
+    }
+
+    // MARK: - Persisting
+
+    /// How long after the last change to UI state a save waits.
+    ///
+    /// Short, because what it is protecting against is the user quitting
+    /// moments after opening a folder: there is no save on termination, since
+    /// `willTerminate` is a synchronous callback and writing is not.
+    static let saveDebounce = Duration.milliseconds(400)
+
+    private var save: Task<Void, Never>?
+
+    /// Writes this workspace's snapshot shortly after whatever changed settles.
+    ///
+    /// Called by whoever mutated the UI state, because `Observation` reports
+    /// reads rather than writes and the state objects belong to the features.
+    /// One pending save at a time: a folder opened ten times in a second costs
+    /// one write, not ten.
+    public func scheduleSnapshotSave() {
+        save?.cancel()
+        save = Task { [weak self] in
+            try? await self?.clock.sleep(for: Workspace.saveDebounce)
+            guard !Task.isCancelled else { return }
+            await self?.saveSnapshot()
+        }
+    }
+
+    /// Writes the snapshot now. Used when the workspace is being put away,
+    /// where there is no later to wait for.
+    public func saveSnapshot() async {
+        save?.cancel()
+        save = nil
+        // Losing a pane's layout is not worth failing anything over, and the
+        // next change will try again.
+        try? await state.save(snapshot, forKey: snapshot.persistenceKey)
+    }
+
+    /// Reads this workspace's snapshot and holds its UI state for the features
+    /// to claim. See ``restore(from:)``.
+    func restoreSnapshot() async {
+        guard let snapshot = await state.loadIfReadable(
+            WorkspaceSnapshot.self,
+            forKey: WorkspaceSnapshot.persistenceKey(for: id)
+        ) else { return }
+        restore(from: snapshot)
     }
 
     // MARK: - Reading
@@ -320,6 +369,8 @@ public final class Workspace {
 
     func stop() {
         isStopped = true
+        save?.cancel()
+        save = nil
         watching?.cancel()
         watching = nil
         drain?.cancel()

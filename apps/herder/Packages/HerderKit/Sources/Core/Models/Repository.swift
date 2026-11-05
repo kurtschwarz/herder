@@ -36,6 +36,15 @@ public struct Repository: Identifiable, Sendable, Codable, Equatable {
     /// ever reordered anything.
     public var addedAt: Date
 
+    /// Whether the sidebar is hiding this repository's worktrees.
+    ///
+    /// View state kept on the record, like ``order``, and for the same reason:
+    /// it is about this repository, there is one sidebar, and it is worth
+    /// remembering across launches. Folded rather than unfolded, so a
+    /// repository the user has never touched — and one added later — starts
+    /// open.
+    public var isCollapsed: Bool
+
     /// Whether the folder could be reached. Not persisted: an unmounted volume
     /// is a fact about right now, not about the repository, and a stored `false`
     /// would outlive plugging the drive back in.
@@ -48,6 +57,7 @@ public struct Repository: Identifiable, Sendable, Codable, Equatable {
         bookmark: Data,
         order: Int,
         addedAt: Date = .now,
+        isCollapsed: Bool = false,
         isAvailable: Bool = true
     ) {
         self.id = id
@@ -56,6 +66,7 @@ public struct Repository: Identifiable, Sendable, Codable, Equatable {
         self.bookmark = bookmark
         self.order = order
         self.addedAt = addedAt
+        self.isCollapsed = isCollapsed
         self.isAvailable = isAvailable
     }
 
@@ -64,7 +75,7 @@ public struct Repository: Identifiable, Sendable, Codable, Equatable {
     /// ``isAvailable`` is deliberately absent: it is about the present moment.
     /// Everything else is what the user would have to recreate by hand.
     private enum CodingKeys: String, CodingKey {
-        case id, name, path, bookmark, order, addedAt
+        case id, name, path, bookmark, order, addedAt, isCollapsed
     }
 
     public init(from decoder: any Decoder) throws {
@@ -75,6 +86,9 @@ public struct Repository: Identifiable, Sendable, Codable, Equatable {
         bookmark = try container.decode(Data.self, forKey: .bookmark)
         order = try container.decode(Int.self, forKey: .order)
         addedAt = try container.decode(Date.self, forKey: .addedAt)
+        // Added after the first repositories were written, so absent state
+        // means open rather than meaning anything.
+        isCollapsed = try container.decodeIfPresent(Bool.self, forKey: .isCollapsed) ?? false
         // Decided by resolving the bookmark at load, not by what was written.
         isAvailable = true
     }

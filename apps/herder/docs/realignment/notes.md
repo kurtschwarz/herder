@@ -239,3 +239,25 @@ whatever the code currently says and pass.
 - **`AppEnvironment.start()` is `async` now**, and the window renders before it
   finishes, so the sidebar is empty for the moment the first read takes. `@main`
   calls it from `.task`, not `init`, because reading the list touches the disk.
+
+## From Phase 4f (restoration)
+
+- **There is no save at termination, and that is not an oversight.**
+  `willTerminate` is a synchronous callback; `StateStore` is `async`. A `Task`
+  started there races the process exiting, so `stop()` is deliberately sync and
+  writes nothing. Workspace snapshots are written as UI state settles (~400ms)
+  and whenever a workspace is switched away from, which leaves a small window:
+  quit within 400ms of opening a folder and that folder is not remembered. The
+  real fix is `applicationShouldTerminate` returning `.terminateLater`, which
+  means an `NSApplicationDelegate` and is its own task.
+- **Reading a feature's UI state creates it**, so merely rendering the file tree
+  leaves an `explorer.expanded` blob — empty — in the snapshot. Harmless, but it
+  makes `persistableUIState()`'s "a feature the user never opened has nothing to
+  say" slightly optimistic: looked-at counts as opened. Not worth distinguishing
+  until something expensive is stored.
+- **Collapse went on `Repository` rather than into a `WorkspaceUIState`.** It is
+  app-scoped, not per-workspace, and the alternative was a second writer to the
+  `AppSnapshot` key — `RepositoryStore` already does read-modify-write there, and
+  two writers to one key is how updates get lost. `order` was the precedent.
+- **`Workspace` now takes a `StateStore`**, so every test that builds a registry
+  needed one. Worth knowing before 4g touches the same constructor.

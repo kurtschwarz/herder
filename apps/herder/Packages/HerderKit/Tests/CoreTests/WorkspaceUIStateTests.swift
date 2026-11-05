@@ -48,7 +48,8 @@ private final class UnencodableState: PersistedWorkspaceUIState {
             files: InMemoryFileClient(),
             git: StubGitClient(),
             watcher: StubFileWatcherClient(),
-            clock: VirtualClockClient()
+            clock: VirtualClockClient(),
+            state: InMemoryStateStore()
         )
         return try #require(await registry.select(URL(filePath: path)))
     }

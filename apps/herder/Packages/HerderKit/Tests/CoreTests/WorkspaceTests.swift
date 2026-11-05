@@ -14,11 +14,12 @@ import Testing
     let git = StubGitClient()
     let watcher = StubFileWatcherClient()
     let clock = VirtualClockClient()
+    let state = InMemoryStateStore()
     let store: WorkspaceRegistry
     let root = URL(filePath: "/code/api")
 
     init() {
-        store = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock)
+        store = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
     }
 
     func dir(_ name: String, in parent: URL? = nil) -> DirectoryEntry {
@@ -320,7 +321,8 @@ private extension Workspace {
             files: files,
             git: StubGitClient(),
             watcher: StubFileWatcherClient(),
-            clock: VirtualClockClient()
+            clock: VirtualClockClient(),
+            state: InMemoryStateStore()
         )
     }
 

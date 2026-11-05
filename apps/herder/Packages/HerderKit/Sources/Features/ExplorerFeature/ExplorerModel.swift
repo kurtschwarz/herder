@@ -71,7 +71,12 @@ public final class ExplorerModel {
     /// shown — there is nothing for expansion to be relative to.
     private var expanded: Set<PathKey> {
         get { worktree?.uiState(ExplorerUIState.self).expanded ?? [] }
-        set { worktree?.uiState(ExplorerUIState.self).expanded = newValue }
+        set {
+            worktree?.uiState(ExplorerUIState.self).expanded = newValue
+            // Observation reports reads, not writes, so the workspace cannot
+            // notice this for itself.
+            worktree?.scheduleSnapshotSave()
+        }
     }
 
     /// The file the user last clicked.

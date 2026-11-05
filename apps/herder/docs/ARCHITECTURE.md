@@ -347,7 +347,9 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 - `StateStore` (protocol in Core) loads and saves `Codable & Sendable` values by key.
 - Live `@Observable` state converts to and from snapshot structs (`AppSnapshot`, `WorkspaceSnapshot`). Never make `@Observable` classes `Codable` directly; the macro's underscored backing storage leaks into the encoded keys.
 - Snapshots carry a `version` field. New fields use `decodeIfPresent` with defaults. That's the whole migration strategy.
-- Saves are debounced (about 1 second after changes settle) and also run on termination. Writes are atomic.
+- Saves are debounced (a few hundred milliseconds after changes settle). Writes are atomic.
+- **Nothing is saved on termination.** `willTerminate` is a synchronous callback and writing is not, so a task started there races the process exiting. The debounce is short for that reason. If a change ever matters enough to guarantee, the answer is `applicationShouldTerminate` returning `.terminateLater`, not a save in `stop()`.
+- The repository list is the exception: it saves immediately on every change, because each addition mints a security-scoped bookmark that cannot be remade.
 - Which workspace a window shows is stored with `@SceneStorage`.
 - Agent transcripts are not stored by Herder. Store an `AgentSessionRef` (the Claude Code session ID plus any Herder label) so sessions can be resumed.
 - Secrets go in the Keychain, never a file.

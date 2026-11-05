@@ -173,6 +173,17 @@ public final class RepositoryStore {
         await save()
     }
 
+    /// Folds a repository's worktrees away in the sidebar, or shows them.
+    ///
+    /// Persisted, because it is the user's arrangement and they would have to
+    /// redo it on every launch otherwise.
+    public func setCollapsed(_ repository: Repository, _ isCollapsed: Bool) async {
+        guard let index = index(of: repository) else { return }
+        guard repositories[index].isCollapsed != isCollapsed else { return }
+        repositories[index].isCollapsed = isCollapsed
+        await save()
+    }
+
     /// Puts the repositories in the given order, renumbering every row in one
     /// save. Renumbering wholesale is a handful of assignments at this size, and
     /// leaves no room for the numbering to go inconsistent.

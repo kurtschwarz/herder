@@ -16,6 +16,7 @@ public final class WorkspaceRegistry {
     private let git: any GitClient
     private let watcher: any FileWatcherClient
     private let clock: any ClockClient
+    private let state: any StateStore
 
     private var states: [PathKey: Workspace] = [:]
 
@@ -28,12 +29,14 @@ public final class WorkspaceRegistry {
         files: any FileClient,
         git: any GitClient,
         watcher: any FileWatcherClient,
-        clock: any ClockClient
+        clock: any ClockClient,
+        state: any StateStore
     ) {
         self.files = files
         self.git = git
         self.watcher = watcher
         self.clock = clock
+        self.state = state
     }
 
     /// The workspace `id` names, if it is one being held. `nil` for a workspace
@@ -68,9 +71,13 @@ public final class WorkspaceRegistry {
         // and compare by construction rather than by luck.
         let key = worktree.map(PathKey.init)
 
-        for (path, state) in states where path != key {
-            if let position = state.position { positions[path] = position }
-            state.stop()
+        for (path, workspace) in states where path != key {
+            if let position = workspace.position { positions[path] = position }
+            // Before stopping it: what the user opened in this worktree is
+            // worth having when they come back to it, and stopping cancels any
+            // save still waiting out its debounce.
+            await workspace.saveSnapshot()
+            workspace.stop()
             states[path] = nil
         }
         guard let key else { return nil }
@@ -79,18 +86,22 @@ public final class WorkspaceRegistry {
         // A folder that is not a working tree has no index to watch, which is
         // not a failure: the working tree alone is still worth watching.
         let gitDirectory = try? await git.gitDirectory(of: key.url).map(PathKey.init)
-        let state = Workspace(
+        let workspace = Workspace(
             root: key,
             gitDirectory: gitDirectory ?? nil,
             from: positions[key],
             files: files,
             git: git,
             watcher: watcher,
-            clock: clock
+            clock: clock,
+            state: state
         )
-        states[key] = state
-        state.beginWatching()
-        return state
+        states[key] = workspace
+        // Before the caller gets it, so a feature asking for its UI state finds
+        // the last run's already in it.
+        await workspace.restoreSnapshot()
+        workspace.beginWatching()
+        return workspace
     }
 
     /// Whether drains may run. Suspended when the window is not in front:
@@ -100,10 +111,20 @@ public final class WorkspaceRegistry {
         for state in states.values { state.setDraining(enabled) }
     }
 
+    /// Puts every workspace away, keeping where its watcher had got to.
+    ///
+    /// Deliberately **not** `async`, and deliberately does not write snapshots.
+    /// The only caller is the app quitting, from `willTerminate`, which is a
+    /// synchronous callback: there is nowhere to await, and a task started here
+    /// would race the process exiting. Snapshots are written as UI state
+    /// settles instead — see `Workspace.scheduleSnapshotSave()` — and whenever
+    /// a workspace is switched away from. The gap is the few hundred
+    /// milliseconds of a pending debounce; closing it properly means
+    /// `applicationShouldTerminate` returning `.terminateLater`.
     public func stop() {
-        for (path, state) in states {
-            if let position = state.position { positions[path] = position }
-            state.stop()
+        for (path, workspace) in states {
+            if let position = workspace.position { positions[path] = position }
+            workspace.stop()
         }
         states = [:]
     }

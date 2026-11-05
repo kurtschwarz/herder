@@ -303,7 +303,17 @@ Then `Storage` finally became `Services/Persistence/`, which Phase 3 could not d
 
 Verified against the real store: the `herder` row arrived in the snapshot with its 740-byte bookmark, its path and its order, and a second launch neither re-imported nor duplicated it.
 
-**4f. Restoration.** Store `activeWorkspaceID` per window with `@SceneStorage`. On launch, the registry restores open workspaces from `AppSnapshot`. Keep `willTerminateNotification` handing back security-scoped access — it is the only place that does.
+**4f. Restoration. Done, bar the part that needs 4g.**
+
+`@SceneStorage` for `activeWorkspaceID` landed in 4c. What this step added is the writing and reading back of everything else:
+
+- **Sidebar collapse is on the repository record**, as `Repository.isCollapsed`, beside `order` and for the same reason: it is the user's arrangement of this repository, there is one sidebar, and it is worth keeping. That retires **the last `UserDefaults` key in the package** — `grep UserDefaults Sources/` now finds only a comment explaining what used to be there.
+- **`Workspace` writes its own snapshot**, debounced about 400ms after UI state settles, and the registry writes it before letting a workspace go. Restoring happens in `select`, before the caller is handed the workspace, so a feature asking for its UI state finds the last run's already in it.
+- **`willTerminate` still hands back security-scoped access**, and still cannot save: it is a synchronous callback with nowhere to await. That is why the debounce is short rather than the ARCHITECTURE-suggested second, and why `stop()` is deliberately not `async`. Closing the remaining few-hundred-millisecond gap means `applicationShouldTerminate` returning `.terminateLater`, which is its own task.
+
+**Not done:** restoring *several* open workspaces from `AppSnapshot.openWorkspaces`. The registry holds one at a time, so there is nothing to restore beyond the active one, which `@SceneStorage` already does. It moves to 4g, with the change that makes several possible.
+
+Verified against the real store: `herder` carries `isCollapsed`, and switching between `main` and `feat/test` left a snapshot apiece under its own key.
 
 **4g. Several live workspaces at once.** The one deliberate behavior change in this phase, so it goes last and alone. `WorkspaceRegistry.select` today **stops** every worktree but the selected one, keeping only the watcher position; the target architecture wants background workspaces to keep running. Each live workspace costs a watcher and a git status call, which is why `WorktreeStateStore`'s own doc comment calls widening it "a deliberate step and not a side effect". Confirm with tests that a background workspace's listings and git state survive a switch.
 
@@ -425,11 +435,11 @@ added to docs/realignment/notes.md.
   - [x] 4c `WindowModel` and per-window active workspace
   - [~] 4d feature UI state onto the workspace
     - [x] file tree expansion → `ExplorerUIState`
-    - [ ] sidebar collapse → `AppSnapshot` *(4f)*
+    - [x] sidebar collapse → `Repository.isCollapsed` *(4f)*
     - [x] repository list → `AppSnapshot` *(4e)*
   - [x] 4e persistence off `@Query`, `Storage` → `Services/Persistence/`
-  - [ ] 4f restoration
-  - [ ] 4g several live workspaces at once
+  - [x] 4f restoration *(`openWorkspaces` moved to 4g)*
+  - [ ] 4g several live workspaces at once, and restoring them from `AppSnapshot`
 - [ ] **P5** Features
   - [ ] Repositories
   - [ ] FileTree

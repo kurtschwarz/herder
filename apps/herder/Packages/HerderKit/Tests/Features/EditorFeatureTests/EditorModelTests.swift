@@ -50,7 +50,7 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
     let root = URL(filePath: "/code/api")
 
     init() {
-        store = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock)
+        store = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: InMemoryStateStore())
         model = EditorModel(store: store, files: files, highlighter: TreeSitterHighlighter())
     }
 

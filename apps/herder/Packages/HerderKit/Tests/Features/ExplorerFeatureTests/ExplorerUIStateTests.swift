@@ -16,12 +16,13 @@ import Testing
     let git = StubGitClient()
     let watcher = StubFileWatcherClient()
     let clock = VirtualClockClient()
+    let state = InMemoryStateStore()
     let registry: WorkspaceRegistry
     let root = URL(filePath: "/code/api")
     let other = URL(filePath: "/code/web")
 
     init() {
-        registry = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock)
+        registry = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
     }
 
     private func dir(_ name: String, in parent: URL? = nil) -> DirectoryEntry {
@@ -120,7 +121,7 @@ import Testing
         let before = try #require(await registry.select(root))
         before.uiState(ExplorerUIState.self).expanded = [PathKey(canonical: "/code/api/Sources")]
 
-        let fresh = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock)
+        let fresh = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
         let after = try #require(await fresh.select(root))
         after.restore(from: before.snapshot)
 

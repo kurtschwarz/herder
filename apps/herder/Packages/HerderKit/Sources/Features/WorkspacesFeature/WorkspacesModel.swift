@@ -23,18 +23,11 @@ public final class WorkspacesModel {
         case unreadable
     }
 
-    private static let collapsedKey = "collapsedWorkspaces"
-
     private let store: RepositoryStore
     private let git: any GitClient
     private let picker: any FolderPickerClient
-    private let defaults: UserDefaults
 
     public private(set) var listings: [UUID: Listing] = [:]
-
-    /// Folded workspaces rather than unfolded ones, so a workspace the user has
-    /// never touched, and one added later, starts open.
-    public private(set) var collapsed: Set<UUID>
 
     /// Each workspace's name, as last read. Kept beside ``listings`` so that
     /// naming the workspace a worktree belongs to costs no fetch: a view asks
@@ -61,15 +54,11 @@ public final class WorkspacesModel {
     public init(
         store: RepositoryStore,
         git: any GitClient,
-        picker: any FolderPickerClient,
-        defaults: UserDefaults = .standard
+        picker: any FolderPickerClient
     ) {
         self.store = store
         self.git = git
         self.picker = picker
-        self.defaults = defaults
-        let saved = defaults.stringArray(forKey: Self.collapsedKey) ?? []
-        self.collapsed = Set(saved.compactMap(UUID.init(uuidString:)))
     }
 
     /// What the workspace holding the worktree at `path` is called.
@@ -139,14 +128,14 @@ public final class WorkspacesModel {
     }
 
     public func isExpanded(_ workspace: Repository) -> Bool {
-        workspace.isAvailable && !collapsed.contains(workspace.id)
+        // Read off the store, not off the copy the caller is holding: the row
+        // is the one place that knows, and it is what gets persisted.
+        workspace.isAvailable && !(store[workspace.id]?.isCollapsed ?? workspace.isCollapsed)
     }
 
     public func toggle(_ workspace: Repository) async {
-        if collapsed.remove(workspace.id) == nil {
-            collapsed.insert(workspace.id)
-        }
-        persistCollapsed()
+        // Showing becomes folding, and folding becomes showing.
+        await store.setCollapsed(workspace, isExpanded(workspace))
         await refresh(workspace)
     }
 
@@ -185,10 +174,5 @@ public final class WorkspacesModel {
         await store.delete(workspace)
         listings[id] = nil
         names[id] = nil
-        if collapsed.remove(id) != nil { persistCollapsed() }
-    }
-
-    private func persistCollapsed() {
-        defaults.set(collapsed.map(\.uuidString).sorted(), forKey: Self.collapsedKey)
     }
 }
