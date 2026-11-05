@@ -1,7 +1,7 @@
 #if DEBUG
-import Clients
+import Core
 import Foundation
-import Models
+import Services
 import Storage
 import SwiftData
 

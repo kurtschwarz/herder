@@ -1,8 +1,8 @@
-import Clients
-import ClientsTestSupport
+import Core
 import Foundation
 import Storage
 import SwiftData
+import TestSupport
 import Testing
 
 @testable import WorkspacesFeature

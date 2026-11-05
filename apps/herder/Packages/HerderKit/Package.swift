@@ -14,39 +14,41 @@ let core: [SwiftSetting] = [
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
 ]
 
+let icons: Target.Dependency = .product(name: "PhosphorSwift", package: "swift")
+
 let package = Package(
     name: "HerderKit",
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "AppFeature", targets: ["AppFeature"]),
-        .library(name: "Clients", targets: ["Clients"]),
+        .library(name: "Services", targets: ["Services"]),
         .library(name: "Storage", targets: ["Storage"]),
     ],
     dependencies: [
         .package(url: "https://github.com/phosphor-icons/swift", from: "2.1.0"),
     ],
     targets: [
-        // Plain Sendable value types. Never imports SwiftUI.
-        .target(name: "Models", swiftSettings: core),
+        // Models, service protocols and — from Phase 4 — workspace state.
+        // Imports only Foundation and Observation: never SwiftUI, AppKit,
+        // SwiftData or the FFI. `scripts/check-boundaries.sh` enforces that.
+        //
+        // Nonisolated by default. The stores that arrive here in Phase 4 are
+        // marked `@MainActor` explicitly rather than by target setting, because
+        // everything else in this module must stay free of the main actor.
+        .target(name: "Core", swiftSettings: core),
 
-        // Side effects behind protocols: disk, network, processes, clocks.
-        .target(name: "Clients", dependencies: ["Models"], swiftSettings: core),
+        // The implementations of Core's service protocols: disk, git, the file
+        // watcher, the sandbox, the clock, and the syntax engine. The only
+        // module that links the FFI.
+        .target(name: "Services", dependencies: ["Core", "HerderSyntaxFFI"], swiftSettings: core),
 
-        // Fakes for the above. Separate target so they never link into the app.
-        .target(name: "ClientsTestSupport", dependencies: ["Models", "Clients"], swiftSettings: core),
+        // Fakes for every service protocol, `#if DEBUG` so a release build
+        // links an empty module. Features depend on this for their previews.
+        .target(name: "TestSupport", dependencies: ["Core"], swiftSettings: core),
 
-        // The one module that owns reference types: the SwiftData `@Model`
-        // classes, their schema versions and the container.
-        .target(name: "Storage", dependencies: ["Models", "Clients"], swiftSettings: ui),
-
-        // The authoritative file and git state of a worktree, watched and kept
-        // fresh. Above the clients and below the features, because more than
-        // one feature reads it and features never import each other.
-        .target(name: "Worktrees", dependencies: ["Models", "Clients"], swiftSettings: ui),
-
-        // Syntax highlighting. The grammars, their queries and the table
-        // matching a file to a language are all in the `herder-syntax` Rust
-        // crate under `packages/syntax-highlighter`; this is the Swift face of it.
+        // Syntax highlighting, over the `herder-syntax` Rust crate under
+        // `packages/syntax-highlighter`. The grammars, their queries and the
+        // table matching a file to a language all live there.
         //
         // An XCFramework because that is the only shape a `.binaryTarget`
         // takes. It is a build artifact, not a checked-in one: `just bootstrap`
@@ -54,50 +56,52 @@ let package = Package(
         // to run one of them before this package will resolve.
         .binaryTarget(name: "HerderSyntaxFFI", path: "Vendor/HerderSyntaxFFI.xcframework"),
 
-        .target(name: "Syntax", dependencies: ["HerderSyntaxFFI"], swiftSettings: core),
+        // The one module that owns reference types: the SwiftData `@Model`
+        // classes, their schema versions and the container. Becomes
+        // `Services/Persistence/` in Phase 3.
+        .target(name: "Storage", dependencies: ["Core"], swiftSettings: ui),
+
+        // The authoritative file and git state of a worktree, watched and kept
+        // fresh. Above the services and below the features, because more than
+        // one feature reads it and features never import each other. Becomes
+        // `Core/Workspace/` in Phase 4.
+        .target(name: "Worktrees", dependencies: ["Core"], swiftSettings: ui),
 
         // Shared views, styles, tokens.
-        .target(
-            name: "DesignSystem",
-            dependencies: [.product(name: "PhosphorSwift", package: "swift")],
-            swiftSettings: ui
-        ),
+        .target(name: "DesignSystem", dependencies: [icons], swiftSettings: ui),
 
-        // Root view and navigation. Add one target per feature alongside it under
-        // `Sources/Features`, and depend on them from here: features never import
-        // each other. Feature targets carry an explicit `path` because SwiftPM
-        // otherwise looks for them directly under `Sources`.
+        // Feature targets carry an explicit `path` because SwiftPM otherwise
+        // looks for them directly under `Sources`. Each one sees `Core`,
+        // `DesignSystem` and `TestSupport` and no other feature; the concrete
+        // services are `AppFeature`'s business alone.
         .target(
             name: "WorkspacesFeature",
-            dependencies: [
-                "Models", "Clients", "DesignSystem", "Storage",
-                .product(name: "PhosphorSwift", package: "swift"),
-            ],
+            dependencies: ["Core", "DesignSystem", "TestSupport", "Storage", icons],
             path: "Sources/Features/WorkspacesFeature",
             swiftSettings: ui
         ),
 
         .target(
             name: "ExplorerFeature",
-            dependencies: [
-                "Models", "Clients", "DesignSystem", "Worktrees",
-                .product(name: "PhosphorSwift", package: "swift"),
-            ],
+            dependencies: ["Core", "DesignSystem", "TestSupport", "Worktrees", icons],
             path: "Sources/Features/ExplorerFeature",
             swiftSettings: ui
         ),
 
         .target(
             name: "EditorFeature",
-            dependencies: ["Models", "Clients", "DesignSystem", "Syntax", "Worktrees"],
+            dependencies: ["Core", "DesignSystem", "TestSupport", "Worktrees"],
             path: "Sources/Features/EditorFeature",
             swiftSettings: ui
         ),
 
+        // Composition root, not a feature: the one module that names concrete
+        // service types, and so the one that may import `Services`. Moves to
+        // `Sources/App/` in the second half of Phase 2.
         .target(
             name: "AppFeature",
             dependencies: [
-                "Models", "Clients", "DesignSystem", "Storage", "Syntax", "Worktrees",
+                "Core", "Services", "DesignSystem", "TestSupport", "Storage", "Worktrees",
                 "WorkspacesFeature", "ExplorerFeature", "EditorFeature",
             ],
             path: "Sources/Features/AppFeature",
@@ -105,51 +109,49 @@ let package = Package(
         ),
 
         .testTarget(
-            name: "ModelsTests",
-            dependencies: ["Models"],
+            name: "CoreTests",
+            dependencies: ["Core", "TestSupport"],
             swiftSettings: core
         ),
         .testTarget(
-            name: "ClientsTests",
-            dependencies: ["Clients", "ClientsTestSupport"],
+            name: "ServicesTests",
+            dependencies: ["Services", "TestSupport"],
             swiftSettings: core
         ),
         .testTarget(
             name: "StorageTests",
-            dependencies: ["Storage", "ClientsTestSupport"],
+            dependencies: ["Storage", "TestSupport"],
             swiftSettings: ui
         ),
         .testTarget(
-            name: "SyntaxTests",
-            dependencies: ["Syntax"],
-            swiftSettings: core
-        ),
-        .testTarget(
             name: "WorktreesTests",
-            dependencies: ["Worktrees", "Models", "Clients", "ClientsTestSupport"],
+            dependencies: ["Worktrees", "Core", "TestSupport"],
             swiftSettings: ui
         ),
         .testTarget(
             name: "WorkspacesFeatureTests",
-            dependencies: ["WorkspacesFeature", "Clients", "ClientsTestSupport", "Storage"],
+            dependencies: ["WorkspacesFeature", "Core", "TestSupport", "Storage"],
             path: "Tests/Features/WorkspacesFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(
             name: "ExplorerFeatureTests",
-            dependencies: ["ExplorerFeature", "Models", "Clients", "ClientsTestSupport", "Worktrees"],
+            dependencies: ["ExplorerFeature", "Core", "TestSupport", "Worktrees"],
             path: "Tests/Features/ExplorerFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(
+            // `Services` because the editor's tests exercise the real
+            // tree-sitter engine: what colour a span gets is part of what the
+            // pane promises, and a fake highlighter cannot check it.
             name: "EditorFeatureTests",
-            dependencies: ["EditorFeature", "Models", "Clients", "ClientsTestSupport", "Syntax", "Worktrees"],
+            dependencies: ["EditorFeature", "Core", "Services", "TestSupport", "Worktrees"],
             path: "Tests/Features/EditorFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(
             name: "AppFeatureTests",
-            dependencies: ["AppFeature", "ClientsTestSupport"],
+            dependencies: ["AppFeature", "TestSupport"],
             path: "Tests/Features/AppFeatureTests",
             swiftSettings: ui
         ),

@@ -38,6 +38,14 @@ syntax:
     rsync --archive --delete \
         {{ crate }}/target/HerderSyntaxFFI.xcframework {{ vendor }}/
 
+# Check the import rules from docs/ARCHITECTURE.md that the compiler cannot
+#
+# Target dependencies in Package.swift enforce most of the layering. These are
+# the rules that need a grep: what Core may import, what a feature may import,
+# and that nothing grows a singleton.
+check:
+    @scripts/check-boundaries.sh
+
 # Regenerate Herder.xcodeproj from project.yml
 project:
     @command -v xcodegen >/dev/null || { print -u2 "xcodegen not found: brew install xcodegen"; exit 1; }

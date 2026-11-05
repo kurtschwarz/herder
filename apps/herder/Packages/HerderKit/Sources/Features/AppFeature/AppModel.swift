@@ -1,11 +1,11 @@
-import Clients
+import Core
 import EditorFeature
 import ExplorerFeature
 import Foundation
 import Observation
-import SwiftData
+import Services
 import Storage
-import Syntax
+import SwiftData
 import WorkspacesFeature
 import Worktrees
 
@@ -37,6 +37,9 @@ public final class AppModel {
 
     /// `context` is the app's `mainContext`, the same one `@Query` reads, so a
     /// change made here shows up in the sidebar without a round trip.
+    ///
+    /// `highlighter` is named here rather than defaulted inside the editor
+    /// because this is the only module allowed to know a concrete service type.
     public init(
         files: any FileClient,
         bookmarks: any BookmarkClient,
@@ -44,7 +47,8 @@ public final class AppModel {
         folderPicker: any FolderPickerClient,
         watcher: any FileWatcherClient,
         clock: any ClockClient,
-        context: ModelContext
+        context: ModelContext,
+        highlighter: any SyntaxHighlighter = TreeSitterHighlighter()
     ) {
         let workspaces = WorkspaceStore(context: context, bookmarks: bookmarks, git: git)
         self.workspaces = workspaces
@@ -52,7 +56,7 @@ public final class AppModel {
         let worktrees = WorktreeStateStore(files: files, git: git, watcher: watcher, clock: clock)
         self.worktrees = worktrees
         self.explorer = ExplorerModel(store: worktrees)
-        self.editor = EditorModel(store: worktrees, files: files)
+        self.editor = EditorModel(store: worktrees, files: files, highlighter: highlighter)
     }
 
     /// Opens the add-workspace modal. Here rather than on the sidebar because a

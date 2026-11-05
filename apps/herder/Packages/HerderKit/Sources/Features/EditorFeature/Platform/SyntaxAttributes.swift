@@ -1,7 +1,7 @@
 import AppKit
+import Core
 import DesignSystem
 import SwiftUI
-import Syntax
 
 /// Turns token kinds into text attributes.
 ///

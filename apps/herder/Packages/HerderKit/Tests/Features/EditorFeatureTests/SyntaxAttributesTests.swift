@@ -1,5 +1,5 @@
 import AppKit
-import Syntax
+import Core
 import Testing
 
 @testable import EditorFeature

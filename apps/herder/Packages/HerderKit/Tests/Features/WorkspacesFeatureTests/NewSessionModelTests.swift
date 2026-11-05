@@ -1,6 +1,6 @@
-import Clients
-import ClientsTestSupport
+import Core
 import Foundation
+import TestSupport
 import Testing
 
 @testable import WorkspacesFeature

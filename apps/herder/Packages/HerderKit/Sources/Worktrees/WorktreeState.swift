@@ -1,6 +1,5 @@
-import Clients
+import Core
 import Foundation
-import Models
 import Observation
 
 /// Everything the app knows about one worktree's files, kept fresh by a file

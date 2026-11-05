@@ -1,4 +1,4 @@
-import Clients
+import Core
 import Foundation
 
 /// Holds the sandbox's folder access open for as long as a workspace is open.

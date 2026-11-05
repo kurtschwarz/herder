@@ -1,8 +1,6 @@
-import Clients
+import Core
 import Foundation
-import Models
 import Observation
-import Syntax
 import Worktrees
 
 /// The file shown in the editor pane.
@@ -58,14 +56,15 @@ public final class EditorModel {
     /// the top.
     public private(set) var session = 0
 
-    /// `highlighter` defaults to the real one. It is pure — the same text gives
-    /// the same tokens — so there is nothing for a test to control and nothing
-    /// for the app target to inject. `NoSyntaxHighlighter` is there for a test
-    /// that wants the editor without the colour.
+    /// `highlighter` is injected rather than defaulted, even though it is pure —
+    /// the same text gives the same tokens — because the real one lives in
+    /// `Services` and a feature may not import that. The composition root picks
+    /// it; `NoSyntaxHighlighter` is there for a test that wants the editor
+    /// without the colour.
     public init(
         store: WorktreeStateStore,
         files: any FileClient,
-        highlighter: any SyntaxHighlighter = TreeSitterHighlighter()
+        highlighter: any SyntaxHighlighter
     ) {
         self.store = store
         self.files = files

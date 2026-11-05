@@ -1,8 +1,7 @@
-import Clients
-import ClientsTestSupport
+import Core
 import Foundation
-import Models
-import Syntax
+import Services
+import TestSupport
 import Testing
 import Worktrees
 
@@ -53,7 +52,7 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
 
     init() {
         store = WorktreeStateStore(files: files, git: git, watcher: watcher, clock: clock)
-        model = EditorModel(store: store, files: files)
+        model = EditorModel(store: store, files: files, highlighter: TreeSitterHighlighter())
     }
 
     func file(_ name: String) -> DirectoryEntry {

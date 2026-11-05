@@ -1,7 +1,7 @@
 import AppKit
+import Core
 import DesignSystem
 import SwiftUI
-import Syntax
 
 /// A read-only, selectable text view with a line-number gutter.
 ///

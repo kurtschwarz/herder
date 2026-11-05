@@ -1,4 +1,4 @@
-import Clients
+import Core
 import DesignSystem
 import PhosphorSwift
 import SwiftUI

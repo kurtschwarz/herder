@@ -1,4 +1,4 @@
-import Clients
+import Core
 import Foundation
 import SwiftData
 

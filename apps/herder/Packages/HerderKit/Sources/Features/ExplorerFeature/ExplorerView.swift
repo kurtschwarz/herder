@@ -1,9 +1,9 @@
 import AppKit
-import Clients
+import Core
 import DesignSystem
-import Models
 import PhosphorSwift
 import SwiftUI
+import TestSupport
 import Worktrees
 
 /// The explorer pane's content: a header over the file tree of the selected
@@ -164,7 +164,7 @@ struct RevealInFinder: View {
         files: PreviewFiles(),
         git: PreviewGit(),
         watcher: PreviewWatcher(),
-        clock: LiveClockClient()
+        clock: VirtualClockClient()
     )))
         .frame(width: Theme.Size.sidebarWidth, height: 420)
         .glassPaneBackground()
