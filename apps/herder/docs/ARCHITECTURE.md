@@ -247,6 +247,8 @@ WindowModel                one per window (AppFeature)
 
 `Repository` is what the user adds and names and arranges; `Workspace` is what a pane shows. One `Repository` can have several `Workspace`s open at once, one per worktree. A plain folder that is not a repository is still a `Workspace`.
 
+**`WorkspaceID` is the canonical path of the folder, not a generated id.** A workspace *is* a folder, so the folder identifies it; a `UUID` would have to be persisted beside the path and kept in step with it, and all it would buy is surviving a move — which for a checkout means a different checkout. `Repository` is the level that genuinely needs identity independent of its path, because the user names it and its bookmark follows the folder around, which is why that one has a `UUID` and this does not.
+
 ### Rules
 
 - **`Workspace` is the single source of truth for one checkout.** If two places hold the same fact, one of them is a bug.
@@ -283,7 +285,11 @@ Anything that must survive a workspace switch (scroll position, expanded folders
 
 extension Workspace {
     /// Lazily creates and caches one instance per type for this workspace.
+    /// A restored snapshot is applied here, on first ask.
     public func uiState<S: WorkspaceUIState>(_ type: S.Type = S.self) -> S
+
+    public var snapshot: WorkspaceSnapshot { get }
+    public func restore(from snapshot: WorkspaceSnapshot)
 }
 
 // FileTreeFeature
@@ -292,6 +298,8 @@ extension Workspace {
     required init() {}
 }
 ```
+
+**Restoring happens on first ask, not at launch.** `restore(from:)` holds the snapshot's `uiState` blobs; the feature's instance is made and filled the first time something asks for it. That is what lets a workspace restore state for features Core knows nothing about. State nobody asks for this session is never decoded and is written back out unchanged, so closing a workspace without opening a pane does not forget that pane's layout.
 
 ## Services
 
@@ -344,14 +352,15 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 └── workspaces/<id>.json        # WorkspaceSnapshot: tabs, UI state, agent session refs
 ```
 
+This is the shape it grows into, not the shape it has. Fields arrive with the features that need them — an editor showing one read-only file has no tab list to write down — as new fields with defaults, decoded with `decodeIfPresent`. Today it is `version`, `id` and `uiState`. There is no separate `root`: the id *is* the path.
+
 ```swift
 public struct WorkspaceSnapshot: Codable, Sendable {
     public var version = 1
     public var id: WorkspaceID
-    public var root: URL
-    public var openTabs: [URL]
-    public var activeTab: URL?
-    public var agentSessions: [AgentSessionRef]
+    public var openTabs: [URL]                 // with the editor's tabs
+    public var activeTab: URL?                 // with the editor's tabs
+    public var agentSessions: [AgentSessionRef] // with AgentSessionsFeature
     public var uiState: [String: Data]   // keyed by PersistedWorkspaceUIState.persistenceKey
 }
 ```

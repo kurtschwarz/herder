@@ -58,6 +58,24 @@ public final class Workspace {
 
     public let root: PathKey
 
+    /// Which checkout this is: the canonical path of ``root``. See ``WorkspaceID``.
+    public var id: WorkspaceID { WorkspaceID(root) }
+
+    /// Per-feature UI state, one instance per type, made on first ask. See
+    /// ``uiState(_:)``.
+    ///
+    /// `@ObservationIgnored` because the states are each `@Observable` in their
+    /// own right and are observed directly. Tracked here instead, every view
+    /// holding any of them would redraw whenever a feature asked for its state
+    /// for the first time.
+    @ObservationIgnored
+    var uiStates: [ObjectIdentifier: any WorkspaceUIState] = [:]
+
+    /// UI state read from a snapshot that no feature has asked for yet. See
+    /// ``restore(from:)``.
+    @ObservationIgnored
+    var pendingUIState: [String: Data] = [:]
+
     /// Where staging writes. Changes here are the only sign of a `git add`, and
     /// for a linked worktree it is not under ``root`` at all.
     private let gitDirectory: PathKey?

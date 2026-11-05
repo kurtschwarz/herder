@@ -85,6 +85,7 @@ The survey raised ten questions. These are the answers; they are settled and not
 - **D7. `AGENTS.md` points at `ARCHITECTURE.md`.** The four rules it held that were not in the architecture doc (`PathKey` over raw `URL`; tokens only applied to the string they were found in; a reload that finds the same text changes nothing; token kinds and colours kept apart) have been moved into `ARCHITECTURE.md`. `AGENTS.md` keeps only the "where a new file goes" table and a pointer. The root `README.md` is left until Phase 8, then asked about.
 - **D8. The composition root is `AppFeature`, not the Xcode target.** `Herder/` holds `@main` and resources and links one product. `AppFeature` moves to `Sources/App/` and is the one HerderKit module that may import `Services`. `AppEnvironment` there constructs the live services, so the app target no longer links them.
 - **D9. Phase 4 only moves what exists.** No `DocumentStore`, `AgentSessionStore`, tabs, dirty state or saving: those features don't exist, and building them is product work, not realignment. Phase 4 is now the workspace rename, UI state, snapshots, restoration and per-window active workspace. The smoke test above is rewritten to match.
+- **D11. `WorkspaceID` is the folder's canonical path**, wrapping `PathKey`, not a `UUID`. A workspace is a folder, the registry already keys on the path, and a generated id would need persisting beside the path and keeping in step with it. `WorkspaceSnapshot` therefore has no separate `root` field — the id is the path — which is one change to `ARCHITECTURE.md`'s example. The other is that the example is now labelled as the shape it grows into: `openTabs`, `activeTab` and `agentSessions` arrive with their features, per D9. **Made while implementing 4b rather than asked; reverse it if you disagree.**
 - **D10. Smaller corrections** are all folded into `ARCHITECTURE.md`: `just test` not `swift test`, clippy is part of green, `PhosphorSwift` is in the `Package.swift` template, `UITests/` and the generated project are in the layout diagram, `NonisolatedNonsendingByDefault` is in the concurrency section, offsets are already UTF-16 from the crate, and the bindings are hand-written rather than generated. The untracked `default.profraw` droppings are a `.gitignore` line in Phase 8.
 
 ---
@@ -250,7 +251,14 @@ The feature's own types (`WorkspacesModel`, `AddWorkspaceModel`, `WorkspaceRow`)
 
 `RepositoryStore` as a protocol is **not** here, for the reason Phase 3 found: it has to return a Core value type, so it cannot land before `@Query` goes. That is 4e.
 
-**4b. Add the types, unused.** In `Core/Workspace/`: `WorkspaceID`, `WorkspaceUIState`, `PersistedWorkspaceUIState`, `AppSnapshot`, `WorkspaceSnapshot`, and the `WorkspaceServicesFactory` protocol (implementation in `Services/Workspace/`). Give `WorkspaceRegistry` `open(_:)` and `close(_:)`. Write tests for open, close and switch behavior using fakes.
+**4b. Add the types, unused. Done.** In `Core/Workspace/`: `WorkspaceID`, `WorkspaceUIState`, `PersistedWorkspaceUIState`, `WorkspaceSnapshot`, `AppSnapshot`, plus `Workspace.uiState(_:)`, `.snapshot` and `.restore(from:)`. 19 tests.
+
+Restoring turned out to belong on first ask rather than at launch: `restore(from:)` parks the blobs and `uiState(_:)` fills the instance when a feature asks for it. That is what lets a workspace restore state for types `Core` has never heard of, and it means state for a pane the user never opens is passed through untouched instead of being dropped.
+
+Two things from this step's original list are **not** here:
+
+- **`WorkspaceRegistry.open(_:)` and `close(_:)`.** The registry has `select(_:)`, which holds one workspace and stops the rest. Adding open and close beside it would be two ways to say one thing and two places for the set of live workspaces to disagree — exactly what this phase's own rule warns about. They replace `select` in 4g, where the single-workspace behaviour changes anyway.
+- **`WorkspaceServicesFactory`.** Workspace-scoped services are the four clients the registry already threads through. A factory for them would be a wrapper with nothing to wrap until search or a PTY exists.
 
 **4c. Per-window active workspace.** Add `WindowModel` with `activeWorkspaceID` in `Sources/App/`. The root view resolves the active workspace from the registry and injects it with `.environment(workspace)`. Features keep reading what they read today; this just establishes the path.
 
@@ -376,7 +384,7 @@ added to docs/realignment/notes.md.
 - [ ] **P4** Workspace state *(gate: smoke test)*
   - [x] 4a rename to `Workspace` / `WorkspaceRegistry` / `Repository`
   - [ ] 4a′ `RepositoryStore` and `RepositoryAccess` behind protocols *(with 4e)*
-  - [ ] 4b snapshot and UI-state types + tests
+  - [x] 4b snapshot and UI-state types + tests
   - [ ] 4c `WindowModel` and per-window active workspace
   - [ ] 4d feature UI state onto the workspace
   - [ ] 4e persistence off `@Query`

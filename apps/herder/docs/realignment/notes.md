@@ -103,3 +103,16 @@ as D1–D10 in the plan.
   carry a note saying why they are explicit.
 - **`WorkspaceRegistry` still holds exactly one live workspace** and stops every
   other on `select`. Unchanged by the rename, and the thing 4g changes.
+
+## From Phase 4b (snapshots and UI state)
+
+- **`WorkspaceServicesFactory` is still unwritten**, deliberately. The
+  workspace-scoped services are the four clients `WorkspaceRegistry` already
+  threads through to each `Workspace`. A factory earns its place when there is a
+  search index or a PTY to build per workspace; until then it wraps nothing.
+- **`AppSnapshot` does not hold the adopted repositories yet.** They are
+  SwiftData rows until 4e, when they arrive as a new field with an empty
+  default.
+- **`Workspace.snapshot` has no `openTabs`.** Not an omission: there are no
+  tabs. The field lands with the editor's tab model, and `decodeIfPresent` means
+  state written before then still loads.
