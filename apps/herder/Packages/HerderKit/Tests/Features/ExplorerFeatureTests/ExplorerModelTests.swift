@@ -478,7 +478,7 @@ import Worktrees
         #expect(ignoredNames(model).isEmpty)
     }
 
-    func marks(_ model: ExplorerModel) -> [String: ExplorerMark] {
+    func marks(_ model: ExplorerModel) -> [String: GitMark] {
         Dictionary(uniqueKeysWithValues: model.rows.compactMap { row in
             guard case .entry(let entry) = row.kind, let mark = row.mark else { return nil }
             return (entry.name, mark)

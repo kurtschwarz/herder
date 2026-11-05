@@ -3,6 +3,7 @@ import Clients
 import DesignSystem
 import PhosphorSwift
 import SwiftUI
+import Worktrees
 
 /// One line of the tree: a folder that opens and closes, a file that selects, or
 /// the note standing in for a folder that could not be read.
@@ -56,7 +57,7 @@ private struct EntryLine: View {
     let entry: DirectoryEntry
     let parent: URL
     let isIgnored: Bool
-    let mark: ExplorerMark?
+    let mark: GitMark?
     let model: ExplorerModel
     let focus: FocusState<ExplorerFocus?>.Binding
     @Binding var isHovering: Bool
@@ -97,7 +98,7 @@ private struct EntryLine: View {
             Spacer(minLength: 0)
 
             if let mark {
-                Text(mark.letter)
+                Text(markLetter(mark))
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(isSelected ? Theme.Palette.onViolet : markColor(mark))
                     .help(markHelp(mark))
@@ -139,7 +140,16 @@ private struct EntryLine: View {
         return isHovering ? Theme.Palette.control : .clear
     }
 
-    private func markColor(_ mark: ExplorerMark) -> Color {
+    /// Git's own shorthand, which anybody who reads `git status` already knows.
+    private func markLetter(_ mark: GitMark) -> String {
+        switch mark {
+        case .untracked: "?"
+        case .modified: "M"
+        case .unmerged: "!"
+        }
+    }
+
+    private func markColor(_ mark: GitMark) -> Color {
         switch mark {
         case .untracked: Theme.Palette.accent
         case .modified: Theme.Palette.warning
@@ -148,7 +158,7 @@ private struct EntryLine: View {
     }
 
     /// A closed folder's mark is about what is inside it, not about the folder.
-    private func markHelp(_ mark: ExplorerMark) -> String {
+    private func markHelp(_ mark: GitMark) -> String {
         let inside = entry.isDirectory
         switch mark {
         case .untracked: return inside ? "Untracked files inside" : "Untracked"

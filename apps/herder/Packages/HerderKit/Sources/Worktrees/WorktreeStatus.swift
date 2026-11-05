@@ -2,18 +2,24 @@ import Clients
 import Foundation
 import Models
 
-/// The single marker a collapsed folder carries for what changed inside it.
+/// The single marker a path carries: what git says about it, or what changed
+/// inside it when it is a collapsed folder.
+///
+/// Staged and unstaged are collapsed into one `modified`. ``GitStatus`` keeps
+/// them apart — a two-column status is what git reports and discarding it could
+/// not be undone — but nothing that draws a marker has a visual language that
+/// could tell "saved" from "staged" without being noise.
 ///
 /// `Comparable` in declaration order, so the marker a folder shows is the
 /// `max` of everything below it. No counts: they are noise at a glance and they
 /// make the rollup expensive to keep correct.
-public enum GitRollup: Sendable, Equatable, Comparable {
+public enum GitMark: Sendable, Equatable, Comparable {
     case untracked
     case modified
     case unmerged
 
     /// `nil` for ignored, which raises no marker anywhere.
-    init?(_ status: GitStatus) {
+    public init?(_ status: GitStatus) {
         switch status {
         case .unmerged: self = .unmerged
         case .tracked: self = .modified
@@ -40,7 +46,7 @@ public struct WorktreeStatus: Equatable, Sendable {
     /// from. Few, because `--untracked-files=normal` collapses them.
     private var collapsed: [PathKey: GitStatus] = [:]
 
-    private var rollups: [PathKey: GitRollup] = [:]
+    private var rollups: [PathKey: GitMark] = [:]
 
     public init() {}
 
@@ -57,7 +63,7 @@ public struct WorktreeStatus: Equatable, Sendable {
         }
 
         for (path, status) in entries {
-            guard let rollup = GitRollup(status) else { continue }
+            guard let rollup = GitMark(status) else { continue }
             // Ignored is terminal in both directions: a change buried inside an
             // ignored folder raises no marker, or every repository with a build
             // folder in it would wear one permanently.
@@ -88,7 +94,7 @@ public struct WorktreeStatus: Equatable, Sendable {
 
     /// The marker `folder` carries for what changed inside it, `nil` when there
     /// is nothing to report.
-    public func rollup(of folder: PathKey) -> GitRollup? {
+    public func rollup(of folder: PathKey) -> GitMark? {
         rollups[folder]
     }
 

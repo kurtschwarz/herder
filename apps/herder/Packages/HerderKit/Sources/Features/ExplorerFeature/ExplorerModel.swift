@@ -28,7 +28,7 @@ public struct ExplorerRow: Identifiable, Equatable {
 
     /// The mark it carries for what git says about it, or for what changed
     /// inside it when it is a closed folder.
-    var mark: ExplorerMark?
+    var mark: GitMark?
 
     public var id: String {
         switch kind {
@@ -311,12 +311,12 @@ public final class ExplorerModel {
     /// A file wears what git says about it. A folder wears what changed inside
     /// it, and only while it is closed: once it is open, the rows inside say it
     /// better than a mark on the folder could.
-    private func mark(of path: PathKey, isDirectory: Bool, isOpen: Bool) -> ExplorerMark? {
+    private func mark(of path: PathKey, isDirectory: Bool, isOpen: Bool) -> GitMark? {
         guard let worktree else { return nil }
         if isDirectory {
             guard !isOpen else { return nil }
-            return worktree.status.rollup(of: path).map(ExplorerMark.init)
+            return worktree.status.rollup(of: path)
         }
-        return worktree.status.status(of: path).flatMap(ExplorerMark.init)
+        return worktree.status.status(of: path).flatMap(GitMark.init)
     }
 }
