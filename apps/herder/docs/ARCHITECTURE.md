@@ -96,7 +96,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   │   ├── Persistence/
 │   │   │   │   │   └── Workspace/       # WorkspaceServicesFactory implementation
 │   │   │   │   ├── DesignSystem/        # Liquid Glass components, tokens, icons
-│   │   │   │   ├── TestSupport/         # fakes for every service protocol
+│   │   │   │   ├── TestSupport/         # fakes for every service protocol (#if DEBUG)
 │   │   │   │   ├── Components/
 │   │   │   │   │   └── TerminalUI/      # shared building blocks, module <Name>UI
 │   │   │   │   ├── Features/
@@ -295,7 +295,8 @@ extension Workspace {
 
 ## Services
 
-- Protocols live in `Core/Services/`. Implementations live in `Services/<Area>/`. Every protocol has a fake in `TestSupport/Fakes/`.
+- Protocols live in `Core/Services/`. Implementations live in `Services/<Area>/`. Every protocol has a fake in `TestSupport/Fakes/`, wrapped in `#if DEBUG` so a release build links an empty module.
+- **Pure logic that happens to be about an external system still belongs in `Core`.** `GitRefName` validates a branch name and `GitWorktreeLocation` works out where a worktree goes: both are string and URL arithmetic with no I/O, and a feature needs them to refuse a name as it is typed. Only the code that actually runs `git` is a service.
 - Stateful services are `actor`s. Stateless ones are `Sendable` structs.
 - Services never hold references to views or view models.
 - Services report changes into the `Workspace` by calling its `@MainActor` methods. Views read from `Workspace` and feature models; they never call services for data. Feature models call services to perform actions.
