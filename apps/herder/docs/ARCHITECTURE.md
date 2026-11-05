@@ -12,7 +12,10 @@ This is the target architecture for Herder and the rulebook for anyone (human or
 ## Layers
 
 ```
-App target            composition root: windows, menus, builds real services
+Herder target         @main, Info.plist, entitlements, assets. Nothing else.
+  │
+  ▼
+AppFeature            composition root: windows, menus, builds real services
   │
   ├──► Features        UI + feature state (Editor, FileTree, AgentSessions, ...)
   │       │
@@ -25,7 +28,17 @@ App target            composition root: windows, menus, builds real services
           RustBridge   Swift bindings for packages/syntax-highlighter
 ```
 
-`RustBridge` is a role, not necessarily a target name. If `packages/syntax-highlighter` already ships its own Swift package, that package's product *is* the RustBridge: HerderKit depends on it directly, no separate `RustBridge` target is needed, and you substitute its module name wherever this document and `check-boundaries.sh` say `RustBridge`.
+### The composition root is a module, not the Xcode target
+
+`Herder.xcodeproj` is **generated** from `project.yml` by `xcodegen`, so every file added under `Herder/` costs a `just project` run, while files under `Packages/HerderKit` are picked up by SwiftPM on their own. Composition code changes often, so it lives one level down, in `AppFeature`.
+
+`Herder/` therefore holds `@main`, `Info.plist`, the entitlements and the asset catalog, and links exactly one product: `AppFeature`. Wherever this document says "the App target", read "the composition root", which is `AppFeature`. Nothing in the dependency rules needs the composition root to be the Xcode target — only that exactly one place names concrete service types.
+
+`AppFeature` is **not a feature**, despite the name. It is the one HerderKit module allowed to import `Services`, and it lives at `Sources/App/` rather than under `Sources/Features/`. The name is kept because `project.yml` names the product.
+
+### RustBridge
+
+`RustBridge` is a role, not a target name. In Herder it is filled by the `HerderSyntaxFFI` binary target: `packages/syntax-highlighter` ships no Swift package, it builds an XCFramework, and `.binaryTarget` is how SwiftPM takes one. `Services` depends on it directly, so there is no separate wrapper target. Substitute `HerderSyntaxFFI` wherever this document and `check-boundaries.sh` say `RustBridge`.
 
 ### Dependency rules
 
@@ -33,11 +46,21 @@ App target            composition root: windows, menus, builds real services
 2. **Features never import other features.** Cross-feature coordination goes through `Workspace` in Core. Building blocks that several features need (for example the terminal emulator view) live in a component module such as `TerminalUI`.
 3. **Services** may import `Core` and `RustBridge`.
 4. **Core** imports only `Foundation` and `Observation`. Never SwiftUI, AppKit, SwiftData, or RustBridge.
-5. **Only the App target** knows concrete service types. It constructs them in `AppEnvironment`.
+5. **Only `AppFeature`** knows concrete service types. It constructs them in `AppEnvironment`.
 6. **SwiftData**, while it exists, is imported only under `Services/Persistence/`.
 7. **RustBridge types never leave Services.** Services translate FFI types to Core types at the boundary.
 
 Rules 1, 2, 3 and 5 are enforced by target dependencies in `Package.swift`. Rules 4 and 6 (and the no-singletons rule below) are enforced by `scripts/check-boundaries.sh`, which must pass before any merge. Rule 7 is enforced in review.
+
+### Feature scope
+
+Features come in two kinds, and which kind a feature is decides how it gets its state.
+
+**Workspace-scoped** features operate inside one checkout and receive it from the environment: `Editor`, `FileTree`, `AgentSessions`, `Terminal`, `Search`. They take `@Environment(Workspace.self)` and never look up "the active workspace" themselves.
+
+**App-scoped** features operate above any single workspace: `Repositories`, `Settings`. `Repositories` is the UI for `WorkspaceRegistry.open(_:)` and `close(_:)` and for setting `WindowModel.activeWorkspaceID` — it is the feature that *picks* the workspace the others run in, so it cannot be scoped to one. `CommandPalette` is app-scoped but reads the active workspace when there is one.
+
+This mirrors the service scoping table below, and it is the rule for where a new feature goes: if it needs the registry rather than a workspace, it is app-scoped.
 
 ## Repository layout
 
@@ -49,16 +72,14 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 <repo root>/
 ├── apps/
 │   ├── herder/
-│   │   ├── Herder.xcodeproj             # thin: app target only
-│   │   ├── App/                         # app target sources (real folder name from the survey)
-│   │   │   ├── HerderApp.swift
-│   │   │   ├── AppEnvironment.swift     # composition root: builds app-scoped services
-│   │   │   ├── WindowModel.swift        # per-window state (active workspace)
-│   │   │   ├── Commands/                # menu bar, keyboard shortcuts
-│   │   │   └── Resources/               # assets, Info.plist, entitlements
+│   │   ├── project.yml                  # source of truth for the generated Herder.xcodeproj
+│   │   ├── Herder.xcodeproj             # generated and gitignored; app target only
+│   │   ├── Herder/                      # app target: @main, Info.plist, entitlements, assets
+│   │   ├── UITests/                     # XCTest only; Swift Testing has no UI automation
 │   │   │
-│   │   ├── HerderKit/
+│   │   ├── Packages/HerderKit/
 │   │   │   ├── Package.swift
+│   │   │   ├── Vendor/                  # gitignored: HerderSyntaxFFI.xcframework, built by `just syntax`
 │   │   │   ├── Sources/
 │   │   │   │   ├── Core/
 │   │   │   │   │   ├── Models/          # Sendable value types
@@ -74,27 +95,29 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   │   ├── Search/
 │   │   │   │   │   ├── Persistence/
 │   │   │   │   │   └── Workspace/       # WorkspaceServicesFactory implementation
-│   │   │   │   ├── RustBridge/          # only if syntax-highlighter has no Swift package of its own
 │   │   │   │   ├── DesignSystem/        # Liquid Glass components, tokens, icons
-│   │   │   │   ├── TestSupport/         # fakes for every service protocol (#if DEBUG)
+│   │   │   │   ├── TestSupport/         # fakes for every service protocol
 │   │   │   │   ├── Components/
 │   │   │   │   │   └── TerminalUI/      # shared building blocks, module <Name>UI
-│   │   │   │   └── Features/
-│   │   │   │       ├── Editor/          # module EditorFeature
-│   │   │   │       ├── FileTree/        # module FileTreeFeature
-│   │   │   │       ├── AgentSessions/   # module AgentSessionsFeature
-│   │   │   │       ├── Terminal/        # module TerminalFeature
-│   │   │   │       ├── Search/          # module SearchFeature
-│   │   │   │       ├── CommandPalette/  # module CommandPaletteFeature
-│   │   │   │       └── Settings/        # module SettingsFeature
+│   │   │   │   ├── Features/
+│   │   │   │   │   ├── Editor/          # module EditorFeature
+│   │   │   │   │   ├── FileTree/        # module FileTreeFeature
+│   │   │   │   │   ├── Repositories/    # module RepositoriesFeature
+│   │   │   │   │   ├── AgentSessions/   # module AgentSessionsFeature
+│   │   │   │   │   ├── Terminal/        # module TerminalFeature
+│   │   │   │   │   ├── Search/          # module SearchFeature
+│   │   │   │   │   ├── CommandPalette/  # module CommandPaletteFeature
+│   │   │   │   │   └── Settings/        # module SettingsFeature
+│   │   │   │   └── App/                 # module AppFeature: the composition root
 │   │   │   └── Tests/
 │   │   │       ├── CoreTests/
 │   │   │       ├── ServicesTests/
-│   │   │       └── <Name>FeatureTests/
+│   │   │       └── Features/<Name>FeatureTests/
 │   │   │
 │   │   ├── scripts/
 │   │   │   └── check-boundaries.sh
 │   │   ├── justfile
+│   │   ├── AGENTS.md                    # points here; holds only what is not in this file
 │   │   └── docs/
 │   │       ├── ARCHITECTURE.md          # this file
 │   │       └── REALIGNMENT.md
@@ -105,11 +128,11 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
     └── ...                              # other shared packages
 ```
 
-HerderKit lives inside `apps/herder/` because nothing outside Herder uses it. If another app ever needs part of it, that part moves to `packages/` then, not before.
+HerderKit lives inside `apps/herder/` because nothing outside Herder uses it. If another app ever needs part of it, that part moves to `packages/` then, not before. It sits under `Packages/` so a second local package has somewhere to go.
 
 ### Naming
 
-- Feature folders are `Sources/Features/<Name>/`; the module is `<Name>Feature`. The suffix avoids module/type name collisions (a `FileTree` type inside a `FileTree` module confuses the compiler).
+- Feature folders are `Sources/Features/<Name>/`; the module is `<Name>Feature`. The suffix avoids module/type name collisions (a `FileTree` type inside a `FileTree` module confuses the compiler). The folder does **not** repeat the suffix: `Sources/Features/Editor/`, not `Sources/Features/EditorFeature/`.
 - Component folders are `Sources/Components/<Name>UI/`; the module is `<Name>UI`.
 - One primary type per file, and the file is named after that type.
 
@@ -119,14 +142,27 @@ HerderKit lives inside `apps/herder/` because nothing outside Herder uses it. If
 // swift-tools-version: 6.2
 import PackageDescription
 
-let mainActorByDefault: [SwiftSetting] = [.defaultIsolation(MainActor.self)]
+/// Settings for modules that own UI. Defaulting isolation to `MainActor` keeps
+/// `@MainActor` annotations out of views and `@Observable` models.
+let ui: [SwiftSetting] = [
+    .defaultIsolation(MainActor.self),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+]
+
+/// Settings for modules that must stay free to run off the main actor.
+let core: [SwiftSetting] = [
+    .defaultIsolation(nil),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+]
+
+let icons: Target.Dependency = .product(name: "PhosphorSwift", package: "swift")
 
 func feature(_ name: String, extraDeps: [Target.Dependency] = []) -> Target {
     .target(
         name: "\(name)Feature",
         dependencies: ["Core", "DesignSystem", "TestSupport"] + extraDeps,
         path: "Sources/Features/\(name)",
-        swiftSettings: mainActorByDefault
+        swiftSettings: ui
     )
 }
 
@@ -134,62 +170,82 @@ let package = Package(
     name: "HerderKit",
     platforms: [.macOS(.v26)],
     products: [
-        .library(name: "HerderKit", targets: [
-            "Core", "Services", "DesignSystem",
-            "EditorFeature", "FileTreeFeature", "AgentSessionsFeature",
-            "TerminalFeature", "SearchFeature", "CommandPaletteFeature", "SettingsFeature",
-        ]),
+        // One product. The app target links the composition root and nothing else.
+        .library(name: "AppFeature", targets: ["AppFeature"]),
     ],
     dependencies: [
-        // packages/syntax-highlighter, when it ships its own Package.swift.
-        .package(path: "../../../packages/syntax-highlighter"),
+        .package(url: "https://github.com/phosphor-icons/swift", from: "2.1.0"),
     ],
     targets: [
-        .target(name: "Core"),
-        .target(name: "Services", dependencies: [
-            "Core",
-            // Use the real product name from the survey.
-            .product(name: "SyntaxHighlighter", package: "syntax-highlighter"),
-        ]),
-        // If syntax-highlighter has no Package.swift, drop the package dependency above
-        // and use a binaryTarget pointing at its build output plus a thin wrapper:
-        //   .binaryTarget(name: "SyntaxHighlighterFFI", path: "../../../packages/syntax-highlighter/<path from survey>"),
-        //   .target(name: "RustBridge", dependencies: ["SyntaxHighlighterFFI"]),
-        // and make Services depend on "RustBridge" instead.
-        .target(name: "DesignSystem", swiftSettings: mainActorByDefault),
-        .target(name: "TestSupport", dependencies: ["Core"]),
+        // Models, service protocols and workspace state. Nonisolated by default;
+        // the stores in Sources/Core/Workspace are marked @MainActor explicitly.
+        .target(name: "Core", swiftSettings: core),
+
+        // Protocol implementations. The only module that touches the FFI.
+        .target(name: "Services", dependencies: ["Core", "HerderSyntaxFFI"], swiftSettings: core),
+
+        // The Rust highlighter. A build artifact, not a checked-in one: `just
+        // syntax` in apps/herder produces it, and a fresh clone has to run
+        // `just bootstrap` before this package will resolve.
+        .binaryTarget(name: "HerderSyntaxFFI", path: "Vendor/HerderSyntaxFFI.xcframework"),
+
+        .target(name: "DesignSystem", dependencies: [icons], swiftSettings: ui),
+        .target(name: "TestSupport", dependencies: ["Core"], swiftSettings: core),
         .target(name: "TerminalUI", dependencies: ["Core", "DesignSystem"],
-                path: "Sources/Components/TerminalUI", swiftSettings: mainActorByDefault),
+                path: "Sources/Components/TerminalUI", swiftSettings: ui),
 
         feature("Editor"),
-        feature("FileTree"),
+        feature("FileTree", extraDeps: [icons]),
+        feature("Repositories", extraDeps: [icons]),
         feature("Terminal", extraDeps: ["TerminalUI"]),
         feature("AgentSessions", extraDeps: ["TerminalUI"]),
         feature("Search"),
         feature("CommandPalette"),
         feature("Settings"),
 
-        .testTarget(name: "CoreTests", dependencies: ["Core", "TestSupport"]),
-        .testTarget(name: "ServicesTests", dependencies: ["Services", "TestSupport"]),
+        // Composition root, not a feature: the one module that names concrete
+        // service types, and so the one that may import Services.
+        .target(
+            name: "AppFeature",
+            dependencies: [
+                "Core", "Services", "DesignSystem", "TestSupport",
+                "EditorFeature", "FileTreeFeature", "RepositoriesFeature",
+            ],
+            path: "Sources/App",
+            swiftSettings: ui
+        ),
+
+        .testTarget(name: "CoreTests", dependencies: ["Core", "TestSupport"], swiftSettings: core),
+        .testTarget(name: "ServicesTests", dependencies: ["Services", "TestSupport"], swiftSettings: core),
     ]
 )
 ```
+
+Each feature's test target takes `path: "Tests/Features/<Name>FeatureTests"`. SwiftPM looks directly under `Sources` and `Tests` by default, so a target without an explicit `path` is not found.
 
 ## State
 
 ### Hierarchy
 
+Two app-wide things, because Herder's model has two levels: the repositories the user has adopted, and the checkouts currently open.
+
 ```
+RepositoryStore            app-wide: the folders the user has adopted (Core)
+ └── Repository            one adopted repository. Persisted: name, bookmark,
+                           sidebar order. Has N git worktrees.
+
 WorkspaceRegistry          app-wide, one per process (Core)
- └── Workspace             one folder or git worktree (Core)
+ └── Workspace             one checkout: a repository's worktree, or a plain folder
       ├── DocumentStore        open documents, tabs, dirty state
       ├── AgentSessionStore    agent sessions running in this worktree
       ├── git state            branch, status
       └── UI state bag         per-feature UI state (see below)
 
-WindowModel                one per window (App)
+WindowModel                one per window (AppFeature)
  └── activeWorkspaceID     which workspace this window is showing
 ```
+
+`Repository` is what the user adds and names and arranges; `Workspace` is what a pane shows. One `Repository` can have several `Workspace`s open at once, one per worktree. A plain folder that is not a repository is still a `Workspace`.
 
 ### Rules
 
@@ -200,9 +256,10 @@ WindowModel                one per window (App)
 - Stores are `@MainActor @Observable public final class` with `public private(set)` state. Mutation happens only through methods (`workspace.documents.open(url)`, never `workspace.documents.tabs.append(...)`).
 - Features receive their `Workspace` from the environment (`@Environment(Workspace.self)`). They never look up "the active workspace" themselves.
 - Keep stores small and focused so Observation tracking stays precise. No god objects.
+- **Key paths with `PathKey`, never with a raw `URL`.** The same folder arrives spelled differently from a bookmark, from `git` and from the file watcher, and `standardizedFileURL` does not resolve symlinks. A dictionary keyed on `URL` looks like it works and silently misses.
 
 ```swift
-// App: root view resolves and injects
+// AppFeature: root view resolves and injects
 if let workspace = registry.workspace(for: window.activeWorkspaceID) {
     WorkspaceView()
         .environment(workspace)
@@ -231,7 +288,7 @@ extension Workspace {
 
 // FileTreeFeature
 @Observable final class FileTreeUIState: WorkspaceUIState {
-    var expanded: Set<URL> = []
+    var expanded: Set<PathKey> = []
     required init() {}
 }
 ```
@@ -250,14 +307,14 @@ extension Workspace {
 | Settings, keybindings, theme | File system + FSEvents watcher |
 | `HighlightService` (Rust syntax engine) | Git |
 | `StateStore` | Search |
-| | Process / PTY |
+| `RepositoryStore`, bookmarks, folder picker | Process / PTY |
 | | Agent runner |
 
 Workspace-scoped services are created when a workspace opens and torn down when it closes. Each one is bound to its workspace root, so there's never a question of which repo it's talking to.
 
 ### Dependency injection
 
-`AppEnvironment` constructs services and passes them in through initializers or SwiftUI `@Entry` environment values. No `static let shared` singletons outside the App target.
+`AppEnvironment` constructs services and passes them in through initializers or SwiftUI `@Entry` environment values. No `static let shared` singletons anywhere in HerderKit.
 
 ## Persistence
 
@@ -271,6 +328,10 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 - Secrets go in the Keychain, never a file.
 - Searchable indexes and history, when needed, use SQLite on the Rust side.
 
+### A `Repository` cannot be recreated from disk
+
+`Repository` holds a **security-scoped bookmark**, plus a user-chosen name and sidebar order. None of that is recoverable from disk or git: the bookmark cannot be regenerated without the user re-picking the folder in an `NSOpenPanel`. So the repository list is the one piece of Herder's state where losing the store costs the user real work, and it gets a migration rather than a fresh start whenever its storage changes. Where the bookmark lives once `FileStateStore` lands is still open — see `REALIGNMENT.md`.
+
 ### Implementations
 
 - **Transitional:** `SwiftDataStateStore` in `Services/Persistence/`, storing snapshot JSON blobs in a single `@Model`.
@@ -278,7 +339,7 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 
 ```
 ~/Library/Application Support/Herder/
-├── state.json                  # AppSnapshot: open workspaces, recents
+├── state.json                  # AppSnapshot: adopted repositories, open workspaces, recents
 └── workspaces/<id>.json        # WorkspaceSnapshot: tabs, UI state, agent session refs
 ```
 
@@ -297,27 +358,31 @@ public struct WorkspaceSnapshot: Codable, Sendable {
 ## Concurrency
 
 - Swift 6 language mode everywhere. Zero concurrency warnings.
-- `Features`, components and `DesignSystem` use `.defaultIsolation(MainActor.self)`. `Core`, `Services` and `RustBridge` keep the nonisolated default; stores in Core are marked `@MainActor` explicitly.
+- `NonisolatedNonsendingByDefault` is enabled on every target. Without it a plain `nonisolated` async function runs on whichever actor called it, so `@concurrent` is what asks for the global executor — which is how the highlighter parses a megabyte without stopping the editor from redrawing.
+- `Features`, components, `DesignSystem` and `AppFeature` use `.defaultIsolation(MainActor.self)`. `Core` and `Services` keep the nonisolated default; stores in Core are marked `@MainActor` explicitly.
 - Prefer structured concurrency: `async`/`await`, task groups, and SwiftUI's `.task(id:)` for view-tied work so it cancels automatically.
-- No new `DispatchQueue` usage and no completion-handler APIs in new code.
+- No new `DispatchQueue` usage and no completion-handler APIs in new code. The two that exist are at a C or AppKit boundary with no `async` equivalent (FSEvents needs a dispatch queue; the line-number ruler defers `needsDisplay` out of a layout pass) and carry a `// CONCURRENCY:` comment.
 - Escape hatches (`@unchecked Sendable`, `nonisolated(unsafe)`, `@preconcurrency import`) require a `// CONCURRENCY:` comment on the same or preceding line explaining why it's safe.
 
 ## Rust
 
 - The syntax highlighter lives in `packages/syntax-highlighter` and stays there. Don't move it, rename it, or restructure its crates as part of other work.
-- It owns its build and binding generation. HerderKit consumes its output; HerderKit doesn't reach into its internals or duplicate its build steps.
-- Generated binding code is never hand-edited. Change the Rust side and regenerate.
+- It owns its build and binding generation. HerderKit consumes its output; HerderKit doesn't reach into its internals or duplicate its build steps. `just syntax` builds the XCFramework and copies it into `Packages/HerderKit/Vendor/`, so the `.binaryTarget` path stays inside the package and SwiftPM never depends on Cargo's output directory.
+- **The bindings are hand-written**, not generated: a C header and a modulemap in `packages/syntax-highlighter/include/`, declaring module `HerderSyntaxFFI`. The header is the API. It is edited by hand, in step with `src/lib.rs`, and the two must not drift — `SyntaxTests` asserts the kind count matches.
 - Changes to its public API (what Swift sees) are deliberate and get their own task.
 - Swift touches it in exactly one place: the highlighting service in `Services/Highlighting/` (for example `RustHighlightService`), which converts its types to Core types.
 - Keep the FFI API coarse: send edits, not whole documents; request highlights for the visible range; batch where possible.
 - Any future Rust work (text ropes, file search) goes in its own package alongside it, as `packages/<name>`, following the same rules.
-- **Offsets:** Core types use UTF-16 offsets to match `NSString` and TextKit. Tree-sitter works in UTF-8 bytes. Conversion happens in exactly one place: the service wrapping the FFI (for example `RustHighlightService`).
+- **Offsets:** Core types use UTF-16 offsets to match `NSString` and TextKit. Tree-sitter works in UTF-8 bytes. **The crate converts before handing tokens over**, because a conversion a caller has to remember is one a caller will forget. There is no conversion on the Swift side, and there must not be a second one.
 
 ## Editor surface
 
 - `NSTextView` with TextKit 2, wrapped in `NSViewRepresentable`. Not SwiftUI's `TextEditor`.
 - Syntax highlighting is applied with `NSTextLayoutManager` rendering attributes, not text storage attributes. It's faster and keeps highlighting out of the undo stack.
 - Text contents live in `NSTextStorage` and the Rust rope mirror. `Document` holds metadata (URL, language, dirty flag, buffer handle), not the text itself.
+- **Keep token kinds and colours apart.** `Core` says what a span of code *is* and names no colour; `DesignSystem` holds the colours and knows no kinds; `EditorFeature` is the one place that pairs them. That is what lets a grammar be added without touching the theme, and the theme be changed without touching a grammar.
+- **Tokens are only ever applied to the string they were found in.** `SourceText` binds text to its tokens so the pair cannot come apart, and the editor model checks the text still matches before letting a highlight land. Colour does arrive after the text — a quarter of a second of query compilation must not sit between a click and the file appearing — and that is safe only because of those two things. A `SourceText` with no tokens is incomplete; one with another string's tokens paints the wrong characters, or throws.
+- **A reload that finds the same text must change nothing.** The worktree notifies every observer when any folder in it is read, so expanding a folder in the file tree reloads the open file. Compare the text, not the whole content value: a freshly read one carries no tokens yet, so comparing values drops the colour already on screen and flickers it back.
 
 ## Agents and terminal
 
@@ -327,23 +392,34 @@ public struct WorkspaceSnapshot: Codable, Sendable {
 
 ## Testing and previews
 
-- Unit tests use Swift Testing (`import Testing`).
+- Unit tests use Swift Testing (`import Testing`): structs for suites, `#require` to unwrap, `#expect` for everything else. They run in parallel, so anything process-global needs a unique path per test.
 - Core and Services have unit tests. Feature models are tested against fakes from `TestSupport`.
 - Previews use fakes: `.environment(Workspace.preview())`.
-- The syntax highlighter is tested with `cargo test` inside `packages/syntax-highlighter`.
+- The syntax highlighter is tested with `cargo test` and `cargo clippy` inside `packages/syntax-highlighter`. Clippy warnings are errors.
 
 ## Code conventions
 
 - Default to `internal`. A module's `public` surface is deliberate and small; a feature usually exposes one entry view.
 - Views stay dumb: layout and bindings. Logic goes in the feature model, or in a small action type (`OpenFileAction`) when the model gets heavy.
-- No singletons outside the App target.
+- **Observe models directly.** `@Observable` classes read straight from views, injected through `init` or `@Environment`. Reach for a separate ViewModel layer only when direct observation has actually failed.
+- **Reference `Theme` instead of literals** for spacing, colour, radius and size.
+- No singletons.
 
 ## Commands
 
 Run from `apps/herder/`.
 
 ```
-just rust      # runs packages/syntax-highlighter's own build (bindings + library)
-just test      # cargo test in packages/syntax-highlighter + swift test
+just bootstrap # syntax + project. Needed once in a fresh clone, and needs a Rust toolchain.
+just syntax    # runs packages/syntax-highlighter's own build, then copies the XCFramework into Vendor/
+just project   # xcodegen generate. Needed after changing Herder/ or UITests/, not HerderKit.
+just build     # project + syntax, then xcodebuild
+just test      # the Swift Testing suites, via xcodebuild
+just dev       # build and run, with output in this terminal
+just uitest    # the XCTest UI suite. Slow; launches the app.
 just check     # scripts/check-boundaries.sh
 ```
+
+`just test` goes through `xcodebuild test -scheme HerderKit-Package` rather than `swift test`, because PhosphorSwift ships its icons as an asset catalog without declaring it a resource, which only Xcode's build system bundles. `swift test` does not work here.
+
+`build`, `test` and `bootstrap` all depend on `syntax`, because a stale static library links without complaint: the app would highlight with yesterday's grammars and nothing would say so.

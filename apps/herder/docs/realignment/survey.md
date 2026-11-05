@@ -487,7 +487,25 @@ pushed down out of the feature.
 
 ## 10. Open questions
 
-Ordered by what blocks what. **Q1–Q5 and Q8 block Phase 2.**
+**All resolved.** Kurt answered these on 2026-11-05 and the answers are recorded as
+D1–D10 in the "Decisions" section of `../REALIGNMENT.md`, which is the authoritative
+version. `ARCHITECTURE.md` has been amended to match. This section is kept as the
+reasoning behind each decision, not as a live list.
+
+| Question | Resolution |
+|---|---|
+| Q1 paths | D1 — keep `Packages/HerderKit/` and `Herder/`; amend the docs |
+| Q2 XCFramework | D2 — keep the vendored copy |
+| Q3 `ExplorerFeature` | D3 — rename to `FileTreeFeature`, types included |
+| Q4 `Workspace` | D4 — option (a): `WorktreeState` → `Workspace`, `@Model Workspace` → `Repository` |
+| Q5 workspace list | D5 — `RepositoriesFeature`, app-scoped |
+| Q6 unrecreatable data | D6 — migrate, never drop; bookmark storage decided before Phase 7 |
+| Q7 contradicting docs | D7 — `AGENTS.md` becomes a pointer; the four orphan rules move into `ARCHITECTURE.md` |
+| Q8 `AppFeature` | D8 — option (b): composition root is the module, at `Sources/App/` |
+| Q9 Phase 4 | D9 — cut to what exists; smoke test rewritten |
+| Q10 smaller items | D10 — all folded into `ARCHITECTURE.md` |
+
+Ordered below by what blocked what.
 
 ### Q1. The docs' paths do not match the repo
 
