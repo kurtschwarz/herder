@@ -72,8 +72,16 @@ modules:
 | `Clients` | Side effects behind protocols: disk, network, processes, clocks. | `nonisolated` |
 | `ClientsTestSupport` | Fakes for those protocols. Never linked into the app. | `nonisolated` |
 | `Storage` | SwiftData `@Model` classes, their schema versions and the container. The one module that owns reference types. | `MainActor` |
+| `Worktrees` | The authoritative file and git state of a worktree, kept fresh by a file watcher. | `MainActor` |
 | `DesignSystem` | Shared views, styles, tokens. | `MainActor` |
 | `AppFeature` | Root view, navigation, composes features. | `MainActor` |
+
+`Worktrees` is the one module that is neither a feature nor a client. It exists
+because two features want the same answer — the explorer draws a worktree's
+files, and the sidebar wants to say which worktrees have uncommitted work — and
+features never import each other. State that more than one feature reads, and
+that has to be kept fresh rather than fetched on demand, goes in a module of its
+own below them rather than in whichever feature happened to need it first.
 
 This buys four things: the tests run in seconds with no app host, module
 boundaries are enforced by the compiler instead of convention, previews work, and
@@ -124,8 +132,8 @@ The `path` is what buys the `Features/` folder: SwiftPM maps a target name strai
 onto `Sources/<name>` unless told otherwise.
 
 The dependency graph only points downward. Features depend on `Clients`, `Models`,
-`Storage` and `DesignSystem`, never on each other. If two features need to talk,
-that goes through `AppFeature` or a shared model.
+`Storage`, `Worktrees` and `DesignSystem`, never on each other. If two features
+need to talk, that goes through `AppFeature` or a shared model.
 
 ### Concurrency
 

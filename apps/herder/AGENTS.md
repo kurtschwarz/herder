@@ -29,6 +29,7 @@ apps/herder/
     │   │   └── FolderPicker/{FolderPickerClient,LiveFolderPickerClient}.swift
     │   ├── ClientsTestSupport/   # fakes; never linked into the app
     │   ├── Storage/          # SwiftData models, schema versions, container
+    │   ├── Worktrees/        # watched file and git state, read by more than one feature
     │   └── DesignSystem/     # Theme.swift + Views/, Modifiers/, Shapes/
     └── Tests/
         ├── Features/<Name>FeatureTests/   # mirrors Sources/Features
@@ -46,6 +47,7 @@ apps/herder/
 | Anything touching disk, network, processes or the clock | a protocol plus its `Live` implementation in `Clients/<Subject>/` |
 | A fake for that protocol | `ClientsTestSupport/` |
 | A persisted type | `Storage/`, versioned in `WorkspaceSchemaV1` |
+| Live state two features both read | `Worktrees/`, not whichever feature needed it first |
 | A plain value type | `Models/`, one type per file named after the type |
 | AppKit bridging | the feature's `Platform/` |
 
@@ -61,9 +63,13 @@ target `path: "Tests/Features/<Name>FeatureTests"`. SwiftPM looks directly under
 - **Keep the app target thin.** `Herder/` declares scenes and injects live clients.
   Behaviour goes in `HerderKit`.
 - **Point dependencies downward only.** Features depend on `Models`, `Clients`,
-  `Storage` and `DesignSystem`. Two features that need to talk do it through
-  `AppFeature` or a shared model, so add each new feature target to `AppFeature`'s
-  dependencies.
+  `Storage`, `Worktrees` and `DesignSystem`. Two features that need to talk do it
+  through `AppFeature` or a shared model, so add each new feature target to
+  `AppFeature`'s dependencies.
+- **Key paths with `PathKey`, never with a raw `URL`.** The same folder arrives
+  spelled differently from a bookmark, from `git` and from the file watcher, and
+  `standardizedFileURL` does not resolve symlinks. A dictionary keyed on `URL`
+  looks like it works and silently misses.
 - **Observe models directly.** `@Observable` classes read straight from views,
   injected through `init` or `@Environment`. Reach for a separate ViewModel layer
   only when direct observation has actually failed.
