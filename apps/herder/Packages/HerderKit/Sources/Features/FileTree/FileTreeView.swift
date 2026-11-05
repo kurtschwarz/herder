@@ -5,26 +5,26 @@ import PhosphorSwift
 import SwiftUI
 import TestSupport
 
-/// The explorer pane's content: a header over the file tree of the selected
+/// The file tree pane's content: a header over the tree of the selected
 /// worktree.
-/// What can hold keyboard focus in the explorer.
-enum ExplorerFocus: Hashable {
+/// What can hold keyboard focus in the file tree.
+enum FileTreeFocus: Hashable {
     case tree
     case nameField
 }
 
-public struct ExplorerView: View {
-    private let model: ExplorerModel
+public struct FileTreeView: View {
+    private let model: FileTreeModel
 
     /// Where keyboard focus is: the tree, so Return reaches it once a file has
     /// been clicked, or a name field. One value for both, so the two can never
     /// hold focus at once.
-    @FocusState private var focus: ExplorerFocus?
+    @FocusState private var focus: FileTreeFocus?
 
     /// What the root is called, in place of the worktree's folder name.
     private let rootName: String?
 
-    public init(model: ExplorerModel, rootName: String? = nil) {
+    public init(model: FileTreeModel, rootName: String? = nil) {
         self.model = model
         self.rootName = rootName
     }
@@ -34,14 +34,14 @@ public struct ExplorerView: View {
             // The sidebar's header strip, so both titles sit on one line.
             Color.clear.frame(height: Theme.Size.titleBar)
 
-            ExplorerHeader(canCollapse: model.canCollapse) { model.collapseAll() }
+            FileTreeHeader(canCollapse: model.canCollapse) { model.collapseAll() }
 
             if let root = model.root {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         RootLabel(url: root, name: rootName ?? root.lastPathComponent, model: model)
                         ForEach(model.rows) { row in
-                            ExplorerRowView(row: row, model: model, focus: $focus)
+                            FileTreeRowView(row: row, model: model, focus: $focus)
                         }
                     }
                     .padding(.horizontal, Theme.Spacing.tight)
@@ -83,7 +83,7 @@ public struct ExplorerView: View {
     }
 }
 
-private struct ExplorerHeader: View {
+private struct FileTreeHeader: View {
     let canCollapse: Bool
     let collapseAll: () -> Void
 
@@ -115,7 +115,7 @@ private struct ExplorerHeader: View {
 private struct RootLabel: View {
     let url: URL
     let name: String
-    let model: ExplorerModel
+    let model: FileTreeModel
 
     var body: some View {
         Text(name)
@@ -138,7 +138,7 @@ private struct RootLabel: View {
 
 /// New File and New Folder, creating inside `folder`.
 struct NewItemMenu: View {
-    let model: ExplorerModel
+    let model: FileTreeModel
     let folder: URL
 
     var body: some View {
@@ -159,7 +159,7 @@ struct RevealInFinder: View {
 
 #if DEBUG
 #Preview {
-    ExplorerView(model: ExplorerModel(store: WorkspaceRegistry(
+    FileTreeView(model: FileTreeModel(store: WorkspaceRegistry(
         files: PreviewFiles(),
         git: PreviewGit(),
         watcher: PreviewWatcher(),

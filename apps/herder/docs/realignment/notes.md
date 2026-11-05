@@ -321,3 +321,24 @@ whatever the code currently says and pass.
   `@discardableResult` call in `PreviewClients` still warns, because `try?`
   wraps the result in a new optional that `@discardableResult` does not cover.
   `_ =` in front of it. It predates this task but the bar is zero warnings.
+
+## From Phase 5, FileTree
+
+- **`persistenceKey` is data, not a name.** `FileTreeUIState` still persists
+  under `"explorer.expanded"`, because the key is what the saved blobs are
+  filed under: renaming it would leave every one of them unreachable and close
+  every folder the user had open. This is the same lesson as the 4a incident at
+  one step down — a string that reaches disk cannot be renamed by a rename. The
+  type carries a comment saying so. Worth a migration pass if other keys ever
+  want tidying; not worth one on its own.
+- **The pane header still says "Explorer"**, like the sidebar still says
+  "Workspaces". Same reason: rule 3. Both want the same copy pass.
+- **The entry view is `FileTreeView`, not `FileTreePanel`.** The phase text
+  names `FileTreePanel` as an example of a small entry point; the app's other
+  three panes are `AppView`, `EditorView` and `RepositoriesView`, and matching
+  them beat matching the parenthetical.
+- **`FileTreeModel`'s public surface is three members**: `init(store:)`,
+  `selected` and `setRoot(_:)`. Everything else the pane needs — `rows`,
+  `toggle`, the renaming and creating methods, `setWatching` — is internal,
+  because `FileTreeView` lives in the same module and `AppView` never touched
+  them. `FileTreeRow` went internal with them.

@@ -174,7 +174,7 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
         #expect(model.content == nil)
     }
 
-    /// The whole chain in one assertion: a file the explorer clicked, read
+    /// The whole chain in one assertion: a file the file tree clicked, read
     /// through the file client, parsed by the crate, published as one value.
     @Test func openingASourceFileShowsItHighlighted() async throws {
         _ = try await start(with: ["A.swift"])
@@ -221,7 +221,7 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
     }
 
     /// A worktree tells every observer when any folder in it is read, so
-    /// expanding a folder in the explorer reloads the open file even though
+    /// expanding a folder in the file tree reloads the open file even though
     /// nothing about it changed. The reload must leave the pane alone: before
     /// this was guarded, the colour dropped out and came back on every click of
     /// a disclosure triangle.

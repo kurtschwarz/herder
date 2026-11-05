@@ -45,13 +45,9 @@ A new feature target needs `path: "Sources/Features/<Name>"` and its test target
 
 ## Not yet moved
 
-Two feature folders still carry their old names, and `Package.swift` says so at
-each target. Phase 5 renames them one at a time; don't rename them as part of
-other work:
+One feature folder still carries its old name, and `Package.swift` says so at
+the target. Phase 5 renames it; don't rename it as part of other work:
 
-- **`Sources/Features/ExplorerFeature/`** — becomes `Sources/Features/FileTree/`,
-  module `FileTreeFeature`, with `ExplorerModel` and friends renamed to match
-  (D3).
 - **`Sources/Features/EditorFeature/`** — the module name is right, the folder
   repeats the suffix. Becomes `Sources/Features/Editor/`.
 

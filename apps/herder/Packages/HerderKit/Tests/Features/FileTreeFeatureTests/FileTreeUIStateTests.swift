@@ -3,15 +3,15 @@ import Foundation
 import TestSupport
 import Testing
 
-@testable import ExplorerFeature
+@testable import FileTreeFeature
 
 /// Expansion belongs to the worktree, not to the pane showing it.
 ///
-/// It used to be a `Set` on `ExplorerModel`, cleared whenever the pane was
+/// It used to be a `Set` on `FileTreeModel`, cleared whenever the pane was
 /// pointed somewhere else. That made "switch worktree and come back" close
 /// everything the user had opened, and it is why the state now lives on the
 /// `Workspace`.
-@Suite @MainActor struct ExplorerUIStateTests {
+@Suite @MainActor struct FileTreeUIStateTests {
     let files = InMemoryFileClient()
     let git = StubGitClient()
     let watcher = StubFileWatcherClient()
@@ -32,13 +32,13 @@ import Testing
     @Test func expandingAFolderRecordsItOnTheWorkspace() async throws {
         files.seed(children: [dir("Sources")], of: root)
         files.seed(children: [], of: root.appending(path: "Sources"))
-        let model = ExplorerModel(store: registry)
+        let model = FileTreeModel(store: registry)
 
         await model.setRoot(root)
         await model.toggle(root.appending(path: "Sources"))
 
         let workspace = try #require(registry.state(for: root))
-        #expect(workspace.uiState(ExplorerUIState.self).expanded == [PathKey(root.appending(path: "Sources"))])
+        #expect(workspace.uiState(FileTreeUIState.self).expanded == [PathKey(root.appending(path: "Sources"))])
     }
 
     /// The reason for the move: pointing the pane elsewhere must not throw away
@@ -47,7 +47,7 @@ import Testing
         files.seed(children: [dir("Sources")], of: root)
         files.seed(children: [], of: root.appending(path: "Sources"))
         files.seed(children: [], of: other)
-        let model = ExplorerModel(store: registry)
+        let model = FileTreeModel(store: registry)
 
         await model.setRoot(root)
         await model.toggle(root.appending(path: "Sources"))
@@ -58,7 +58,7 @@ import Testing
 
         await model.setRoot(other)
 
-        #expect(workspace.uiState(ExplorerUIState.self).expanded == [PathKey(root.appending(path: "Sources"))])
+        #expect(workspace.uiState(FileTreeUIState.self).expanded == [PathKey(root.appending(path: "Sources"))])
     }
 
     /// Two worktrees' expansion must not run together, which is the thing a
@@ -68,7 +68,7 @@ import Testing
         files.seed(children: [], of: root.appending(path: "Sources"))
         files.seed(children: [dir("Sources", in: other)], of: other)
         files.seed(children: [], of: other.appending(path: "Sources"))
-        let model = ExplorerModel(store: registry)
+        let model = FileTreeModel(store: registry)
 
         await model.setRoot(root)
         await model.toggle(root.appending(path: "Sources"))
@@ -77,27 +77,27 @@ import Testing
         await model.setRoot(other)
         let second = try #require(registry.state(for: other))
 
-        #expect(first.uiState(ExplorerUIState.self).expanded.count == 1)
-        #expect(second.uiState(ExplorerUIState.self).expanded.isEmpty)
+        #expect(first.uiState(FileTreeUIState.self).expanded.count == 1)
+        #expect(second.uiState(FileTreeUIState.self).expanded.isEmpty)
     }
 
     @Test func collapsingAllClosesOnlyTheWorktreeShown() async throws {
         files.seed(children: [dir("Sources")], of: root)
         files.seed(children: [], of: root.appending(path: "Sources"))
-        let model = ExplorerModel(store: registry)
+        let model = FileTreeModel(store: registry)
 
         await model.setRoot(root)
         await model.toggle(root.appending(path: "Sources"))
         model.collapseAll()
 
         let workspace = try #require(registry.state(for: root))
-        #expect(workspace.uiState(ExplorerUIState.self).expanded.isEmpty)
+        #expect(workspace.uiState(FileTreeUIState.self).expanded.isEmpty)
     }
 
     /// With no worktree there is nothing for a path to be relative to, so
     /// expansion has nowhere to go and must not crash trying.
     @Test func expandingWithNoWorktreeIsHarmless() async {
-        let model = ExplorerModel(store: registry)
+        let model = FileTreeModel(store: registry)
         await model.toggle(root.appending(path: "Sources"))
         #expect(!model.canCollapse)
     }
@@ -105,10 +105,10 @@ import Testing
     // MARK: - Persistence
 
     @Test func expansionSurvivesAnEncodeAndRestore() throws {
-        let state = ExplorerUIState()
+        let state = FileTreeUIState()
         state.expanded = [PathKey(canonical: "/code/api/Sources"), PathKey(canonical: "/code/api/Tests")]
 
-        let restored = ExplorerUIState()
+        let restored = FileTreeUIState()
         try restored.restore(from: try state.encode())
 
         #expect(restored.expanded == state.expanded)
@@ -119,12 +119,12 @@ import Testing
     @Test func aRestoredWorkspaceHandsExpansionBackOnFirstAsk() async throws {
         files.seed(children: [], of: root)
         let before = try #require(await registry.open(WorkspaceID(root)))
-        before.uiState(ExplorerUIState.self).expanded = [PathKey(canonical: "/code/api/Sources")]
+        before.uiState(FileTreeUIState.self).expanded = [PathKey(canonical: "/code/api/Sources")]
 
         let fresh = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
         let after = try #require(await fresh.open(WorkspaceID(root)))
         after.restore(from: before.snapshot)
 
-        #expect(after.uiState(ExplorerUIState.self).expanded == [PathKey(canonical: "/code/api/Sources")])
+        #expect(after.uiState(FileTreeUIState.self).expanded == [PathKey(canonical: "/code/api/Sources")])
     }
 }

@@ -1,6 +1,6 @@
 import Core
 import EditorFeature
-import ExplorerFeature
+import FileTreeFeature
 import Foundation
 import Observation
 import RepositoriesFeature
@@ -47,7 +47,7 @@ public final class AppEnvironment {
     public let repositoryList: RepositoriesModel
 
     /// The file tree of the worktree selected in the sidebar.
-    public let explorer: ExplorerModel
+    public let fileTree: FileTreeModel
 
     /// The file open in the middle pane.
     public let editor: EditorModel
@@ -123,7 +123,7 @@ public final class AppEnvironment {
             files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
         )
         self.worktrees = worktrees
-        self.explorer = ExplorerModel(store: worktrees)
+        self.fileTree = FileTreeModel(store: worktrees)
         self.editor = EditorModel(store: worktrees, files: files, highlighter: highlighter)
     }
 

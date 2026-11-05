@@ -13,7 +13,11 @@ import Observation
 /// `internal`: `Core` holds this without knowing the type, which is what keeps
 /// one feature's UI state out of reach of every other.
 @Observable
-final class ExplorerUIState: PersistedWorkspaceUIState {
+final class FileTreeUIState: PersistedWorkspaceUIState {
+    /// Still `explorer`, after the rename to `FileTreeFeature`. The key is what
+    /// is on disk: changing it would leave every saved blob unreachable and
+    /// close every folder the user had open. It is renamed with a migration or
+    /// not at all.
     static let persistenceKey = "explorer.expanded"
 
     /// Open folders below the root. The root itself is always open and is never

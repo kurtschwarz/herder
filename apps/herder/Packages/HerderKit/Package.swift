@@ -75,12 +75,10 @@ let package = Package(
             swiftSettings: ui
         ),
 
-        // Still the old name and the old folder: it becomes `FileTreeFeature`
-        // at `Sources/Features/FileTree` in Phase 5, types included (D3).
         .target(
-            name: "ExplorerFeature",
+            name: "FileTreeFeature",
             dependencies: ["Core", "DesignSystem", "TestSupport", icons],
-            path: "Sources/Features/ExplorerFeature",
+            path: "Sources/Features/FileTree",
             swiftSettings: ui
         ),
 
@@ -101,7 +99,7 @@ let package = Package(
             name: "AppFeature",
             dependencies: [
                 "Core", "Services", "DesignSystem", "TestSupport",
-                "RepositoriesFeature", "ExplorerFeature", "EditorFeature",
+                "RepositoriesFeature", "FileTreeFeature", "EditorFeature",
             ],
             path: "Sources/App",
             swiftSettings: ui
@@ -130,9 +128,9 @@ let package = Package(
             swiftSettings: ui
         ),
         .testTarget(
-            name: "ExplorerFeatureTests",
-            dependencies: ["ExplorerFeature", "Core", "TestSupport"],
-            path: "Tests/Features/ExplorerFeatureTests",
+            name: "FileTreeFeatureTests",
+            dependencies: ["FileTreeFeature", "Core", "TestSupport"],
+            path: "Tests/Features/FileTreeFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(

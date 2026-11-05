@@ -356,7 +356,9 @@ Order if running serially: Repositories, FileTree, Editor.
 - **Repositories. Done.** `RepositoriesFeature` at `Sources/Features/Repositories/`, with `RepositoriesModel`, `RepositoriesView`, `AddRepositoryModel`/`Overlay`, `RepositoryRow` and `RepositorySection`. `WorktreeRow` keeps its name: it is a row of git's worktrees, which is the vocabulary `ARCHITECTURE.md` keeps separate. It kept `NewSessionModel`, whose `workspaceName` became `repositoryName`. App-scoped as D5 says, though in the shape 4c and 4e left it: it takes the `RepositoryStore`, not the `WorkspaceRegistry`, because picking a workspace now goes through `OpenWorkspaceAction` and nothing in the feature holds a registry. Its public surface came down to four names, and it gained a `#Preview` over the `TestSupport` fakes.
 
   **The user-visible strings still say "workspace"** — the sidebar header, the add button and the empty state. Changing them is a behaviour change under rule 3, so they were left exactly as they were and logged in `notes.md` for Kurt.
-- **FileTree** (`ExplorerFeature` today). Rename per D3, types included.
+- **FileTree. Done.** `FileTreeFeature` at `Sources/Features/FileTree/`, with `FileTreeModel`, `FileTreeView`, `FileTreeRow`, `FileTreeRowView`, `FileTreeFocus` and `FileTreeUIState`. The entry view is `FileTreeView`, not the `FileTreePanel` this phase's step 3 names in passing: every other pane in the app is `<Name>View`, and one odd name out is worse than matching the parenthetical.
+
+  **Two strings are deliberately untouched.** The pane header still reads "Explorer" — a behaviour change under rule 3, like the sidebar's "Workspaces". And `FileTreeUIState.persistenceKey` is still `"explorer.expanded"`, which is not cosmetic: it is the key the saved blobs are under, so changing it would close every folder the user had open. It is renamed with a migration or not at all, and the type says so.
 - **Editor**. Largest surface per file but least coupled. `SyntaxAttributes` is the one place kinds meet colours and stays here by design.
 - **AppFeature** is not a feature and is not extracted. It moved in Phase 2 step 6.
 
@@ -457,7 +459,7 @@ added to docs/realignment/notes.md.
   - [x] 4g several live workspaces at once, and restoring them from `AppSnapshot`
 - [ ] **P5** Features
   - [x] Repositories
-  - [ ] FileTree
+  - [x] FileTree
   - [ ] Editor
 - [ ] **P6** Syntax highlighter boundary
 - [ ] **P7** Persistence swap *(optional)*

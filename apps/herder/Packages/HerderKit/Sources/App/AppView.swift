@@ -1,7 +1,7 @@
 import Core
 import DesignSystem
 import EditorFeature
-import ExplorerFeature
+import FileTreeFeature
 import RepositoriesFeature
 import SwiftUI
 
@@ -42,7 +42,7 @@ public struct AppView: View {
             EditorView(model: environment.editor, rootName: activeWorkspaceName)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            ExplorerView(model: environment.explorer, rootName: activeWorkspaceName)
+            FileTreeView(model: environment.fileTree, rootName: activeWorkspaceName)
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
         }
@@ -66,7 +66,7 @@ public struct AppView: View {
         .task(id: window.activeWorkspaceID) {
             // A file from the worktree before is stale, not preserved.
             environment.editor.close()
-            await environment.explorer.setRoot(window.activeWorkspaceID?.url)
+            await environment.fileTree.setRoot(window.activeWorkspaceID?.url)
         }
         // Tells the registry what this window is showing, which is what
         // decides whether that workspace drains. Idempotent, so saying it
@@ -88,8 +88,8 @@ public struct AppView: View {
         }
         // Selection only ever opens. A file that goes from disk loses its
         // selection but not its pane: the editor keeps it, struck through.
-        .task(id: environment.explorer.selected) {
-            guard let file = environment.explorer.selected else { return }
+        .task(id: environment.fileTree.selected) {
+            guard let file = environment.fileTree.selected else { return }
             await environment.editor.open(file)
         }
         // The modal's scrim swallows clicks; this stops the keyboard reaching

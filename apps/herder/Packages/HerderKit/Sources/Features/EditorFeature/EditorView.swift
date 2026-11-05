@@ -3,7 +3,7 @@ import PhosphorSwift
 import SwiftUI
 
 /// The editor pane's content: a breadcrumb over the open file's text. Has no
-/// surface of its own: it sits straight on the window, and the explorer is the
+/// surface of its own: it sits straight on the window, and the file tree is the
 /// only floating pane beside it.
 public struct EditorView: View {
     private let model: EditorModel

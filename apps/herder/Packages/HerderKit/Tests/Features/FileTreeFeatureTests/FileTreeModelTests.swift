@@ -3,15 +3,15 @@ import Foundation
 import TestSupport
 import Testing
 
-@testable import ExplorerFeature
+@testable import FileTreeFeature
 
-@Suite struct ExplorerModelTests {
+@Suite struct FileTreeModelTests {
     let files = InMemoryFileClient()
     let git = StubGitClient()
     let watcher = StubFileWatcherClient()
     let clock = VirtualClockClient()
     let state = InMemoryStateStore()
-    let model: ExplorerModel
+    let model: FileTreeModel
     let root = URL(filePath: "/code/api")
 
     /// Stands in for the window showing this worktree. Since 4g a workspace
@@ -28,7 +28,7 @@ import Testing
             state: state
         )
         registry.display(WorkspaceID(root), from: window)
-        model = ExplorerModel(store: registry)
+        model = FileTreeModel(store: registry)
     }
 
     func dir(_ name: String, in parent: URL? = nil) -> DirectoryEntry {
@@ -39,7 +39,7 @@ import Testing
         DirectoryEntry(url: (parent ?? root).appending(path: name), isDirectory: false)
     }
 
-    func names(_ model: ExplorerModel) -> [String] {
+    func names(_ model: FileTreeModel) -> [String] {
         model.rows.compactMap {
             if case .entry(let entry) = $0.kind { entry.name } else { nil }
         }
@@ -370,7 +370,7 @@ import Testing
         #expect(files.creations.isEmpty)
     }
 
-    func ignoredNames(_ model: ExplorerModel) -> [String] {
+    func ignoredNames(_ model: FileTreeModel) -> [String] {
         model.rows.compactMap {
             if case .entry(let entry) = $0.kind, $0.isIgnored { entry.name } else { nil }
         }
@@ -485,7 +485,7 @@ import Testing
         #expect(ignoredNames(model).isEmpty)
     }
 
-    func marks(_ model: ExplorerModel) -> [String: GitMark] {
+    func marks(_ model: FileTreeModel) -> [String: GitMark] {
         Dictionary(uniqueKeysWithValues: model.rows.compactMap { row in
             guard case .entry(let entry) = row.kind, let mark = row.mark else { return nil }
             return (entry.name, mark)

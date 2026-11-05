@@ -5,7 +5,7 @@ import Observation
 /// The file shown in the editor pane.
 ///
 /// Read-only, one file at a time. Owns which file is open rather than
-/// borrowing it from the explorer's selection: a selection goes when its file
+/// borrowing it from the file tree's selection: a selection goes when its file
 /// does, and the pane keeps showing what it last read, struck through, until
 /// something else is opened or the worktree changes. The contents are read
 /// from disk and re-read whenever the worktree's watcher says something
@@ -160,7 +160,7 @@ public final class EditorModel {
         // `result` never carries tokens, so comparing values would throw away
         // the colour already on screen and put it back a moment later. A worktree
         // notifies every observer when any folder in it is read, so expanding a
-        // folder in the explorer reloads an unchanged file — and the flicker was
+        // folder in the file tree reloads an unchanged file — and the flicker was
         // plain to see.
         guard shownText != source.text else { return }
         content = result

@@ -3,8 +3,8 @@ import Foundation
 import Observation
 
 /// One line of the flattened tree.
-public struct ExplorerRow: Identifiable, Equatable {
-    public enum Kind: Equatable {
+struct FileTreeRow: Identifiable, Equatable {
+    enum Kind: Equatable {
         case entry(DirectoryEntry)
         /// Stands in for the contents of a folder that could not be read.
         case unreadable
@@ -12,9 +12,9 @@ public struct ExplorerRow: Identifiable, Equatable {
         case creating(isDirectory: Bool)
     }
 
-    public var kind: Kind
-    public var depth: Int
-    public var parent: URL
+    var kind: Kind
+    var depth: Int
+    var parent: URL
 
     /// Tells one name field from the next. Without it a second field in the
     /// same folder reuses the first's view state, including its "already
@@ -28,7 +28,7 @@ public struct ExplorerRow: Identifiable, Equatable {
     /// inside it when it is a closed folder.
     var mark: GitMark?
 
-    public var id: String {
+    var id: String {
         switch kind {
         case .entry(let entry): entry.url.absoluteString
         case .unreadable: parent.absoluteString + "#unreadable"
@@ -37,7 +37,7 @@ public struct ExplorerRow: Identifiable, Equatable {
     }
 }
 
-private extension ExplorerRow {
+private extension FileTreeRow {
     var isDirectoryField: Bool {
         if case .creating(let isDirectory) = kind { isDirectory } else { false }
     }
@@ -50,29 +50,29 @@ private extension ExplorerRow {
 /// ``Workspace``, which is shared and kept fresh by a watcher. Expansion
 /// lives here and is dropped with the root.
 @Observable
-public final class ExplorerModel {
+public final class FileTreeModel {
     private let store: WorkspaceRegistry
 
     /// The worktree being shown, or `nil` when none is selected.
-    public private(set) var worktree: Workspace?
+    private(set) var worktree: Workspace?
 
     private var registration: Workspace.Registration?
 
     /// The folder the tree is rooted at. Always open; `nil` shows nothing.
-    public var root: URL? { worktree?.root.url }
+    var root: URL? { worktree?.root.url }
 
     /// Open folders below the root, kept on the workspace so that switching
     /// away and back does not close everything the user opened. See
-    /// ``ExplorerUIState``.
+    /// ``FileTreeUIState``.
     ///
     /// A computed property over that state rather than a stored one, so every
     /// reader below is unchanged and there is exactly one place the tree's
     /// expansion lives. Empty, and silently unwritable, when no worktree is
     /// shown — there is nothing for expansion to be relative to.
     private var expanded: Set<PathKey> {
-        get { worktree?.uiState(ExplorerUIState.self).expanded ?? [] }
+        get { worktree?.uiState(FileTreeUIState.self).expanded ?? [] }
         set {
-            worktree?.uiState(ExplorerUIState.self).expanded = newValue
+            worktree?.uiState(FileTreeUIState.self).expanded = newValue
             // Observation reports reads, not writes, so the workspace cannot
             // notice this for itself.
             worktree?.scheduleSnapshotSave()
@@ -83,19 +83,19 @@ public final class ExplorerModel {
     public private(set) var selected: URL?
 
     /// The item whose name is being edited in place.
-    public private(set) var renaming: URL?
+    private(set) var renaming: URL?
 
     /// A new file or folder being named, before anything exists on disk.
-    public struct Creation: Equatable {
-        public var parent: PathKey
-        public var isDirectory: Bool
+    struct Creation: Equatable {
+        var parent: PathKey
+        var isDirectory: Bool
         var id = UUID()
     }
 
-    public private(set) var creating: Creation?
+    private(set) var creating: Creation?
 
     /// What git says about the whole worktree, however much of it is open.
-    public var status: WorktreeStatus { worktree?.status ?? .empty }
+    var status: WorktreeStatus { worktree?.status ?? .empty }
 
     public init(store: WorkspaceRegistry) {
         self.store = store
@@ -103,18 +103,18 @@ public final class ExplorerModel {
 
     /// Whether a name field is open. Return belongs to that field, not to the
     /// tree behind it.
-    public var isEditingName: Bool { renaming != nil || creating != nil }
+    var isEditingName: Bool { renaming != nil || creating != nil }
 
-    public var canCollapse: Bool { !expanded.isEmpty }
+    var canCollapse: Bool { !expanded.isEmpty }
 
     /// The tree as the list draws it: every open folder followed by its
     /// children, one row per line.
-    public var rows: [ExplorerRow] {
+    var rows: [FileTreeRow] {
         guard let worktree, worktree.isAvailable else { return [] }
         return rows(in: worktree.root, depth: 0)
     }
 
-    public func listing(of url: URL) -> Workspace.Listing? {
+    func listing(of url: URL) -> Workspace.Listing? {
         worktree?.listing(of: Self.key(url))
     }
 
@@ -150,15 +150,15 @@ public final class ExplorerModel {
     /// it is not: changes keep accumulating and are acted on in one go when it
     /// comes back, because the worst storms happen while the user is in a
     /// terminal running the build that causes them.
-    public func setWatching(_ enabled: Bool) {
+    func setWatching(_ enabled: Bool) {
         store.setFrontmost(enabled)
     }
 
-    public func isExpanded(_ folder: URL) -> Bool {
+    func isExpanded(_ folder: URL) -> Bool {
         expanded.contains(Self.key(folder))
     }
 
-    public func toggle(_ folder: URL) async {
+    func toggle(_ folder: URL) async {
         let key = Self.key(folder)
         if expanded.remove(key) == nil {
             expanded.insert(key)
@@ -166,18 +166,18 @@ public final class ExplorerModel {
         }
     }
 
-    public func select(_ file: URL) {
+    func select(_ file: URL) {
         selected = file
     }
 
-    public func beginRenaming(_ url: URL) {
+    func beginRenaming(_ url: URL) {
         creating = nil
         renaming = url
     }
 
     /// Opens a name field inside `folder`, opening the folder if it is closed.
     /// Nothing is made until the name is committed.
-    public func beginCreating(in folder: URL, isDirectory: Bool) async {
+    func beginCreating(in folder: URL, isDirectory: Bool) async {
         guard let worktree else { return }
         let key = Self.key(folder)
         renaming = nil
@@ -188,14 +188,14 @@ public final class ExplorerModel {
         await worktree.open(key)
     }
 
-    public func cancelCreating() {
+    func cancelCreating() {
         creating = nil
     }
 
     /// Makes what the name field describes and shows it. A blank or unusable
     /// name, or a refusal from the disk (the name is taken, say), makes
     /// nothing. A new file is selected; a new folder is left closed.
-    public func commitCreating(named name: String) async {
+    func commitCreating(named name: String) async {
         guard let creation = creating, let worktree else { return }
         creating = nil
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -213,14 +213,14 @@ public final class ExplorerModel {
         if !creation.isDirectory { selected = url }
     }
 
-    public func cancelRenaming() {
+    func cancelRenaming() {
         renaming = nil
     }
 
     /// Renames `entry` on disk, then re-reads so the tree shows the result. A
     /// blank, unchanged or unusable name, or a refusal from the disk (the name
     /// is taken, say), leaves everything as it was.
-    public func commitRename(_ entry: DirectoryEntry, to name: String) async {
+    func commitRename(_ entry: DirectoryEntry, to name: String) async {
         renaming = nil
         guard let worktree else { return }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -248,12 +248,12 @@ public final class ExplorerModel {
     }
 
     /// Closes every folder below the root.
-    public func collapseAll() {
+    func collapseAll() {
         expanded = []
     }
 
     /// Re-reads the root and every open folder, then asks git about the tree.
-    public func refresh() async {
+    func refresh() async {
         await worktree?.refresh()
     }
 
@@ -281,7 +281,7 @@ public final class ExplorerModel {
         worktree?.exists(Self.key(url)) ?? true
     }
 
-    private func rows(in folder: PathKey, depth: Int, underIgnored: Bool = false) -> [ExplorerRow] {
+    private func rows(in folder: PathKey, depth: Int, underIgnored: Bool = false) -> [FileTreeRow] {
         guard let worktree else { return [] }
         let parent = folder.url
 
@@ -289,9 +289,9 @@ public final class ExplorerModel {
         case .loaded(let entries):
             let field = creating.flatMap { $0.parent == folder ? $0 : nil }
                 .map {
-                    ExplorerRow(kind: .creating(isDirectory: $0.isDirectory), depth: depth, parent: parent, creation: $0.id)
+                    FileTreeRow(kind: .creating(isDirectory: $0.isDirectory), depth: depth, parent: parent, creation: $0.id)
                 }
-            var result: [ExplorerRow] = []
+            var result: [FileTreeRow] = []
             var placed = field == nil
             for entry in entries {
                 // A new folder leads the folders, a new file leads the files.
@@ -305,7 +305,7 @@ public final class ExplorerModel {
                 // flag rides down the recursion rather than being asked again
                 // per row, which would walk back up to the root each time.
                 let isIgnored = underIgnored || worktree.status.isIgnored(key)
-                var row = ExplorerRow(kind: .entry(entry), depth: depth, parent: parent)
+                var row = FileTreeRow(kind: .entry(entry), depth: depth, parent: parent)
                 row.isIgnored = isIgnored
                 row.mark = isIgnored ? nil : mark(of: key, isDirectory: entry.isDirectory, isOpen: isOpen)
                 result.append(row)
@@ -316,7 +316,7 @@ public final class ExplorerModel {
             if !placed, let field { result.append(field) }
             return result
         case .unreadable:
-            return [ExplorerRow(kind: .unreadable, depth: depth, parent: parent)]
+            return [FileTreeRow(kind: .unreadable, depth: depth, parent: parent)]
         case nil:
             return []
         }

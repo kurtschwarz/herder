@@ -6,10 +6,10 @@ import SwiftUI
 
 /// One line of the tree: a folder that opens and closes, a file that selects, or
 /// the note standing in for a folder that could not be read.
-struct ExplorerRowView: View {
-    let row: ExplorerRow
-    let model: ExplorerModel
-    let focus: FocusState<ExplorerFocus?>.Binding
+struct FileTreeRowView: View {
+    let row: FileTreeRow
+    let model: FileTreeModel
+    let focus: FocusState<FileTreeFocus?>.Binding
 
     @State private var isHovering = false
 
@@ -57,8 +57,8 @@ private struct EntryLine: View {
     let parent: URL
     let isIgnored: Bool
     let mark: GitMark?
-    let model: ExplorerModel
-    let focus: FocusState<ExplorerFocus?>.Binding
+    let model: FileTreeModel
+    let focus: FocusState<FileTreeFocus?>.Binding
     @Binding var isHovering: Bool
 
     private var isSelected: Bool { !entry.isDirectory && model.selected == entry.url }
@@ -182,8 +182,8 @@ private struct EntryLine: View {
 /// appear.
 private struct CreatingLine: View {
     let isDirectory: Bool
-    let model: ExplorerModel
-    let focus: FocusState<ExplorerFocus?>.Binding
+    let model: FileTreeModel
+    let focus: FocusState<FileTreeFocus?>.Binding
 
     var body: some View {
         HStack(spacing: Theme.Spacing.normal) {
@@ -211,7 +211,7 @@ private struct CreatingLine: View {
 /// it. Opens with the name selected up to its extension, so typing replaces
 /// `Notes` in `Notes.md` and leaves `.md` alone.
 private struct RenameField: View {
-    let focus: FocusState<ExplorerFocus?>.Binding
+    let focus: FocusState<FileTreeFocus?>.Binding
     let commit: (String) -> Void
     let cancel: () -> Void
 
@@ -225,7 +225,7 @@ private struct RenameField: View {
     init(
         name: String,
         isFolder: Bool,
-        focus: FocusState<ExplorerFocus?>.Binding,
+        focus: FocusState<FileTreeFocus?>.Binding,
         commit: @escaping (String) -> Void,
         cancel: @escaping () -> Void
     ) {
