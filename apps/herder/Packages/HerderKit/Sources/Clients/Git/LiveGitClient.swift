@@ -168,6 +168,7 @@ public struct LiveGitClient: GitClient {
         ])
     }
 
+    @concurrent
     public func ignored(_ entries: [DirectoryEntry], in folder: URL) async throws -> Set<URL> {
         var result: Set<URL> = []
         // Arguments rather than stdin: git answers as it reads, so feeding a

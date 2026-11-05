@@ -2,8 +2,11 @@ import Foundation
 
 /// `FileClient` backed by the real file system.
 ///
-/// Injected from the app target. Blocking `FileManager` work stays off the main
-/// actor because this module's default isolation is `nonisolated`.
+/// Injected from the app target.
+///
+/// Every method is `@concurrent`: `FileManager` blocks, and a plain `nonisolated
+/// async` function runs on whichever actor called it, which here is the main one.
+/// The module's `nonisolated` default isolation is not enough on its own.
 ///
 /// `FileManager` is not `Sendable`, so it is reached through `.default` inside each
 /// call rather than stored. Tests use `InMemoryFileClient` instead of substituting
@@ -11,6 +14,7 @@ import Foundation
 public struct LiveFileClient: FileClient {
     public init() {}
 
+    @concurrent
     public func read(_ path: String) async throws -> String {
         guard let data = FileManager.default.contents(atPath: path) else {
             throw FileClientError.notFound(path: path)
@@ -21,6 +25,7 @@ public struct LiveFileClient: FileClient {
         return contents
     }
 
+    @concurrent
     public func write(_ contents: String, to path: String) async throws {
         let url = URL(filePath: path)
         try FileManager.default.createDirectory(
@@ -30,10 +35,12 @@ public struct LiveFileClient: FileClient {
         try Data(contents.utf8).write(to: url, options: .atomic)
     }
 
+    @concurrent
     public func exists(_ path: String) async -> Bool {
         FileManager.default.fileExists(atPath: path)
     }
 
+    @concurrent
     public func children(of url: URL) async throws -> [DirectoryEntry] {
         let keys: Set<URLResourceKey> = [.isDirectoryKey]
         let urls: [URL]
@@ -54,6 +61,7 @@ public struct LiveFileClient: FileClient {
         }
     }
 
+    @concurrent
     public func move(_ source: URL, to destination: URL) async throws {
         // A rename that only changes case finds "something" at the destination:
         // the source itself, on a case-insensitive volume.
@@ -66,6 +74,7 @@ public struct LiveFileClient: FileClient {
         try FileManager.default.moveItem(at: source, to: destination)
     }
 
+    @concurrent
     public func create(_ url: URL, isDirectory: Bool) async throws {
         let path = url.path(percentEncoded: false)
         guard !FileManager.default.fileExists(atPath: path) else {
