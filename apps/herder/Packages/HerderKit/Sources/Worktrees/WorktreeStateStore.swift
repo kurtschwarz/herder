@@ -18,7 +18,7 @@ public final class WorktreeStateStore {
     private let watcher: any FileWatcherClient
     private let clock: any ClockClient
 
-    public private(set) var states: [PathKey: WorktreeState] = [:]
+    private var states: [PathKey: WorktreeState] = [:]
 
     /// Where each worktree's watcher had got to, kept after its state is
     /// dropped. Coming back to a worktree then replays what changed while

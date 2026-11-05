@@ -124,10 +124,6 @@ public final class WorktreeState {
         listings[folder]
     }
 
-    public var readFolders: Set<PathKey> {
-        Set(listings.keys)
-    }
-
     /// Reads `folder` the first time it is asked for, and not again: a
     /// repository's `node_modules` costs nothing until somebody looks inside.
     public func open(_ folder: PathKey) async {
