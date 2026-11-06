@@ -196,6 +196,22 @@ public final class TerminalModel {
         select(tab)
     }
 
+    /// Pins a tab or lets it go. Pinned tabs sit together at the front, in the
+    /// order they were pinned; the rest keep their order behind them. The tab
+    /// showing stays the one showing.
+    func togglePin(_ tab: TerminalTab) {
+        guard let id = tabsByWorkspace.first(where: { $0.value.contains { $0.id == tab.id } })?.key else { return }
+        var tabs = tabsByWorkspace[id] ?? []
+        guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        tabs.remove(at: index)
+        let pinnedCount = tabs.prefix { $0.isPinned }.count
+        // Pinning goes to the end of the pinned run; unpinning to the start of
+        // the rest, which is where it was most likely taken from.
+        tab.setPinned(!tab.isPinned)
+        tabs.insert(tab, at: pinnedCount)
+        tabsByWorkspace[id] = tabs
+    }
+
     public func selectNextTab() { cycle(by: 1) }
     public func selectPreviousTab() { cycle(by: -1) }
 

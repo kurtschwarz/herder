@@ -170,6 +170,60 @@ import Testing
         #expect(model.tabs.count == 1)
     }
 
+    // MARK: Pinning a tab
+
+    @Test func aPinnedTabMovesToTheFront() async throws {
+        let (model, _, _) = try await shown(tabs: 3)
+        let ids = model.tabs.map(\.id)
+        model.togglePin(model.tabs[2])
+        #expect(model.tabs.map(\.id) == [ids[2], ids[0], ids[1]])
+        #expect(model.tabs[0].isPinned)
+        #expect(!model.tabs[1].isPinned)
+    }
+
+    @Test func pinnedTabsKeepTheOrderTheyWerePinnedIn() async throws {
+        let (model, _, _) = try await shown(tabs: 4)
+        let ids = model.tabs.map(\.id)
+        model.togglePin(model.tabs[3])
+        // Now [3, 0, 1, 2]: pin the last of those.
+        model.togglePin(model.tabs[3])
+        #expect(model.tabs.map(\.id) == [ids[3], ids[2], ids[0], ids[1]])
+        #expect(model.tabs.map(\.isPinned) == [true, true, false, false])
+    }
+
+    @Test func unpinningSendsItBehindTheRestOfThePinned() async throws {
+        let (model, _, _) = try await shown(tabs: 3)
+        let ids = model.tabs.map(\.id)
+        model.togglePin(model.tabs[0])
+        model.togglePin(model.tabs[1])
+        model.togglePin(model.tabs[0])
+        #expect(model.tabs.map(\.id) == [ids[1], ids[0], ids[2]])
+        #expect(model.tabs.map(\.isPinned) == [true, false, false])
+    }
+
+    @Test func pinningDoesNotChangeWhichTabIsShowing() async throws {
+        let (model, _, _) = try await shown(tabs: 3)
+        let active = model.activeTab?.id
+        model.togglePin(model.tabs[0])
+        #expect(model.activeTab?.id == active)
+    }
+
+    @Test func aNewTabOpensAfterThePinnedOnes() async throws {
+        let (model, _, _) = try await shown(tabs: 2)
+        let pinned = model.tabs[1]
+        model.togglePin(pinned)
+        await model.openTab()
+        #expect(model.tabs.first?.id == pinned.id)
+        #expect(model.tabs.last?.isPinned == false)
+    }
+
+    @Test func aPinnedTabCanStillBeClosed() async throws {
+        let (model, _, _) = try await shown(tabs: 2)
+        model.togglePin(model.tabs[0])
+        model.close(model.tabs[0])
+        #expect(model.tabs.count == 1)
+    }
+
     // MARK: Naming a tab
 
     @Test func aNameReplacesWhatIsRunningInTheTitle() async throws {

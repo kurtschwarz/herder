@@ -16,6 +16,7 @@ struct TerminalHeader: View {
                     isActive: tab.id == model.activeTab?.id,
                     select: { model.select(tab) },
                     rename: { model.rename(tab, to: $0) },
+                    togglePin: { model.togglePin(tab) },
                     close: { Task { await model.requestClose(tab) } }
                 )
             }
@@ -56,6 +57,7 @@ private struct TerminalTabView: View {
     let isActive: Bool
     let select: () -> Void
     let rename: (String) -> Void
+    let togglePin: () -> Void
     let close: () -> Void
 
     @State private var isEditing = false
@@ -67,7 +69,7 @@ private struct TerminalTabView: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.normal) {
-            PhIcon(Ph.terminal.regular, size: 14)
+            PhIcon(tab.isPinned ? Ph.pushPin.fill : Ph.terminal.regular, size: 14)
                 .foregroundStyle(isActive ? Theme.Palette.accent : Theme.Palette.tertiaryText)
 
             if isEditing {
@@ -90,8 +92,11 @@ private struct TerminalTabView: View {
                     .lineLimit(1)
             }
 
-            HoverIconButton(icon: Ph.x.bold, iconSize: 10, side: 18, radius: 5, help: "Close Terminal", action: close)
-                .opacity(isActive || isHovering ? 1 : 0)
+            // A pinned tab has none: that is what pinning is for.
+            if !tab.isPinned {
+                HoverIconButton(icon: Ph.x.bold, iconSize: 10, side: 18, radius: 5, help: "Close Terminal", action: close)
+                    .opacity(isActive || isHovering ? 1 : 0)
+            }
         }
         .padding(.horizontal, Theme.Spacing.normal + 2)
         .frame(height: Theme.Size.iconButton)
@@ -104,6 +109,7 @@ private struct TerminalTabView: View {
         .onTapGesture(perform: select)
         .contextMenu {
             Button("Rename\u{2026}", action: beginEditing)
+            Button(tab.isPinned ? "Unpin Tab" : "Pin Tab", action: togglePin)
             Button("Close", action: close)
         }
         .onHover { isHovering = $0 }

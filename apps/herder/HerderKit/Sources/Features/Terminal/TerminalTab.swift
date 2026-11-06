@@ -16,6 +16,12 @@ final class TerminalTab: Identifiable {
     /// Kept as long as the tab is, like everything else about a shell.
     private(set) var customName: String?
 
+    /// Kept at the front of the bar, and with no close button, so it is not
+    /// closed by a stray click. Lasts as long as the tab does.
+    private(set) var isPinned = false
+
+    func setPinned(_ pinned: Bool) { isPinned = pinned }
+
     /// What the tab says: the person's name for it, or else what is running.
     var displayTitle: String { customName ?? title }
 
