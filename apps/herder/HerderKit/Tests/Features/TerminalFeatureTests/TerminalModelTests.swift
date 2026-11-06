@@ -170,6 +170,62 @@ import Testing
         #expect(model.tabs.count == 1)
     }
 
+    // MARK: Naming a tab
+
+    @Test func aNameReplacesWhatIsRunningInTheTitle() async throws {
+        let (model, _, _) = try await shown(tabs: 1)
+        let tab = try #require(model.activeTab)
+        model.rename(tab, to: "server")
+        #expect(tab.displayTitle == "server")
+
+        pty.sessions[0].run("swift test")
+        await tab.refresh()
+        #expect(tab.displayTitle == "server")
+        #expect(tab.title == "swift test")
+    }
+
+    @Test func aBlankNameGoesBackToFollowingWhatIsRunning() async throws {
+        let (model, _, _) = try await shown(tabs: 1)
+        let tab = try #require(model.activeTab)
+        model.rename(tab, to: "server")
+        model.rename(tab, to: "   ")
+        #expect(tab.customName == nil)
+        #expect(tab.displayTitle == tab.title)
+    }
+
+    @Test func aNameIsTrimmedAndHeldToALength() async throws {
+        let (model, _, _) = try await shown(tabs: 1)
+        let tab = try #require(model.activeTab)
+        model.rename(tab, to: "  web  ")
+        #expect(tab.customName == "web")
+        model.rename(tab, to: String(repeating: "x", count: 200))
+        #expect(tab.customName?.count == TerminalTab.maxNameLength)
+    }
+
+    @Test func renamingOneTabLeavesTheOthersAlone() async throws {
+        let (model, _, _) = try await shown(tabs: 2)
+        model.rename(model.tabs[0], to: "api")
+        #expect(model.tabs[1].customName == nil)
+    }
+
+    @Test func renamingHandsTheKeyboardBackToTheTerminal() async throws {
+        let (model, _, _) = try await shown(tabs: 1)
+        let before = model.focusRequest
+        model.rename(try #require(model.activeTab), to: "x")
+        #expect(model.focusRequest > before)
+    }
+
+    @Test func aNameDoesNotChangeWhetherTheTabIsBusy() async throws {
+        let (model, _, _) = try await shown(tabs: 1)
+        let tab = try #require(model.activeTab)
+        model.rename(tab, to: "quiet")
+        pty.sessions[0].run("sleep 30")
+        #expect(await tab.isRunningSomething())
+        // The prompt names the command, not the label.
+        await model.requestCloseActiveTab()
+        #expect(model.closePrompt?.command == "sleep 30")
+    }
+
     // MARK: Closing with something running
 
     @Test func anIdleShellClosesWithoutAsking() async throws {

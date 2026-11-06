@@ -189,6 +189,13 @@ public final class TerminalModel {
         focusRequest += 1
     }
 
+    /// Names a tab, or with a blank name lets it follow what is running again.
+    /// Hands the keyboard back to the terminal: the name was typed over it.
+    func rename(_ tab: TerminalTab, to name: String) {
+        tab.rename(to: name)
+        select(tab)
+    }
+
     public func selectNextTab() { cycle(by: 1) }
     public func selectPreviousTab() { cycle(by: -1) }
 

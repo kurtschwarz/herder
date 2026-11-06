@@ -14,6 +14,7 @@ struct TerminalHeader: View {
                     tab: tab,
                     isActive: tab.id == model.activeTab?.id,
                     select: { model.select(tab) },
+                    rename: { model.rename(tab, to: $0) },
                     close: { Task { await model.requestClose(tab) } }
                 )
             }
@@ -57,8 +58,12 @@ private struct TerminalTabView: View {
     let tab: TerminalTab
     let isActive: Bool
     let select: () -> Void
+    let rename: (String) -> Void
     let close: () -> Void
 
+    @State private var isEditing = false
+    @State private var draft = ""
+    @FocusState private var isFieldFocused: Bool
     @State private var isHovering = false
     @State private var isFlashing = false
 
@@ -67,10 +72,25 @@ private struct TerminalTabView: View {
             PhIcon(Ph.terminal.regular, size: 14)
                 .foregroundStyle(isActive ? Theme.Palette.accent : Theme.Palette.tertiaryText)
 
-            Text(tab.title)
-                .font(.system(size: 13))
-                .foregroundStyle(isActive ? Theme.Palette.text : Theme.Palette.secondaryText)
-                .lineLimit(1)
+            if isEditing {
+                TextField("Name", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.Palette.text)
+                    .focused($isFieldFocused)
+                    .frame(width: 120)
+                    .onSubmit { finishEditing(keep: true) }
+                    .onExitCommand { finishEditing(keep: false) }
+                    // Clicking away keeps what was typed, as in Finder.
+                    .onChange(of: isFieldFocused) { _, focused in
+                        if !focused { finishEditing(keep: true) }
+                    }
+            } else {
+                Text(tab.displayTitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(isActive ? Theme.Palette.text : Theme.Palette.secondaryText)
+                    .lineLimit(1)
+            }
 
             Button(action: close) {
                 PhIcon(Ph.x.bold, size: 10)
@@ -88,7 +108,12 @@ private struct TerminalTabView: View {
                 .fill(isFlashing ? Theme.Palette.controlPressed : isActive ? Theme.Palette.control : .clear)
         )
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.control))
+        .onTapGesture(count: 2, perform: beginEditing)
         .onTapGesture(perform: select)
+        .contextMenu {
+            Button("Rename\u{2026}", action: beginEditing)
+            Button("Close", action: close)
+        }
         .onHover { isHovering = $0 }
         // A bell is a silent flash of the tab, and only of one not in front:
         // the one in front is being looked at.
@@ -97,5 +122,18 @@ private struct TerminalTabView: View {
             withAnimation(.easeOut(duration: 0.1)) { isFlashing = true }
             withAnimation(.easeOut(duration: 0.6).delay(0.15)) { isFlashing = false }
         }
+    }
+
+    private func beginEditing() {
+        draft = tab.displayTitle
+        isEditing = true
+        // The field is made by this change, so it can take focus only after.
+        Task { isFieldFocused = true }
+    }
+
+    private func finishEditing(keep: Bool) {
+        guard isEditing else { return }
+        isEditing = false
+        if keep { rename(draft) } else { select() }
     }
 }

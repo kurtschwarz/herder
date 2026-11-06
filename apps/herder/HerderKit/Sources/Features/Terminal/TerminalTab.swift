@@ -12,6 +12,13 @@ final class TerminalTab: Identifiable {
     /// What the foreground process is, as a tab would say it.
     private(set) var title = TerminalTitle.placeholder
 
+    /// A name the person gave it, which replaces ``title`` until it is cleared.
+    /// Kept as long as the tab is, like everything else about a shell.
+    private(set) var customName: String?
+
+    /// What the tab says: the person's name for it, or else what is running.
+    var displayTitle: String { customName ?? title }
+
     /// Where the shell is: what it said, or else what the system says.
     private(set) var directory: URL?
 
@@ -53,6 +60,15 @@ final class TerminalTab: Identifiable {
                 do { try await clock.sleep(for: period) } catch { return }
             }
         })
+    }
+
+    /// The longest a name may be. About what a tab can show.
+    static let maxNameLength = 40
+
+    /// Names the tab. Blank goes back to following what is running.
+    func rename(to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        customName = trimmed.isEmpty ? nil : String(trimmed.prefix(Self.maxNameLength))
     }
 
     func refresh() async {
