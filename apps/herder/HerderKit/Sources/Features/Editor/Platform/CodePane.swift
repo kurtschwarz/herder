@@ -9,11 +9,14 @@ import DesignSystem
 final class CodePane: NSView {
     let scrollView: NSScrollView
     let gutter: LineNumberGutter
+    let highlight: CurrentLineHighlight
 
-    init(scrollView: NSScrollView, gutter: LineNumberGutter) {
+    init(scrollView: NSScrollView, gutter: LineNumberGutter, highlight: CurrentLineHighlight) {
         self.scrollView = scrollView
         self.gutter = gutter
+        self.highlight = highlight
         super.init(frame: .zero)
+        addSubview(highlight)
         addSubview(gutter)
         addSubview(scrollView)
     }
@@ -24,6 +27,7 @@ final class CodePane: NSView {
 
     override func layout() {
         super.layout()
+        highlight.frame = bounds
         gutter.frame = NSRect(x: 0, y: 0, width: Theme.Size.gutter, height: bounds.height)
         scrollView.frame = NSRect(
             x: Theme.Size.gutter,

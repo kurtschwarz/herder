@@ -139,7 +139,7 @@ final class Buffer: NSObject, NSTextViewDelegate {
     // MARK: - The view
 
     private func makePane() -> CodePane {
-        let textView = NSTextView(frame: .zero, textContainer: container)
+        let textView = SourceTextView(frame: .zero, textContainer: container)
         textView.delegate = self
         textView.isEditable = true
         textView.isSelectable = true
@@ -175,9 +175,14 @@ final class Buffer: NSObject, NSTextViewDelegate {
 
         let gutter = LineNumberGutter(scrollView: scrollView, textView: textView)
         gutter.textDidChange(to: storage.string)
+        let highlight = CurrentLineHighlight(scrollView: scrollView, textView: textView)
+        textView.onSelect = { [weak gutter, weak highlight] in
+            gutter?.selectionDidChange()
+            highlight?.selectionDidChange()
+        }
         self.textView = textView
         self.gutter = gutter
-        return CodePane(scrollView: scrollView, gutter: gutter)
+        return CodePane(scrollView: scrollView, gutter: gutter, highlight: highlight)
     }
 
     /// The view that takes the keyboard when this tab is shown.

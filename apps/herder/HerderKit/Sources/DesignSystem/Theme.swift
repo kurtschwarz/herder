@@ -101,6 +101,9 @@ public enum Theme {
         public static let tertiaryText = Color(red: 128 / 255, green: 128 / 255, blue: 136 / 255)
         public static let accent = Color(red: 122 / 255, green: 162 / 255, blue: 247 / 255)
 
+        /// The band behind the line the caret is on in the editor.
+        public static let currentLine = Color.white.opacity(0.05)
+
         /// Folder glyphs and the primary button. Distinct from `accent`, which
         /// is the blue of interactive text.
         public static let violet = Color(red: 184 / 255, green: 156 / 255, blue: 240 / 255)

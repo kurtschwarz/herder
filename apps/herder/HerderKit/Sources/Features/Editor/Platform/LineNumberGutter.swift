@@ -25,12 +25,20 @@ final class LineNumberGutter: NSView {
 
     private let font = NSFont.monospacedDigitSystemFont(ofSize: Theme.Size.code, weight: .regular)
 
-    private var attributes: [NSAttributedString.Key: Any] {
-        [.font: font, .foregroundColor: NSColor(Theme.Palette.tertiaryText)]
+    private let attributes: [NSAttributedString.Key: Any]
+    private let currentAttributes: [NSAttributedString.Key: Any]
+
+    /// The 1-based line the caret is on, or `nil` for a selection, which is
+    /// marked by its own highlight. As `CurrentLineHighlight` decides it.
+    private var currentLine: Int? {
+        guard let range = textView?.selectedRange(), range.length == 0 else { return nil }
+        return number(at: range.location)
     }
 
     init(scrollView: NSScrollView, textView: NSTextView) {
         self.textView = textView
+        attributes = [.font: font, .foregroundColor: NSColor(Theme.Palette.tertiaryText)]
+        currentAttributes = [.font: font, .foregroundColor: NSColor(Theme.Palette.text)]
         super.init(frame: .zero)
         // Views stopped clipping to their bounds by default in macOS 14, and a
         // number for a line scrolled half out of view would be drawn over the
@@ -51,6 +59,10 @@ final class LineNumberGutter: NSView {
     override var isFlipped: Bool { true }
 
     @objc private func scrolled(_ note: Notification) {
+        needsDisplay = true
+    }
+
+    func selectionDidChange() {
         needsDisplay = true
     }
 
@@ -79,6 +91,7 @@ final class LineNumberGutter: NSView {
         else { return }
 
         let originY = textView.textContainerOrigin.y
+        let currentLine = currentLine
         let start = layout.textViewportLayoutController.viewportRange?.location ?? layout.documentRange.location
 
         // Where the empty line after the last fragment has its baseline.
@@ -107,7 +120,11 @@ final class LineNumberGutter: NSView {
             }
 
             let offset = content.offset(from: layout.documentRange.location, to: fragment.rangeInElement.location)
-            let label = NSAttributedString(string: "\(number(at: offset))", attributes: attributes)
+            let lineNumber = number(at: offset)
+            let label = NSAttributedString(
+                string: "\(lineNumber)",
+                attributes: lineNumber == currentLine ? currentAttributes : attributes
+            )
             let size = label.size()
             // Sat on the text's own baseline. Centring in the line box drifts
             // when the two fonts' ascents differ.
@@ -121,7 +138,10 @@ final class LineNumberGutter: NSView {
 
         guard reachedEnd, endsInEmptyLine else { return }
         let baseline = emptyLineBaseline ?? convert(NSPoint(x: 0, y: originY), from: textView).y + font.ascender
-        let label = NSAttributedString(string: "\(lineStarts.count)", attributes: attributes)
+        let label = NSAttributedString(
+            string: "\(lineStarts.count)",
+            attributes: lineStarts.count == currentLine ? currentAttributes : attributes
+        )
         label.draw(at: NSPoint(
             x: bounds.width - label.size().width - Theme.Spacing.normal,
             y: baseline - font.ascender
