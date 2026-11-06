@@ -44,8 +44,8 @@ public final class EditorModel {
     /// dropped instead of overwriting it.
     private var generation = 0
 
-    /// The files with a tab, in the order they were opened. Newest at the end;
-    /// nothing reorders them and there is no cap.
+    /// The files with a tab, in the order they were opened. Newest at the end,
+    /// until ``move(_:to:)`` puts one elsewhere; there is no cap.
     public private(set) var tabs: [PathKey] = []
 
     /// The file showing, or `nil` when none is.
@@ -200,6 +200,37 @@ public final class EditorModel {
             let index = tabs.firstIndex(of: fileKey)
         else { return }
         await activate(tabs[(index + offset + tabs.count) % tabs.count])
+    }
+
+    // MARK: - Reordering
+
+    /// Puts the tab for `key` at `index`, clamped to the strip. Nothing for a
+    /// path with no tab. Which tab is showing is not touched: moving a tab is
+    /// not looking at it.
+    func move(_ key: PathKey, to index: Int) {
+        guard let from = tabs.firstIndex(of: key) else { return }
+        let to = min(max(index, 0), tabs.count - 1)
+        guard to != from else { return }
+        tabs.remove(at: from)
+        tabs.insert(key, at: to)
+        worktree.map(remember(on:))
+    }
+
+    /// Moves the tab showing one step along. What ⌘⌥⇧[ and ⌘⌥⇧] do.
+    ///
+    /// Stops at the ends where ``selectNextTab()`` wraps. Wrapping a selection
+    /// is navigation; wrapping a move would carry a tab from one end of the
+    /// strip to the other, which reads as a bug.
+    public func moveActiveTab(by offset: Int) {
+        guard canMoveActiveTab(by: offset), let fileKey, let index = tabs.firstIndex(of: fileKey) else { return }
+        move(fileKey, to: index + offset)
+    }
+
+    /// Whether ``moveActiveTab(by:)`` would change anything, so a menu item
+    /// can read as unavailable at the end it cannot go past.
+    public func canMoveActiveTab(by offset: Int) -> Bool {
+        guard let fileKey, let index = tabs.firstIndex(of: fileKey) else { return false }
+        return tabs.indices.contains(index + offset) && offset != 0
     }
 
     private func open(_ key: PathKey, remembering: Bool) async {

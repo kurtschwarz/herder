@@ -13,6 +13,11 @@ extension FocusedValues {
     /// the menu items read as unavailable rather than doing nothing.
     @Entry var selectPreviousEditorTab: (() -> Void)?
     @Entry var selectNextEditorTab: (() -> Void)?
+
+    /// Move the tab showing one place along. `nil` when it is already at that
+    /// end, so the item dims exactly when it would do nothing.
+    @Entry var moveEditorTabLeft: (() -> Void)?
+    @Entry var moveEditorTabRight: (() -> Void)?
 }
 
 /// The menu commands that act on a window.
@@ -25,6 +30,8 @@ public struct AppCommands: Commands {
     @FocusedValue(\.closeEditorTab) private var closeEditorTab
     @FocusedValue(\.selectPreviousEditorTab) private var selectPreviousEditorTab
     @FocusedValue(\.selectNextEditorTab) private var selectNextEditorTab
+    @FocusedValue(\.moveEditorTabLeft) private var moveEditorTabLeft
+    @FocusedValue(\.moveEditorTabRight) private var moveEditorTabRight
 
     public init() {}
 
@@ -57,6 +64,15 @@ public struct AppCommands: Commands {
             Button("Show Next Tab") { selectNextEditorTab?() }
                 .keyboardShortcut("]", modifiers: [.command, .shift])
                 .disabled(selectNextEditorTab == nil)
+
+            // The navigation shortcuts with Option added.
+            Button("Move Tab Left") { moveEditorTabLeft?() }
+                .keyboardShortcut("[", modifiers: [.command, .option, .shift])
+                .disabled(moveEditorTabLeft == nil)
+
+            Button("Move Tab Right") { moveEditorTabRight?() }
+                .keyboardShortcut("]", modifiers: [.command, .option, .shift])
+                .disabled(moveEditorTabRight == nil)
 
             Divider()
         }

@@ -131,6 +131,14 @@ private struct WindowView: View {
             \.selectNextEditorTab,
             window.editor.tabs.count > 1 ? { Task { await window.editor.selectNextTab() } } : nil
         )
+        .focusedSceneValue(
+            \.moveEditorTabLeft,
+            window.editor.canMoveActiveTab(by: -1) ? { window.editor.moveActiveTab(by: -1) } : nil
+        )
+        .focusedSceneValue(
+            \.moveEditorTabRight,
+            window.editor.canMoveActiveTab(by: 1) ? { window.editor.moveActiveTab(by: 1) } : nil
+        )
     }
 
     /// What the panes call the checkout they are showing: the workspace's name,

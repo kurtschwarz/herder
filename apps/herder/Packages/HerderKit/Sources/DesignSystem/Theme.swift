@@ -198,5 +198,11 @@ public enum Theme {
         public static let modalColor = Color.black.opacity(0.55)
         public static let modalRadius: CGFloat = 40
         public static let modalOffset: CGFloat = 20
+
+        /// Small and close: a tab picked up out of its strip, not a card over
+        /// a window.
+        public static let liftColor = Color.black.opacity(0.4)
+        public static let liftRadius: CGFloat = 6
+        public static let liftOffset: CGFloat = 2
     }
 }

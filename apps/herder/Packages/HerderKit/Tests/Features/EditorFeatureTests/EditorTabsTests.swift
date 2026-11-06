@@ -138,6 +138,76 @@ import Testing
         #expect(model.file == nil)
     }
 
+    // MARK: - Reordering
+
+    @Test func movingATabChangesTheOrder() async throws {
+        let (model, _) = await open(["a.txt", "b.txt", "c.txt"])
+
+        model.move(key("a.txt"), to: 2)
+        #expect(model.tabs == [key("b.txt"), key("c.txt"), key("a.txt")])
+
+        model.move(key("a.txt"), to: 0)
+        #expect(model.tabs == [key("a.txt"), key("b.txt"), key("c.txt")])
+    }
+
+    /// Selection is navigation and wraps; a move would teleport the tab.
+    @Test func movingTheActiveTabStopsAtBothEnds() async throws {
+        let (model, _) = await open(["a.txt", "b.txt", "c.txt"])
+        #expect(model.activeTab == key("c.txt"))
+
+        #expect(!model.canMoveActiveTab(by: 1))
+        model.moveActiveTab(by: 1)
+        #expect(model.tabs == [key("a.txt"), key("b.txt"), key("c.txt")])
+
+        model.moveActiveTab(by: -1)
+        model.moveActiveTab(by: -1)
+        #expect(model.tabs == [key("c.txt"), key("a.txt"), key("b.txt")])
+
+        #expect(!model.canMoveActiveTab(by: -1))
+        model.moveActiveTab(by: -1)
+        #expect(model.tabs == [key("c.txt"), key("a.txt"), key("b.txt")])
+    }
+
+    @Test func movingWithFewerThanTwoTabsDoesNothing() async throws {
+        let (empty, _) = await open([])
+        empty.moveActiveTab(by: 1)
+        #expect(empty.tabs.isEmpty)
+        #expect(!empty.canMoveActiveTab(by: 1))
+
+        let (one, _) = await open(["a.txt"])
+        one.moveActiveTab(by: -1)
+        one.move(key("a.txt"), to: 5)
+        #expect(one.tabs == [key("a.txt")])
+        #expect(!one.canMoveActiveTab(by: -1))
+    }
+
+    /// Putting a tab down is not looking at it.
+    @Test func movingATabLeavesTheOneShowingAlone() async throws {
+        let (model, _) = await open(["a.txt", "b.txt", "c.txt"])
+
+        model.move(key("a.txt"), to: 2)
+        #expect(model.activeTab == key("c.txt"))
+
+        model.moveActiveTab(by: -1)
+        #expect(model.activeTab == key("c.txt"))
+    }
+
+    @Test func aMoveOutlivesTheWindow() async throws {
+        let (model, registry) = await open(["a.txt", "b.txt", "c.txt"])
+        let workspace = try #require(registry.workspace(for: WorkspaceID(root)))
+
+        model.move(key("a.txt"), to: 2)
+
+        let stored = EditorUIState()
+        try stored.restore(from: try workspace.uiState(EditorUIState.self).encode())
+        #expect(stored.files == [key("b.txt"), key("c.txt"), key("a.txt")])
+
+        let reopened = EditorModel(store: registry, files: files, highlighter: NoSyntaxHighlighter())
+        await reopened.restore(in: workspace)
+        #expect(reopened.tabs == [key("b.txt"), key("c.txt"), key("a.txt")])
+        #expect(reopened.activeTab == key("c.txt"))
+    }
+
     // MARK: - Renames
 
     @Test func aRenameCarriesEveryTabAlong() async throws {

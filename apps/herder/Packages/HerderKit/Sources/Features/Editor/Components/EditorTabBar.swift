@@ -8,33 +8,121 @@ import SwiftUI
 /// A strip that scrolls rather than tabs that shrink: shrinking makes every tab
 /// unreadable to fit one more. There is no cap and no overflow menu — the tab
 /// showing is scrolled into view instead.
+///
+/// A tab can be dragged to a new place. The strip is not reordered while it
+/// moves: ``TabDragState`` is a draft of where everything would go, and the
+/// model is told once, on release. Letting go outside the strip, or the tabs
+/// changing underneath the drag, puts everything back.
 struct EditorTabBar: View {
     let model: EditorModel
+
+    private static let space = "EditorTabBar"
+
+    @State private var drag: TabDragState?
+    @State private var cancelled = false
+    @State private var widths: [PathKey: CGFloat] = [:]
+    @State private var viewport: CGSize = .zero
+    @State private var scrollX: CGFloat = 0
+    @State private var startScrollX: CGFloat = 0
+    @State private var pointer: CGFloat = 0
+    @State private var edgeKey: PathKey?
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.tight) {
                     ForEach(model.openTabs) { tab in
+                        let isLifted = drag?.dragged == tab.key
+                        let shift = drag?.offset(for: tab.key) ?? 0
                         EditorTabView(
                             tab: tab,
                             isActive: tab.key == model.activeTab,
                             // Only the tab showing has been read, so it is the
                             // only one that can be known to have gone.
                             isDeleted: tab.key == model.activeTab && model.isDeleted,
+                            isLifted: isLifted,
                             activate: { Task { await model.activate(tab.key) } },
                             close: { Task { await model.close(tab: tab.key) } }
                         )
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { widths[tab.key] = $0 }
+                        .offset(x: shift)
+                        // The tab in hand follows the pointer; the rest spring.
+                        .animation(isLifted ? nil : .interactiveSpring, value: shift)
+                        .zIndex(isLifted ? 1 : 0)
+                        // Alongside the button's own click, which a drag under
+                        // four points never disturbs.
+                        .simultaneousGesture(dragGesture(for: tab.key, proxy: proxy))
                         .id(tab.key)
                     }
                 }
                 .padding(.horizontal, Theme.Spacing.normal)
                 .padding(.vertical, Theme.Spacing.tight)
             }
+            // The bar scrolls itself while a tab is held, at the edges.
+            .scrollDisabled(drag != nil)
+            .coordinateSpace(.named(Self.space))
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { viewport = $0 }
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, x in
+                scrollX = x
+                refresh()
+            }
             .onChange(of: model.activeTab, initial: true) { _, key in
                 guard let key else { return }
                 withAnimation { proxy.scrollTo(key, anchor: .center) }
             }
+            // A rename or a closed tab changes the key the drag is holding.
+            .onChange(of: model.tabs) {
+                guard drag != nil else { return }
+                cancelled = true
+                withAnimation(.interactiveSpring) { drag = nil }
+            }
+        }
+    }
+
+    private func dragGesture(for key: PathKey, proxy: ScrollViewProxy) -> some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .named(Self.space))
+            .onChanged { value in
+                guard !cancelled else { return }
+                if drag == nil {
+                    drag = TabDragState(
+                        dragging: key,
+                        in: model.tabs,
+                        widths: widths,
+                        spacing: Theme.Spacing.tight
+                    )
+                    startScrollX = scrollX
+                }
+                guard drag?.dragged == key else { return }
+                pointer = value.translation.width
+                refresh()
+                scrollToEdge(at: value.location.x, proxy: proxy)
+            }
+            .onEnded { value in
+                defer { cancelled = false }
+                guard let drag, !cancelled else { return }
+                let strip = CGRect(origin: .zero, size: viewport).insetBy(dx: -48, dy: -24)
+                withAnimation(.interactiveSpring) {
+                    if strip.contains(value.location) { model.move(drag.dragged, to: drag.targetIndex) }
+                    self.drag = nil
+                }
+                edgeKey = nil
+            }
+    }
+
+    /// The pointer's travel, plus however far the strip has scrolled under it.
+    private func refresh() {
+        drag?.translation = pointer + scrollX - startScrollX
+    }
+
+    private func scrollToEdge(at x: CGFloat, proxy: ScrollViewProxy) {
+        guard let edge = drag?.edgeScrollTarget(pointerX: x, viewport: viewport.width) else {
+            edgeKey = nil
+            return
+        }
+        guard edge.key != edgeKey else { return }
+        edgeKey = edge.key
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo(edge.key, anchor: edge.leading ? .leading : .trailing)
         }
     }
 }
@@ -44,6 +132,8 @@ private struct EditorTabView: View {
     let tab: EditorTab
     let isActive: Bool
     let isDeleted: Bool
+    /// Picked up and being dragged along the strip.
+    let isLifted: Bool
     let activate: () -> Void
     let close: () -> Void
 
@@ -90,14 +180,23 @@ private struct EditorTabView: View {
             .background {
                 RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                     .fill(fill)
+                    .shadow(
+                        color: isLifted ? Theme.Shadow.liftColor : .clear,
+                        radius: Theme.Shadow.liftRadius,
+                        y: Theme.Shadow.liftOffset
+                    )
             }
             // The whole tab, not just where there happens to be a glyph.
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .overlay(alignment: .trailing) {
+            // Gone from the tab in hand, so a drag that ends on it cannot be
+            // taken for a close.
             CloseTabButton(action: close)
                 .padding(.trailing, Theme.Spacing.normal)
+                .opacity(isLifted ? 0 : 1)
+                .allowsHitTesting(!isLifted)
         }
         .onHover { isHovering = $0 }
         .help(tab.key.path)
@@ -110,7 +209,7 @@ private struct EditorTabView: View {
 
     /// The tab showing sits on a surface; the rest are flat on the window.
     private var fill: Color {
-        if isActive { return Theme.Palette.control }
+        if isActive || isLifted { return Theme.Palette.control }
         return isHovering ? Theme.Palette.glassTint : .clear
     }
 }
@@ -153,11 +252,12 @@ private struct CloseTabButton: View {
 private struct TabStripPreview: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.tight) {
-            ForEach(["ContentView.swift", "FileTreeView.swift", "EditorState.swift"], id: \.self) { name in
+            ForEach(["ContentView.swift", "FileTreeView.swift", "EditorState.swift", "TabDragState.swift"], id: \.self) { name in
                 EditorTabView(
                     tab: EditorTab(key: PathKey(canonical: "/code/api/" + name), name: name, folder: nil),
                     isActive: name.hasPrefix("Content"),
                     isDeleted: false,
+                    isLifted: name.hasPrefix("TabDrag"),
                     activate: {},
                     close: {}
                 )
