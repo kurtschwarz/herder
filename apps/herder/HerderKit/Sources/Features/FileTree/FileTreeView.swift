@@ -181,7 +181,7 @@ struct RevealInFinder: View {
         clock: VirtualClockClient(),
         state: InMemoryStateStore()
     )))
-        .frame(width: Theme.Size.sidebarWidth, height: 420)
+        .frame(width: Theme.Size.defaultSidebarWidth, height: 420)
         .glassPaneBackground()
         .padding(Theme.Spacing.windowPadding)
         .background(Theme.Palette.window)

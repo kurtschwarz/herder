@@ -93,7 +93,7 @@ private struct EmptyRepositories: View {
     let list = WindowRepositories(store: store)
 
     RepositoriesView(model: RepositoriesModel(repositories: list, git: git, picker: StubFolderPickerClient()))
-    .frame(width: Theme.Size.sidebarWidth, height: 420)
+    .frame(width: Theme.Size.defaultSidebarWidth, height: 420)
     .glassPaneBackground()
     .padding(Theme.Spacing.windowPadding)
     .background(Theme.Palette.window)

@@ -31,7 +31,7 @@ rationale.
 | A fake for that protocol | `TestSupport/Fakes/`, wrapped in `#if DEBUG` |
 | A user-facing feature | its own target under `Sources/Features/<Name>/`, module `<Name>Feature` |
 | A subview used by one feature | that feature's `Components/` |
-| AppKit bridging | that feature's `Platform/` |
+| AppKit bridging | that feature's `Platform/`, or `DesignSystem/Platform/` if two features share it |
 | A view, modifier or shape used by two features | `DesignSystem/Views`, `/Modifiers`, `/Shapes` |
 | A design token | `DesignSystem/Theme.swift` |
 | A colour for a token kind | `DesignSystem/Theme.swift`, paired in `Features/Editor/Platform/SyntaxAttributes.swift` |

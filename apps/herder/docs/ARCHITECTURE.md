@@ -387,6 +387,7 @@ The general form: **an identifier that is also a key on disk is data, and renami
 
 - `PersistedWorkspaceUIState.persistenceKey`. The file tree's is still `"explorer.expanded"` after the feature was renamed to `FileTreeFeature`, because changing it would leave every saved blob unreachable and close every folder the user had open. The editor's is `"editor.openFile"`, an object with one field rather than a bare path — and that is what let tabs arrive as `files` and `active` beside the original `file`, which is still read and no longer written. The key kept the singular name it was born with, which is the rule working rather than the rule chafing.
 - `AppSnapshot.persistenceKey` and the file names derived from `WorkspaceSnapshot.persistenceKey(for:)`.
+- `WindowSnapshot`'s `paneWidths`, an object of `leading` and `trailing`, each absent until that pane has been dragged.
 - `Codable` `CodingKeys` on any snapshot. Renaming a property renames the JSON field; add a new one with `decodeIfPresent` instead.
 
 And the test rule, which also outlived SwiftData: **storage changes are tested against bytes this build did not write.** A fixture encoded by the current types proves nothing, because both sides move together.

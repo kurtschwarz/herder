@@ -29,16 +29,22 @@ public struct WindowSnapshot: Codable, Sendable, Equatable {
     /// bookmark are the app's, in ``AppSnapshot/repositories``.
     public var repositories: [RepositoryMembership]
 
+    /// How wide the window's outer panes were left. Not part of ``isBlank``: a
+    /// pane dragged in a window with nothing in it is not worth adopting.
+    public var paneWidths: PaneWidths
+
     public init(
         id: UUID,
         openWorkspaces: [WorkspaceID] = [],
         activeWorkspace: WorkspaceID? = nil,
-        repositories: [RepositoryMembership] = []
+        repositories: [RepositoryMembership] = [],
+        paneWidths: PaneWidths = PaneWidths()
     ) {
         self.id = id
         self.openWorkspaces = openWorkspaces
         self.activeWorkspace = activeWorkspace
         self.repositories = repositories
+        self.paneWidths = paneWidths
     }
 
     public init(from decoder: any Decoder) throws {
@@ -48,6 +54,7 @@ public struct WindowSnapshot: Codable, Sendable, Equatable {
         openWorkspaces = try container.decodeIfPresent([WorkspaceID].self, forKey: .openWorkspaces) ?? []
         activeWorkspace = try container.decodeIfPresent(WorkspaceID.self, forKey: .activeWorkspace)
         repositories = try container.decodeIfPresent([RepositoryMembership].self, forKey: .repositories) ?? []
+        paneWidths = try container.decodeIfPresent(PaneWidths.self, forKey: .paneWidths) ?? PaneWidths()
     }
 
     /// Where a window's snapshot is stored. One key each.

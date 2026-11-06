@@ -34,6 +34,9 @@ public struct AppView: View {
                 WindowView(window: window, environment: environment)
             }
         }
+        // Above what the panes need (two minimum panes, the editor's floor, the
+        // padding and the gaps): this is the smallest window worth showing, not
+        // the smallest the layout survives.
         .frame(minWidth: 960, minHeight: 460)
         .background { WindowGlass() }
         .background(
@@ -68,18 +71,55 @@ private struct WindowView: View {
     let window: WindowEnvironment
     let environment: AppEnvironment
 
+    /// What the three panes share, once the gaps between them are taken off.
+    /// Zero until the first layout reports, which the clamp reads as "no room",
+    /// so the panes sit at their minimum for that one frame.
+    @State private var availableWidth: CGFloat = 0
+
+    private let limits = PaneWidths.Limits(
+        defaultWidth: Theme.Size.defaultSidebarWidth,
+        minimumPane: Theme.Size.minSidebarWidth,
+        minimumEditor: Theme.Size.minEditorWidth
+    )
+
     var body: some View {
-        HStack(spacing: Theme.Spacing.paneGap) {
+        let widths = window.paneWidths.resolved(in: availableWidth, limits: limits)
+
+        // No spacing: the gaps between panes are the resize handles.
+        HStack(spacing: 0) {
             Sidebar(model: window.repositoryList)
-                .frame(width: Theme.Size.sidebarWidth)
+                .frame(width: widths.leading)
                 .glassPaneBackground()
+
+            ResizeHandle(
+                widens: .trailing,
+                width: widths.leading,
+                onResize: { resize(.leading, to: $0) },
+                onCommit: { window.commitPaneWidths() },
+                onReset: { reset(.leading) }
+            )
 
             EditorView(model: window.editor, rootName: activeWorkspaceName)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+            ResizeHandle(
+                widens: .leading,
+                width: widths.trailing,
+                onResize: { resize(.trailing, to: $0) },
+                onCommit: { window.commitPaneWidths() },
+                onReset: { reset(.trailing) }
+            )
+
             FileTreeView(model: window.fileTree, rootName: activeWorkspaceName)
-                .frame(width: Theme.Size.sidebarWidth)
+                .frame(width: widths.trailing)
                 .glassPaneBackground()
+        }
+        // Read, not laid out by: a `GeometryReader` here would become the root
+        // of the layout and change how the panes size themselves.
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width - 2 * Theme.Spacing.paneGap
+        } action: {
+            availableWidth = $0
         }
         // Features read the workspace; they never ask which one is active.
         .environment(window.activeWorkspace)
@@ -123,6 +163,19 @@ private struct WindowView: View {
         // Where ⇧⌘N finds the window it should open the modal in.
         .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
         .modifier(EditorCommandValues(editor: window.editor))
+    }
+
+    private func resize(_ side: PaneWidths.Side, to proposed: CGFloat) {
+        window.paneWidths = window.paneWidths.setting(side, to: proposed, in: availableWidth, limits: limits)
+    }
+
+    /// Animated, unlike the drag: the jump back is one the eye needs help
+    /// following, where a drag has to track the pointer exactly.
+    private func reset(_ side: PaneWidths.Side) {
+        withAnimation(.easeOut(duration: 0.15)) {
+            window.paneWidths = window.paneWidths.resetting(side)
+        }
+        window.commitPaneWidths()
     }
 
     /// What the panes call the checkout they are showing: the workspace's name,

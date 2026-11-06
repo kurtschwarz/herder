@@ -20,7 +20,17 @@ public enum Theme {
     }
 
     public enum Size {
-        public static let sidebarWidth: CGFloat = 236
+        /// What an outer pane measures until the user drags it.
+        public static let defaultSidebarWidth: CGFloat = 236
+        /// The narrowest an outer pane may be dragged; narrower and the
+        /// indented rows of a file tree start to truncate.
+        public static let minSidebarWidth: CGFloat = 180
+        /// What a drag leaves the editor, roughly 80 columns of code and the
+        /// gutter.
+        public static let minEditorWidth: CGFloat = 400
+        /// The grip drawn in the gap between panes: a short pill, centred.
+        public static let gripLength: CGFloat = 44
+        public static let gripThickness: CGFloat = 4
         /// Header strip tall enough to clear the traffic lights.
         public static let titleBar: CGFloat = 48
         public static let wolfMark = CGSize(width: 15, height: 19.5)
@@ -69,6 +79,9 @@ public enum Theme {
     public enum Palette {
         /// The window itself. Panes sit on top of this.
         public static let window = Color(red: 28 / 255, green: 28 / 255, blue: 31 / 255, opacity: 0.97)
+
+        /// The pane-resize grip, shown while its edge is hovered or dragged.
+        public static let grip = Color.white.opacity(0.5)
 
         /// Dark wash over the blurred desktop. Light enough that the wallpaper's
         /// colour still reads through.

@@ -53,6 +53,10 @@ final class WindowEnvironment {
     /// alive for as long as any window names them.
     private(set) var openWorkspaces: [WorkspaceID]
 
+    /// How wide the outer panes were left. Changes live while a pane is being
+    /// dragged; ``commitPaneWidths()`` is what writes it down.
+    var paneWidths: PaneWidths
+
     init(
         id: UUID,
         repositories: WindowRepositories,
@@ -72,6 +76,7 @@ final class WindowEnvironment {
         self.windows = windows
         self.activeWorkspaceID = snapshot?.activeWorkspace
         self.openWorkspaces = snapshot?.openWorkspaces ?? []
+        self.paneWidths = snapshot?.paneWidths ?? PaneWidths()
         // Not worth a file until something is in it, but once there is one it
         // is kept current even if the window empties again.
         self.hasSnapshot = snapshot != nil
@@ -150,6 +155,12 @@ final class WindowEnvironment {
         fileTree.select(editor.file)
     }
 
+    /// Writes down the pane widths. Asked for when a drag ends rather than as it
+    /// goes: the disk only needs the width the user let go at.
+    func commitPaneWidths() {
+        scheduleSave()
+    }
+
     /// Opens the add-repository modal. Here rather than on the sidebar because a
     /// menu command, not just the sidebar's button, asks for it.
     func beginAddingRepository() {
@@ -170,7 +181,8 @@ final class WindowEnvironment {
             id: id,
             openWorkspaces: openWorkspaces,
             activeWorkspace: activeWorkspaceID,
-            repositories: repositories.members
+            repositories: repositories.members,
+            paneWidths: paneWidths
         )
     }
 

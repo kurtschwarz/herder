@@ -115,6 +115,33 @@ import Testing
         #expect(snapshot.activeWorkspace == nil)
     }
 
+    @Test func windowSnapshotKeepsItsPaneWidths() throws {
+        let snapshot = WindowSnapshot(id: UUID(), paneWidths: PaneWidths(leading: 300, trailing: nil))
+        let decoded = try decoder.decode(WindowSnapshot.self, from: try encoder.encode(snapshot))
+
+        #expect(decoded.paneWidths == PaneWidths(leading: 300, trailing: nil))
+    }
+
+    @Test func windowSnapshotWrittenBeforePaneWidthsExistedDecodesToTheDefaults() throws {
+        let id = UUID()
+        let json = #"{"id":"\#(id.uuidString)","version":1,"openWorkspaces":[],"repositories":[]}"#
+        let snapshot = try decoder.decode(WindowSnapshot.self, from: Data(json.utf8))
+
+        #expect(snapshot.paneWidths == PaneWidths())
+    }
+
+    @Test func windowSnapshotReadsPaneWidthsFromBytesWrittenByHand() throws {
+        let id = UUID()
+        let json = #"{"id":"\#(id.uuidString)","paneWidths":{"leading":212.5,"trailing":300}}"#
+        let snapshot = try decoder.decode(WindowSnapshot.self, from: Data(json.utf8))
+
+        #expect(snapshot.paneWidths == PaneWidths(leading: 212.5, trailing: 300))
+    }
+
+    @Test func aWindowWithOnlyDraggedPanesIsStillBlank() {
+        #expect(WindowSnapshot(id: UUID(), paneWidths: PaneWidths(leading: 300)).isBlank)
+    }
+
     @Test func windowSnapshotWithoutAnIdentityIsRefused() {
         #expect(throws: (any Error).self) {
             try decoder.decode(WindowSnapshot.self, from: Data("{}".utf8))

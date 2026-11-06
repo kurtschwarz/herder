@@ -59,7 +59,7 @@ extension View {
 #Preview {
     HStack(spacing: Theme.Spacing.paneGap) {
         Color.clear
-            .frame(width: Theme.Size.sidebarWidth)
+            .frame(width: Theme.Size.defaultSidebarWidth)
             .paneBackground()
         Color.clear
     }
