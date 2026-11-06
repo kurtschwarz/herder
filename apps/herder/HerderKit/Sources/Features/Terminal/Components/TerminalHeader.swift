@@ -29,7 +29,12 @@ struct TerminalHeader: View {
             .foregroundStyle(Theme.Palette.secondaryText)
             .help("New Terminal Tab")
 
+            // Empty space is a place to double-click for another terminal, as it
+            // is in a browser's tab strip. Only this: a tab's own double-click
+            // renames it.
             Spacer(minLength: Theme.Spacing.loose)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { Task { await model.openTab() } }
 
             if let directory = model.activeTab?.directory {
                 Text(model.label(for: directory))
