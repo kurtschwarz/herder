@@ -4,7 +4,8 @@ import SwiftUI
 import TerminalUI
 
 /// The terminal under the editor: a header with the tabs, and the screen of the
-/// one showing.
+/// one showing. Has no surface of its own: like the editor above it, it sits
+/// straight on the window.
 public struct TerminalPanel: View {
     private let model: TerminalModel
 
@@ -24,7 +25,6 @@ public struct TerminalPanel: View {
                 Color.clear
             }
         }
-        .paneBackgroundSquareTop()
         .alert(
             model.closePrompt.map { "Do you want to close \u{201C}\(TerminalTitle.truncated($0.command, to: 40))\u{201D}?" } ?? "",
             isPresented: Binding(
