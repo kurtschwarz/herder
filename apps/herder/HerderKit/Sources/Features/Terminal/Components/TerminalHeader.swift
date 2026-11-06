@@ -32,7 +32,7 @@ struct TerminalHeader: View {
 
             if let directory = model.activeTab?.directory {
                 Text(model.label(for: directory))
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.Palette.secondaryText)
                     .lineLimit(1)
                     .truncationMode(.head)
