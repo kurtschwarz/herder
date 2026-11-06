@@ -4,6 +4,7 @@ import Foundation
 import Testing
 
 @testable import EditorFeature
+@testable import DesignSystem
 
 /// The pane's own behaviour, below the model: what the text view is told when
 /// the colour changes under it.
@@ -60,6 +61,62 @@ import Testing
 
         let cleanAfter = views.filter { !$0.needsDisplay } + views.flatMap(clean(under:))
         #expect(cleanAfter.isEmpty)
+    }
+
+    /// The colour painted over the character at `offset`, or `nil` for none.
+    ///
+    /// The enumeration skips ahead to the next coloured run rather than
+    /// reporting an uncoloured one, so the run found has to contain `offset`.
+    private func colour(in buffer: Buffer, at offset: Int) -> NSColor? {
+        let layout = buffer.pane.scrollView.documentView.flatMap { ($0 as? NSTextView)?.textLayoutManager }
+        guard let layout, let content = layout.textContentManager,
+              let start = content.location(content.documentRange.location, offsetBy: offset)
+        else { return nil }
+        var found: NSColor?
+        layout.enumerateRenderingAttributes(from: start, reverse: false) { _, attributes, range in
+            if range.contains(start) { found = attributes[.foregroundColor] as? NSColor }
+            return false
+        }
+        return found
+    }
+
+    /// Between a keystroke and the next parse, the colour after the caret has
+    /// to move with its text rather than stay where the text was.
+    @Test func colourFollowsTextTypedBeforeIt() {
+        let text = "let name = \"Herder\"\n"
+        let (buffer, textView) = drawn(text)
+        let string = (text as NSString).range(of: "\"Herder\"")
+        buffer.colour([SyntaxToken(range: string, kind: .string)], foundIn: text)
+        let stringColour = SyntaxAttributes.colour(for: .string)
+        #expect(colour(in: buffer, at: string.location) == stringColour)
+
+        buffer.storage.replaceCharacters(in: NSRange(location: 0, length: 0), with: "xxx")
+        buffer.textDidChange(Notification(name: NSText.didChangeNotification, object: textView))
+
+        #expect(buffer.text.hasPrefix("xxx"))
+        #expect(colour(in: buffer, at: string.location + 3) == stringColour)
+        #expect(colour(in: buffer, at: string.location + 3 + string.length - 1) == stringColour)
+        #expect(colour(in: buffer, at: string.location) != stringColour)
+    }
+
+    /// Sizes the two costs behind the colour lag. Prints, and asserts nothing
+    /// about time: a budget here would fail on a busy machine.
+    @Test func colouringALargeFileIsTimed() {
+        let line = "let name = \"Herder\" // note\n"
+        let text = String(repeating: line, count: 5_000)
+        let buffer = Buffer(text: text)
+        _ = buffer.pane
+        var tokens: [SyntaxToken] = []
+        var location = 0
+        for _ in 0..<5_000 {
+            tokens.append(SyntaxToken(range: NSRange(location: location, length: 3), kind: .keyword))
+            tokens.append(SyntaxToken(range: NSRange(location: location + 11, length: 8), kind: .string))
+            location += (line as NSString).length
+        }
+
+        let clock = ContinuousClock()
+        let elapsed = clock.measure { buffer.colour(tokens, foundIn: text) }
+        print("colour: \(tokens.count) tokens in \(text.utf16.count) UTF-16 units took \(elapsed)")
     }
 
     /// Tokens for text the buffer no longer holds change nothing, so there is

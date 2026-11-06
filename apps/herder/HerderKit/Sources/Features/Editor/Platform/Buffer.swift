@@ -1,6 +1,7 @@
 import AppKit
 import Core
 import DesignSystem
+import os
 
 /// One tab's text, and everything that has to outlive the tab being on screen:
 /// the storage, the undo history, the layout, and the view showing them.
@@ -26,6 +27,12 @@ final class Buffer: NSObject, NSTextViewDelegate {
     private let layout = NSTextLayoutManager()
     private let container = NSTextContainer()
 
+    private static let signposter = OSSignposter(subsystem: "dev.herder", category: "editor")
+
+    /// What is painted now, kept in step with the text as it is edited: see
+    /// `TextEdit`. Parsing replaces it; typing only moves it.
+    private var tokens: [SyntaxToken] = []
+
     private var textView: NSTextView?
     private var gutter: LineNumberGutter?
 
@@ -38,6 +45,12 @@ final class Buffer: NSObject, NSTextViewDelegate {
         storage = NSTextStorage(string: text, attributes: SyntaxAttributes.base)
         super.init()
         content.textStorage = storage
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(storageDidProcessEditing),
+            name: NSTextStorage.didProcessEditingNotification,
+            object: storage
+        )
         content.addTextLayoutManager(layout)
         layout.textContainer = container
     }
@@ -48,6 +61,8 @@ final class Buffer: NSObject, NSTextViewDelegate {
     /// The undo history goes too: its ranges mean nothing over different text.
     func replace(with text: String) {
         storage.setAttributedString(NSAttributedString(string: text, attributes: SyntaxAttributes.base))
+        tokens = []
+        shifted = false
         layout.removeRenderingAttribute(.foregroundColor, for: layout.documentRange)
         undoManager.removeAllActions()
         textView?.setSelectedRange(NSRange(location: 0, length: 0))
@@ -61,9 +76,18 @@ final class Buffer: NSObject, NSTextViewDelegate {
     /// Only if the buffer still holds the `text` the tokens were found in.
     func colour(_ tokens: [SyntaxToken], foundIn text: String) {
         guard storage.string == text else { return }
+        self.tokens = tokens
+        paint()
+    }
+
+    /// Paints ``tokens``, replacing whatever colour was there.
+    private func paint() {
+        let interval = Self.signposter.beginInterval("colour", "\(self.tokens.count) tokens")
+        defer { Self.signposter.endInterval("colour", interval) }
 
         layout.removeRenderingAttribute(.foregroundColor, for: layout.documentRange)
         let length = storage.length
+
         for token in tokens where NSMaxRange(token.range) <= length {
             guard
                 let start = content.location(content.documentRange.location, offsetBy: token.range.location),
@@ -142,7 +166,33 @@ final class Buffer: NSObject, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         gutter?.textDidChange(to: storage.string)
+        if shifted {
+            shifted = false
+            paint()
+        }
         onEdit()
+    }
+
+    // MARK: - Following edits
+
+    /// Whether ``tokens`` moved for an edit that has not been painted yet.
+    private var shifted = false
+
+    /// Moves the colour with the text, so that between a keystroke and the next
+    /// parse everything after the caret is not painted where the text was.
+    /// Painting waits for `textDidChange`, which is after layout has settled.
+    ///
+    /// A notification rather than the storage's delegate: the content manager
+    /// takes that over when the storage is attached to it.
+    @objc private func storageDidProcessEditing(_ note: Notification) {
+        guard storage.editedMask.contains(.editedCharacters), !tokens.isEmpty else { return }
+        let edited = storage.editedRange
+        let edit = TextEdit(
+            replaced: NSRange(location: edited.location, length: edited.length - storage.changeInLength),
+            length: edited.length
+        )
+        tokens = tokens.applying(edit)
+        shifted = true
     }
 
     func undoManager(for view: NSTextView) -> UndoManager? {

@@ -1,6 +1,7 @@
 import Core
 import Foundation
 import HerderSyntaxFFI
+import os
 
 /// The real highlighter: tree-sitter, through the `herder-syntax` crate.
 ///
@@ -13,6 +14,8 @@ import HerderSyntaxFFI
 /// keeps its own compiled queries for the life of the process.
 public struct TreeSitterHighlighter: SyntaxHighlighter {
     public init() {}
+
+    private static let signposter = OSSignposter(subsystem: "dev.herder", category: "editor")
 
     /// `@concurrent` on purpose. With `NonisolatedNonsendingByDefault` a plain
     /// `nonisolated` function runs on whichever actor called it, which for this
@@ -29,7 +32,9 @@ public struct TreeSitterHighlighter: SyntaxHighlighter {
                 let language = hdr_language_for(name.baseAddress, name.count, source.baseAddress, source.count)
                 guard language != HDR_LANGUAGE_NONE else { return [] }
 
+                let interval = Self.signposter.beginInterval("parse", "\(source.count) bytes")
                 let run = hdr_highlight(language, source.baseAddress, source.count)
+                Self.signposter.endInterval("parse", interval)
                 defer { hdr_tokens_free(run) }
                 guard let tokens = run.tokens else { return [] }
 

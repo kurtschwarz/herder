@@ -82,10 +82,16 @@ public final class EditorModel {
     @ObservationIgnored
     private var rehighlight: Task<Void, Never>?
 
-    /// How long typing has to stop before the text is coloured again. The
-    /// highlighter takes the whole document, so colouring every keystroke
-    /// would parse the file that many times.
+    /// How long typing has to stop before a big file is coloured again. The
+    /// highlighter takes the whole document, so colouring every keystroke of
+    /// one would parse it that many times.
     static let rehighlightDelay = Duration.milliseconds(50)
+
+    /// Up to this many UTF-16 units a file is coloured on every keystroke. A
+    /// parse takes about 4 ms at 24 KB and 33 ms at 190 KB, and runs off the main
+    /// actor, so below this a new word is coloured as it is typed instead of
+    /// when typing pauses.
+    static let immediateRehighlightLimit = 100_000
 
     /// `highlighter` is injected rather than defaulted, even though it is pure —
     /// the same text gives the same tokens — because the real one lives in
@@ -331,11 +337,15 @@ public final class EditorModel {
         document.bufferChanged(to: buffer.text)
 
         rehighlight?.cancel()
+        let waits = buffer.storage.length > Self.immediateRehighlightLimit
         rehighlight = Task { [highlighter] in
-            try? await Task.sleep(for: Self.rehighlightDelay)
-            guard !Task.isCancelled else { return }
+            if waits {
+                try? await Task.sleep(for: Self.rehighlightDelay)
+                guard !Task.isCancelled else { return }
+            }
             let text = buffer.text
             let tokens = await highlighter.tokens(in: text, ofFileNamed: document.key.path)
+            guard !Task.isCancelled else { return }
             // Dropped by the buffer if typing went on while the parser ran.
             buffer.colour(tokens, foundIn: text)
         }
