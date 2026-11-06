@@ -3,7 +3,7 @@
 #
 # The project file is generated rather than hand-edited so adding files never
 # produces a .pbxproj merge conflict. Keep this target thin: entry point, assets,
-# entitlements and signing only. Everything else belongs in Packages/HerderKit.
+# entitlements and signing only. Everything else belongs in HerderKit.
 name: Herder
 
 options:
@@ -16,7 +16,7 @@ options:
 
 packages:
   HerderKit:
-    path: Packages/HerderKit
+    path: HerderKit
 
 settings:
   base:

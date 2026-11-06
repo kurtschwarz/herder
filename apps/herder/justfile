@@ -5,7 +5,7 @@ set shell := ["zsh", "-cu"]
 
 name := "Herder"
 proj := name + ".xcodeproj"
-kit := "Packages/HerderKit"
+kit := "HerderKit"
 
 # The syntax-highlighting crate. Its XCFramework is a `.binaryTarget` of
 # HerderKit, so it has to exist before SwiftPM will resolve the package at all.

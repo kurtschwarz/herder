@@ -30,7 +30,7 @@ AppFeature            composition root: windows, menus, builds real services
 
 ### The composition root is a module, not the Xcode target
 
-`Herder.xcodeproj` is **generated** from `project.yml` by `xcodegen`, so every file added under `Herder/` costs a `just project` run, while files under `Packages/HerderKit` are picked up by SwiftPM on their own. Composition code changes often, so it lives one level down, in `AppFeature`.
+`Herder.xcodeproj` is **generated** from `project.yml` by `xcodegen`, so every file added under `Herder/` costs a `just project` run, while files under `HerderKit` are picked up by SwiftPM on their own. Composition code changes often, so it lives one level down, in `AppFeature`.
 
 `Herder/` therefore holds `@main`, `Info.plist`, the entitlements and the asset catalog, and links exactly one product: `AppFeature`. Wherever this document says "the App target", read "the composition root", which is `AppFeature`. Nothing in the dependency rules needs the composition root to be the Xcode target — only that exactly one place names concrete service types.
 
@@ -77,7 +77,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   ├── Herder/                      # app target: @main, Info.plist, entitlements, assets
 │   │   ├── UITests/                     # XCTest only; Swift Testing has no UI automation
 │   │   │
-│   │   ├── Packages/HerderKit/
+│   │   ├── HerderKit/
 │   │   │   ├── Package.swift
 │   │   │   ├── Vendor/                  # gitignored: HerderSyntaxFFI.xcframework, built by `just syntax`
 │   │   │   ├── Sources/
@@ -128,7 +128,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
     └── ...                              # other shared packages
 ```
 
-HerderKit lives inside `apps/herder/` because nothing outside Herder uses it. If another app ever needs part of it, that part moves to `packages/` then, not before. It sits under `Packages/` so a second local package has somewhere to go.
+HerderKit lives inside `apps/herder/` because nothing outside Herder uses it. If another app ever needs part of it, that part moves to `packages/` then, not before.
 
 ### Naming
 
@@ -453,7 +453,7 @@ shows it.
 ## Rust
 
 - The syntax highlighter lives in `packages/syntax-highlighter` and stays there. Don't move it, rename it, or restructure its crates as part of other work.
-- It owns its build and binding generation. HerderKit consumes its output; HerderKit doesn't reach into its internals or duplicate its build steps. `just syntax` builds the XCFramework and copies it into `Packages/HerderKit/Vendor/`, so the `.binaryTarget` path stays inside the package and SwiftPM never depends on Cargo's output directory.
+- It owns its build and binding generation. HerderKit consumes its output; HerderKit doesn't reach into its internals or duplicate its build steps. `just syntax` builds the XCFramework and copies it into `HerderKit/Vendor/`, so the `.binaryTarget` path stays inside the package and SwiftPM never depends on Cargo's output directory.
 - **The bindings are hand-written**, not generated: a C header and a modulemap in `packages/syntax-highlighter/include/`, declaring module `HerderSyntaxFFI`. The header is the API. It is edited by hand, in step with `src/lib.rs`, and the two must not drift — `TreeSitterHighlighterTests` asserts the kind count matches.
 - Changes to its public API (what Swift sees) are deliberate and get their own task.
 - Swift touches it in exactly one place: the highlighting service in `Services/Highlighting/` (for example `RustHighlightService`), which converts its types to Core types.

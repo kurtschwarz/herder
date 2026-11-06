@@ -155,7 +155,7 @@ just bootstrap     # add the Rust targets for both architectures
 ```
 
 `just build` here only produces the XCFramework. Copying it into
-`apps/herder/Packages/HerderKit/Vendor/` is the app's `syntax` recipe, which
+`apps/herder/HerderKit/Vendor/` is the app's `syntax` recipe, which
 every recipe that compiles Swift depends on: a stale static library links
 without complaint, and the app would highlight with yesterday's grammars.
 

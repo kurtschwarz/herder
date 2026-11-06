@@ -4,7 +4,7 @@ import SwiftUI
 /// Entry point, nothing else.
 ///
 /// This target's whole job is to declare scenes. Every service, every model and
-/// every line of behaviour lives in `Packages/HerderKit`, and `AppEnvironment`
+/// every line of behaviour lives in `HerderKit`, and `AppEnvironment`
 /// is what builds them — including the live services, which used to be
 /// constructed here. The project file is generated from `project.yml`, so the
 /// fewer files this target has, the less often it has to be regenerated.

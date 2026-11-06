@@ -16,8 +16,7 @@ herder/
 │       ├── project.yml       # source of truth for Herder.xcodeproj
 │       ├── scripts/          # check-boundaries.sh, the import rules a compiler can't see
 │       ├── Herder/           # thin app target: entry point and resources only
-│       ├── Packages/
-│       │   └── HerderKit/    # all the code, split into modules
+│       ├── HerderKit/        # all the code, split into modules
 │       └── UITests/          # XCTest, since Swift Testing has no UI automation
 └── packages/
     └── syntax-highlighter/   # Rust: tree-sitter grammars behind a C ABI
@@ -83,7 +82,7 @@ propagate — a failing test exits 1.
 
 The Xcode target is deliberately almost empty. It owns the `@main` entry point,
 `Info.plist`, entitlements, signing and assets, and links exactly one product.
-Everything real lives in the local Swift package `apps/herder/Packages/HerderKit`,
+Everything real lives in the local Swift package `apps/herder/HerderKit`,
 split into modules:
 
 | Module | Job | Default isolation |

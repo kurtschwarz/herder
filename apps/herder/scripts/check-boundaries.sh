@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."   # always run from apps/herder
 
-SRC="Packages/HerderKit/Sources"
+SRC="HerderKit/Sources"
 APP_DIR="${APP_DIR:-Herder}"
 RUST_MODULE="${RUST_MODULE:-HerderSyntaxFFI}"
 fail=0
