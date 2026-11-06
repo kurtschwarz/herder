@@ -20,15 +20,9 @@ struct TerminalHeader: View {
                 )
             }
 
-            Button {
+            HoverIconButton(icon: Ph.plus.regular, help: "New Terminal Tab") {
                 Task { await model.openTab() }
-            } label: {
-                PhIcon(Ph.plus.regular, size: 14)
-                    .frame(width: Theme.Size.iconButton, height: Theme.Size.iconButton)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.Palette.secondaryText)
-            .help("New Terminal Tab")
 
             // Empty space is a place to double-click for another terminal, as it
             // is in a browser's tab strip. Only this: a tab's own double-click
@@ -96,14 +90,8 @@ private struct TerminalTabView: View {
                     .lineLimit(1)
             }
 
-            Button(action: close) {
-                PhIcon(Ph.x.bold, size: 10)
-                    .frame(width: 16, height: 16)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.Palette.tertiaryText)
-            .opacity(isActive || isHovering ? 1 : 0)
-            .help("Close Terminal")
+            HoverIconButton(icon: Ph.x.bold, iconSize: 10, side: 18, radius: 5, help: "Close Terminal", action: close)
+                .opacity(isActive || isHovering ? 1 : 0)
         }
         .padding(.horizontal, Theme.Spacing.normal + 2)
         .frame(height: Theme.Size.iconButton)
@@ -183,6 +171,9 @@ private final class ClickMonitor {
 /// becomes a hand.
 private struct HoverIconButton: View {
     let icon: Image
+    var iconSize: CGFloat = 14
+    var side: CGFloat = Theme.Size.iconButton
+    var radius: CGFloat = Theme.Radius.control
     let help: String
     let action: () -> Void
 
@@ -190,13 +181,13 @@ private struct HoverIconButton: View {
 
     var body: some View {
         Button(action: action) {
-            PhIcon(icon, size: 14)
-                .frame(width: Theme.Size.iconButton, height: Theme.Size.iconButton)
+            PhIcon(icon, size: iconSize)
+                .frame(width: side, height: side)
                 .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.control)
+                    RoundedRectangle(cornerRadius: radius)
                         .fill(isHovering ? Theme.Palette.control : .clear)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.control))
+                .contentShape(RoundedRectangle(cornerRadius: radius))
         }
         .buttonStyle(.plain)
         .foregroundStyle(isHovering ? Theme.Palette.text : Theme.Palette.secondaryText)
