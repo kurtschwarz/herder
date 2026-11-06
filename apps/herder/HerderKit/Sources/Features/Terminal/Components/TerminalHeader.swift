@@ -31,8 +31,11 @@ struct TerminalHeader: View {
 
             // Empty space is a place to double-click for another terminal, as it
             // is in a browser's tab strip. Only this: a tab's own double-click
-            // renames it.
-            Spacer(minLength: Theme.Spacing.loose)
+            // renames it. Not a `Spacer`, which has nothing for a click to
+            // land on whatever its content shape says.
+            Color.clear
+                .frame(minWidth: Theme.Spacing.loose, maxWidth: .infinity)
+                .frame(height: Theme.Size.iconButton)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { Task { await model.openTab() } }
 
