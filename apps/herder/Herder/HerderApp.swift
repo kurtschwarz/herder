@@ -12,6 +12,9 @@ import SwiftUI
 struct HerderApp: App {
     @State private var environment: AppEnvironment
 
+    /// Asks before quitting with unsaved edits.
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+
     init() {
         _environment = State(initialValue: AppEnvironment())
     }
@@ -22,7 +25,10 @@ struct HerderApp: App {
                 // Reading the repository list touches the disk, so it happens
                 // here rather than in `init`. The sidebar is empty for the
                 // moment it takes.
-                .task { await environment.start() }
+                .task {
+                    delegate.environment = environment
+                    await environment.start()
+                }
                 // Quitting is the only way out, so this is where the sandbox
                 // gets its folder access handed back.
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in

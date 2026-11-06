@@ -36,7 +36,13 @@ public struct AppView: View {
         }
         .frame(minWidth: 960, minHeight: 460)
         .background { WindowGlass() }
-        .background(WindowChrome { close() })
+        .background(
+            WindowChrome(
+                onClose: { close() },
+                unsavedFiles: { window?.editor.unsavedFiles ?? [] },
+                saveAll: { await window?.editor.saveAll() ?? true }
+            )
+        )
         // After the backgrounds, so the glass runs under the title bar too.
         .ignoresSafeArea()
         .preferredColorScheme(.dark)

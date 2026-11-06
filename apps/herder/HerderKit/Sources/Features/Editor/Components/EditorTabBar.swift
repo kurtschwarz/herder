@@ -43,7 +43,7 @@ struct EditorTabBar: View {
                             isDirty: model.isDirty(tab.key),
                             isLifted: isLifted,
                             activate: { Task { await model.activate(tab.key) } },
-                            close: { Task { await model.close(tab: tab.key) } }
+                            close: { Task { await model.requestClose(tab: tab.key) } }
                         )
                         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { widths[tab.key] = $0 }
                         .offset(x: shift)

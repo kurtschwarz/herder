@@ -40,7 +40,27 @@ public struct EditorView: View {
                 EditorTabBar(model: model)
                 Breadcrumb(components: breadcrumb, isDeleted: model.isDeleted)
                 Rectangle().fill(Theme.Palette.hairline).frame(height: 1)
+                if model.isStale {
+                    StaleBanner(
+                        reload: { Task { await model.reloadFromDisk() } },
+                        keep: { Task { await model.keepEdits() } }
+                    )
+                }
                 body(of: model.content)
+            }
+            .alert(
+                model.closePrompt.map { "Do you want to save the changes to \u{201C}\($0.name)\u{201D}?" } ?? "",
+                isPresented: Binding(
+                    get: { model.closePrompt != nil },
+                    set: { if !$0 { Task { await model.answer(.cancel) } } }
+                ),
+                presenting: model.closePrompt
+            ) { _ in
+                Button("Save") { Task { await model.answer(.save) } }
+                Button("Don\u{2019}t Save", role: .destructive) { Task { await model.answer(.discard) } }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("Your changes will be lost if you don\u{2019}t save them.")
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .alert(
@@ -87,6 +107,30 @@ public struct EditorView: View {
         case .tooLarge: "Can't show this file: it is larger than 1 MB."
         case .unreadable: "Can't read this file."
         }
+    }
+}
+
+/// Shown over a buffer whose file changed on disk while it held unsaved edits.
+/// Neither answer is the default: either loses something.
+private struct StaleBanner: View {
+    let reload: () -> Void
+    let keep: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.normal) {
+            Text("This file changed on disk.")
+                .font(.callout)
+                .foregroundStyle(Theme.Palette.secondaryText)
+            Spacer(minLength: 0)
+            Button("Reload", action: reload)
+                .help("Take what is on disk and lose your changes")
+            Button("Keep Mine", action: keep)
+                .help("Keep your changes; saving will replace what is on disk")
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, Theme.Spacing.paneInset)
+        .padding(.vertical, Theme.Spacing.normal)
+        .background(Theme.Palette.control)
     }
 }
 

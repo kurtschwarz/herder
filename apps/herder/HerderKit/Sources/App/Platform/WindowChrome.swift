@@ -15,12 +15,18 @@ struct WindowChrome: NSViewRepresentable {
     /// merely going away with the app.
     var onClose: () -> Void = {}
 
+    /// Which files in this window have edits that are not on disk, and how to
+    /// save them. Closing the window with any asks first.
+    var unsavedFiles: () -> [String] = { [] }
+    var saveAll: () async -> Bool = { true }
+
     /// Holds the resize observer for as long as the view is alive.
     final class Coordinator {
         var observer: NSObjectProtocol?
         var closeObserver: NSObjectProtocol?
         var doubleClickMonitor: Any?
         var onClose: () -> Void = {}
+        var closeGuard: CloseGuard?
 
         // Isolated so it can reach `observer`, which this module's default
         // `MainActor` isolation otherwise puts out of a nonisolated deinit's reach.
@@ -59,6 +65,14 @@ struct WindowChrome: NSViewRepresentable {
         // Reassigned every time, because the closure captures the window's
         // state, which does not exist when the view is first made.
         coordinator.onClose = onClose
+        if coordinator.closeGuard == nil {
+            let guarded = CloseGuard()
+            guarded.original = window.delegate
+            window.delegate = guarded
+            coordinator.closeGuard = guarded
+        }
+        coordinator.closeGuard?.unsavedFiles = unsavedFiles
+        coordinator.closeGuard?.saveAll = saveAll
         if coordinator.closeObserver == nil {
             coordinator.closeObserver = NotificationCenter.default.addObserver(
                 forName: NSWindow.willCloseNotification,
@@ -174,5 +188,51 @@ struct WindowChrome: NSViewRepresentable {
     /// Distance from the window's top edge to the middle of the sidebar header.
     private static var trafficLightCentre: CGFloat {
         Theme.Spacing.windowPadding + Theme.Size.titleBar / 2
+    }
+}
+
+/// Stands in front of the window's delegate to answer "should this window
+/// close?", and hands everything else to the delegate SwiftUI installed.
+///
+/// A window's delegate is the only place AppKit asks that, the close button
+/// and ⌘W both reach it, and SwiftUI owns the one that is there.
+final class CloseGuard: NSObject, NSWindowDelegate {
+    // CONCURRENCY: `nonisolated(unsafe)` because the runtime asks
+    // `responds(to:)` and `forwardingTarget(for:)` from whichever context sent
+    // the message, and they have to read this. It is set once, on the main
+    // thread, before the guard is installed as the delegate, and never
+    // written again.
+    nonisolated(unsafe) weak var original: (any NSWindowDelegate)?
+    var unsavedFiles: () -> [String] = { [] }
+    var saveAll: () async -> Bool = { true }
+
+    nonisolated override func responds(to selector: Selector!) -> Bool {
+        super.responds(to: selector) || original?.responds(to: selector) == true
+    }
+
+    nonisolated override func forwardingTarget(for selector: Selector!) -> Any? {
+        original?.responds(to: selector) == true ? original : super.forwardingTarget(for: selector)
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        let files = unsavedFiles()
+        guard !files.isEmpty else { return original?.windowShouldClose?(sender) ?? true }
+
+        // A sheet, so the answer comes later and this one is no.
+        UnsavedChangesAlert.make(files: files).beginSheetModal(for: sender) { [weak self] response in
+            switch UnsavedChangesAlert.choice(for: response) {
+            case .cancel:
+                break
+            case .discard:
+                sender.close()
+            case .save:
+                // `close()` does not ask again. A save that fails leaves the
+                // window open with the failure showing.
+                Task {
+                    if await self?.saveAll() == true { sender.close() }
+                }
+            }
+        }
+        return false
     }
 }

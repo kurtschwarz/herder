@@ -196,7 +196,7 @@ public final class EditorModel {
     /// Closes the tab showing. What ⌘W does, when there is one.
     public func closeActiveTab() async {
         guard let fileKey else { return }
-        await close(tab: fileKey)
+        await requestClose(tab: fileKey)
     }
 
     /// Empties the pane and drops its tabs. What the workspace remembers is
@@ -352,21 +352,109 @@ public final class EditorModel {
     /// A file that was deleted is written back. Its folder is not: making
     /// back a folder that was deleted is a bigger decision than saving.
     public func save() async {
-        guard let document = activeDocument, let buffer = buffers[document.buffer], let worktree else { return }
+        guard let activeDocument else { return }
+        await save(activeDocument)
+    }
+
+    /// Whether the document was written.
+    @discardableResult
+    private func save(_ document: Document) async -> Bool {
+        guard let buffer = buffers[document.buffer] else { return false }
         let key = document.key
         let text = buffer.text
 
         do {
-            if let folder = key.parent, folder != worktree.root, worktree.exists(folder) == false {
+            if let worktree = store.state(containing: key),
+               let folder = key.parent, folder != worktree.root, worktree.exists(folder) == false {
                 throw MissingFolder()
             }
             try await files.write(text, to: key.path)
         } catch {
             saveFailure = SaveFailure(name: key.name, reason: error.localizedDescription)
-            return
+            return false
         }
         document.saved(text, buffer: buffer.text)
         if key == fileKey { isDeleted = false }
+        return true
+    }
+
+    // MARK: - Unsaved work
+
+    /// The files with edits that are not on disk, for a prompt to name.
+    public var unsavedFiles: [String] {
+        documents.dirty.map(\.key.name)
+    }
+
+    /// Writes every document with unsaved edits. Stops at the first that
+    /// fails, which is then reported as any failed save is, and answers
+    /// whether all of them went.
+    public func saveAll() async -> Bool {
+        for document in documents.dirty {
+            guard await save(document) else { return false }
+        }
+        return true
+    }
+
+    /// The tab whose close is waiting on an answer.
+    struct ClosePrompt: Equatable {
+        let key: PathKey
+        var name: String { key.name }
+    }
+
+    /// What is held while asking whether to lose a tab's edits.
+    private(set) var closePrompt: ClosePrompt?
+
+    enum CloseAnswer {
+        case save, discard, cancel
+    }
+
+    /// Closes the tab for `key`, or asks first when it has unsaved edits. What
+    /// the close button and ⌘W do: ``close(tab:)`` is the one that does not ask.
+    func requestClose(tab key: PathKey) async {
+        guard isDirty(key) else {
+            await close(tab: key)
+            return
+        }
+        closePrompt = ClosePrompt(key: key)
+    }
+
+    /// Carries out the answer to ``closePrompt``. A save that fails leaves the
+    /// tab open, with the failure showing.
+    func answer(_ answer: CloseAnswer) async {
+        guard let prompt = closePrompt else { return }
+        closePrompt = nil
+
+        switch answer {
+        case .cancel:
+            return
+        case .save:
+            for document in documents.documents(at: prompt.key) where document.isDirty {
+                guard await save(document) else { return }
+            }
+        case .discard:
+            break
+        }
+        await close(tab: prompt.key)
+    }
+
+    // MARK: - A file that changed under unsaved edits
+
+    /// Whether the file showing changed on disk while it held unsaved edits.
+    var isStale: Bool { activeDocument?.isStale == true }
+
+    /// Takes what is on disk, and the edits go.
+    func reloadFromDisk() async {
+        activeDocument?.discardEdits()
+        await reload()
+    }
+
+    /// Keeps the buffer. It stays dirty, and saving it replaces what is on
+    /// disk: the person has seen that it changed.
+    func keepEdits() async {
+        guard let document = activeDocument, let buffer = buffers[document.buffer],
+              let text = try? await files.read(document.key.path, maxBytes: Self.maxBytes)
+        else { return }
+        document.keepBuffer(over: text, buffer: buffer.text)
     }
 
     /// Whether ``save()`` has anything to do.
@@ -505,7 +593,10 @@ public final class EditorModel {
         let result = documents.move(from: old, to: new)
         for document in result.collapsed { discard(document) }
         if let active = activeDocument, result.collapsed.contains(where: { $0 === active }) {
-            activeDocument = result.moved.first { $0.key == Workspace.moved(fileKey ?? old, from: old, to: new) }
+            // The survivor is the other document at the path. Its text is not
+            // what is on screen, so the next read puts it there.
+            activeDocument = documents.documents(at: Workspace.moved(fileKey ?? old, from: old, to: new)).first
+            content = nil
         }
         if let fileKey {
             let next = Workspace.moved(fileKey, from: old, to: new)

@@ -45,6 +45,10 @@ public final class AppEnvironment {
     @ObservationIgnored
     private var liveWindows: Set<UUID> = []
 
+    /// The same windows, to ask what each still has unsaved when the app quits.
+    @ObservationIgnored
+    private var openWindows: [UUID: WindowEnvironment] = [:]
+
     /// The authoritative file and git state of the worktrees being watched.
     /// Held here rather than inside a feature because more than one pane reads
     /// it and features never import each other.
@@ -181,13 +185,30 @@ public final class AppEnvironment {
         }
         liveWindows.insert(id)
 
-        return makeWindow(id: id, restoring: await windows.load(id))
+        let window = makeWindow(id: id, restoring: await windows.load(id))
+        openWindows[id] = window
+        return window
     }
 
     /// A window was closed by the user, as opposed to the app quitting.
     func close(_ window: WindowEnvironment) async {
         liveWindows.remove(window.id)
+        openWindows[window.id] = nil
         await window.didClose()
+    }
+
+    /// The files with unsaved edits in any window, for the quit prompt.
+    public var unsavedFiles: [String] {
+        openWindows.values.flatMap(\.editor.unsavedFiles)
+    }
+
+    /// Saves every window's unsaved files. `false` if any would not save, in
+    /// which case its window shows why and the app should not quit.
+    public func saveAll() async -> Bool {
+        for window in openWindows.values {
+            guard await window.editor.saveAll() else { return false }
+        }
+        return true
     }
 
     /// Reads the repository list and takes access to every folder. Windows reopen

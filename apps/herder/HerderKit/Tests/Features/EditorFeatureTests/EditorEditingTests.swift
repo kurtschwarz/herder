@@ -220,7 +220,129 @@ import Testing
         #expect(model.isDirty(PathKey(canonical: path("b.txt"))))
     }
 
+    @Test func keepingEditsClearsStaleAndSavingThenReplacesTheDisk() async throws {
+        _ = try await start(with: ["a.txt": "one"])
+        await model.open(url("a.txt"))
+        try type("!")
+        files.seed(path("a.txt"), "outside")
+        watcher.change([root])
+        await settle()
+        #expect(model.isStale)
+
+        await model.keepEdits()
+        #expect(model.isStale == false)
+        #expect(text == "one!")
+
+        await model.save()
+        #expect(files.files[path("a.txt")] == "one!")
+    }
+
+    @Test func reloadingFromDiskDropsTheEditsAndTakesTheDisk() async throws {
+        _ = try await start(with: ["a.txt": "one"])
+        await model.open(url("a.txt"))
+        try type("!")
+        files.seed(path("a.txt"), "outside")
+        watcher.change([root])
+        await settle()
+
+        await model.reloadFromDisk()
+
+        #expect(text == "outside")
+        #expect(model.isStale == false)
+        #expect(model.canSave == false)
+    }
+
     // MARK: - Closing
+
+    @Test func closingACleanTabDoesNotAsk() async throws {
+        _ = try await start(with: ["a.txt": "one"])
+        await model.open(url("a.txt"))
+
+        await model.closeActiveTab()
+
+        #expect(model.closePrompt == nil)
+        #expect(model.tabs.isEmpty)
+    }
+
+    @Test func closingADirtyTabAsksAndLeavesItOpen() async throws {
+        _ = try await start(with: ["a.txt": "one"])
+        await model.open(url("a.txt"))
+        try type("!")
+
+        await model.closeActiveTab()
+
+        #expect(model.closePrompt == .init(key: PathKey(canonical: path("a.txt"))))
+        #expect(model.tabs.count == 1)
+    }
+
+    @Test func cancellingTheQuestionKeepsTheTabAndItsEdits() async throws {
+        _ = try await start(with: ["a.txt": "one"])
+        await model.open(url("a.txt"))
+        try type("!")
+        await model.closeActiveTab()
+
+        await model.answer(.cancel)
+
+        #expect(model.closePrompt == nil)
+        #expect(model.tabs.count == 1)
+        #expect(text == "one!")
+    }
+
+    @Test func discardingClosesWithoutWriting() async throws {
+        _ = try await start(with: ["a.txt": "one"])
+        await model.open(url("a.txt"))
+        try type("!")
+        await model.closeActiveTab()
+
+        await model.answer(.discard)
+
+        #expect(model.tabs.isEmpty)
+        #expect(files.writes.isEmpty)
+        #expect(model.documents.documents.isEmpty)
+    }
+
+    @Test func savingThenClosingWritesFirst() async throws {
+        _ = try await start(with: ["a.txt": "one"])
+        await model.open(url("a.txt"))
+        try type("!")
+        await model.closeActiveTab()
+
+        await model.answer(.save)
+
+        #expect(files.files[path("a.txt")] == "one!")
+        #expect(model.tabs.isEmpty)
+    }
+
+    @Test func aFailedSaveWhileClosingKeepsTheTabOpen() async throws {
+        struct Refused: LocalizedError { var errorDescription: String? { "Disk full." } }
+        _ = try await start(with: ["a.txt": "one"])
+        await model.open(url("a.txt"))
+        try type("!")
+        await model.closeActiveTab()
+        files.refuseWrites(with: Refused())
+
+        await model.answer(.save)
+
+        #expect(model.tabs.count == 1)
+        #expect(model.saveFailure != nil)
+        #expect(text == "one!")
+    }
+
+    @Test func everyDirtyFileIsListedAndSavedTogether() async throws {
+        _ = try await start(with: ["a.txt": "one", "b.txt": "two", "c.txt": "three"])
+        await model.open(url("a.txt"))
+        try type("!")
+        await model.open(url("b.txt"))
+        try type("?")
+        await model.open(url("c.txt"))
+
+        #expect(model.unsavedFiles.sorted() == ["a.txt", "b.txt"])
+        #expect(await model.saveAll())
+
+        #expect(files.files[path("a.txt")] == "one!")
+        #expect(files.files[path("b.txt")] == "two?")
+        #expect(model.unsavedFiles.isEmpty)
+    }
 
     @Test func closingATabFreesItsBuffer() async throws {
         _ = try await start(with: ["a.txt": "one"])

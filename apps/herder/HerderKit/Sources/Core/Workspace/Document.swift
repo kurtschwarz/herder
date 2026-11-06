@@ -60,6 +60,21 @@ public final class Document {
         isStale = false
     }
 
+    /// The person chose to keep the buffer over what the disk now holds,
+    /// `text`. The buffer stays dirty — it differs from the disk — but saving
+    /// it is now a decision made with the change in view, so it is no longer
+    /// stale.
+    public func keepBuffer(over text: String, buffer: String) {
+        saved(text, buffer: buffer)
+    }
+
+    /// The person chose the disk over the buffer. Clean, so the next read
+    /// replaces the buffer with what the disk holds.
+    public func discardEdits() {
+        isDirty = false
+        isStale = false
+    }
+
     /// The disk was read and held `text`.
     public func read(_ text: String) -> Reading {
         guard text != baseline else {

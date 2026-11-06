@@ -158,27 +158,71 @@ import Testing
         #expect(moving.key == b)
     }
 
-    @Test func aMoveOntoADirtyDocumentKeepsBoth() {
+    @Test func aDirtyDocumentMovedOntoACleanOneSurvives() {
+        let moving = store.open(a, baseline: "one")
+        moving.bufferChanged(to: "mine")
+        let displaced = store.open(b, baseline: "two")
+
+        let move = store.move(from: a, to: b)
+
+        #expect(move.collapsed.count == 1)
+        #expect(move.collapsed.first === displaced)
+        #expect(store.documents.count == 1)
+        #expect(moving.isDirty)
+    }
+
+    /// The clean one holds nothing the disk does not, so it is the one to give
+    /// way: no unsaved text is lost either way round.
+    @Test func aCleanDocumentMovedOntoADirtyOneGivesWay() {
         let moving = store.open(a, baseline: "one")
         let displaced = store.open(b, baseline: "two")
         displaced.bufferChanged(to: "mine")
 
         let move = store.move(from: a, to: b)
 
-        #expect(move.collapsed.isEmpty)
-        #expect(store.documents.count == 2)
-        #expect(store.documents(at: b).count == 2)
-        #expect(moving.key == b)
+        #expect(move.collapsed.count == 1)
+        #expect(move.collapsed.first === moving)
+        #expect(move.moved.isEmpty)
+        #expect(store.documents.count == 1)
+        #expect(store.documents.first === displaced)
         #expect(displaced.isDirty)
     }
 
-    @Test func theDisplacedDirtyDocumentFindsItselfStaleOnTheNextRead() {
-        store.open(a, baseline: "one")
+    @Test func twoDirtyDocumentsAtOnePathAreBothKept() {
+        let moving = store.open(a, baseline: "one")
+        moving.bufferChanged(to: "mine")
         let displaced = store.open(b, baseline: "two")
-        displaced.bufferChanged(to: "mine")
-        store.move(from: a, to: b)
+        displaced.bufferChanged(to: "yours")
 
+        let move = store.move(from: a, to: b)
+
+        #expect(move.collapsed.isEmpty)
+        #expect(store.documents(at: b).count == 2)
+        #expect(store.dirty.count == 2)
         #expect(displaced.read("one") == .stale)
-        #expect(displaced.isStale)
+    }
+
+    @Test func keepingTheBufferOverTheDiskClearsStaleAndStaysDirty() {
+        let document = store.open(a, baseline: "old")
+        document.bufferChanged(to: "mine")
+        _ = document.read("outside")
+
+        document.keepBuffer(over: "outside", buffer: "mine")
+
+        #expect(document.isStale == false)
+        #expect(document.isDirty)
+        #expect(document.baseline == "outside")
+    }
+
+    @Test func discardingEditsLeavesItCleanSoTheDiskReplacesTheBuffer() {
+        let document = store.open(a, baseline: "old")
+        document.bufferChanged(to: "mine")
+        _ = document.read("outside")
+
+        document.discardEdits()
+
+        #expect(document.isDirty == false)
+        #expect(document.isStale == false)
+        #expect(document.read("outside") == .replace)
     }
 }

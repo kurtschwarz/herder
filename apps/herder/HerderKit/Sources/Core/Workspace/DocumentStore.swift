@@ -60,10 +60,13 @@ public final class DocumentStore {
     /// Follows a rename or move of `old` to `new`, a folder's contents with it.
     ///
     /// Documents are re-keyed, not rebuilt, so a rename costs no typing. When
-    /// one lands on a path that has a document of its own, that one is
-    /// collapsed into it if it has nothing unsaved. If it does, both stay:
-    /// the file on disk is now one thing while two versions are held, and
-    /// the disk read that follows marks the displaced one stale.
+    /// one lands on a path that has a document of its own, whichever of the
+    /// two has nothing unsaved is collapsed into the other: the file on disk
+    /// is one thing, and the clean one holds nothing the disk does not. The
+    /// disk read that follows marks a dirty survivor stale.
+    ///
+    /// When both have unsaved edits neither is collapsed: both stay, at one
+    /// path, and the disk read marks the displaced one stale.
     @discardableResult
     public func move(from old: PathKey, to new: PathKey) -> Move {
         var result = Move()
@@ -71,9 +74,12 @@ public final class DocumentStore {
             let target = PathKey(canonical: new.path + document.key.path.dropFirst(old.path.count))
             if target == document.key { continue }
 
-            for other in documents where other.key == target && other !== document && !other.isDirty {
-                result.collapsed.append(other)
+            let others = documents.filter { $0.key == target && $0 !== document }
+            if !document.isDirty, others.contains(where: \.isDirty) {
+                result.collapsed.append(document)
+                continue
             }
+            result.collapsed += others.filter { !$0.isDirty }
             document.rekey(to: target)
             result.moved.append(document)
         }
