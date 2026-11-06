@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.."   # always run from apps/herder
 SRC="HerderKit/Sources"
 APP_DIR="${APP_DIR:-Herder}"
 RUST_MODULE="${RUST_MODULE:-HerderSyntaxFFI}"
+GHOSTTY_MODULE="${GHOSTTY_MODULE:-GhosttyVt}"
 fail=0
 
 check() {  # usage: check "description" <rg args...>
@@ -21,11 +22,11 @@ check() {  # usage: check "description" <rg args...>
   fi
 }
 
-check "Core imports UI, persistence, or Rust" \
-  -e "^import (SwiftUI|AppKit|SwiftData|$RUST_MODULE)" --type swift "$SRC/Core"
+check "Core imports UI, persistence, or a C library" \
+  -e "^import (SwiftUI|AppKit|SwiftData|$RUST_MODULE|$GHOSTTY_MODULE)" --type swift "$SRC/Core"
 
-check "Feature imports Services or the Rust module" \
-  -e "^import (Services|$RUST_MODULE)" --type swift "$SRC/Features"
+check "Feature imports Services or a C library module" \
+  -e "^import (Services|$RUST_MODULE|$GHOSTTY_MODULE)" --type swift "$SRC/Features"
 
 # Passes today, and the survey found nothing to fix. Keep it that way.
 check "Singleton in HerderKit" \
@@ -37,6 +38,11 @@ check "Singleton in HerderKit" \
 # is review's job.
 check "Rust module imported outside Services" \
   -e "^import $RUST_MODULE\$" --type swift --glob '!**/Services/**' "$SRC" "$APP_DIR"
+
+# Same for libghostty-vt, whose API is not stable: an ABI break is one module's
+# problem only while nothing else imports it.
+check "GhosttyVt imported outside TerminalUI" \
+  -e "^import $GHOSTTY_MODULE\$" --type swift --glob '!**/Components/TerminalUI/**' "$SRC" "$APP_DIR"
 
 # Phase 7 removed SwiftData altogether, so this is no longer "only under
 # Services/Persistence" — it is "not at all". State is JSON files behind

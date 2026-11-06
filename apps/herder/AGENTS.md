@@ -39,6 +39,7 @@ rationale.
 | Something the app persists about itself | nothing new — add a field to a snapshot, decoded with `decodeIfPresent`, and put it through `StateStore`. No schema, no migration. |
 | A key the app stores state under | a `static let persistenceKey` beside the snapshot. **Never rename one** — it is a file name on the user's disk, so a rename is a migration. |
 | Live state two features both read | `Core/Workspace/`, on the `Workspace`, not whichever feature needed it first |
+| A different libghostty-vt version | `../../packages/ghostty-vt/GHOSTTY_COMMIT`, then fix what `TerminalUI` breaks |
 | A language for the editor to highlight | `../../packages/syntax-highlighter`, not here. See its `AGENTS.md`. |
 
 Organise by feature, not by type: a feature's view, model and subviews sit together.
@@ -64,6 +65,7 @@ just build         # regenerates the project, then builds
 just check         # the import rules the compiler cannot enforce
 just dev           # build and run with output in the terminal
 just syntax        # rebuild the Rust crate and refresh its XCFramework
+just ghostty       # build libghostty-vt at the pinned commit (needs Zig 0.17.x)
 ```
 
 `Herder.xcodeproj` is generated and gitignored. Files under `HerderKit` are picked
@@ -73,4 +75,5 @@ up by SwiftPM, so only changes to `Herder/` or `UITests/` need `just project`.
 from `../../packages/syntax-highlighter` and gitignored like the project file.
 `test`, `build` and `bootstrap` all depend on the `syntax` recipe, so it is never
 stale; a fresh clone needs `just bootstrap` before SwiftPM will resolve the
-package, and needs a Rust toolchain for that to work.
+package, and needs a Rust toolchain for that to work. `ghostty` is the same
+for `Vendor/GhosttyVt.xcframework`, and needs Zig 0.17.x.

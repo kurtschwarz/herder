@@ -24,6 +24,10 @@ build/
 packages/syntax-highlighter/target/
 apps/herder/HerderKit/Vendor/
 
+# libghostty-vt: the downloaded Ghostty source and the XCFramework built from it,
+# by `just ghostty` in apps/herder.
+packages/ghostty-vt/target/
+
 # Tooling caches
 .xcodegen/
 

@@ -12,6 +12,9 @@ kit := "HerderKit"
 crate := "../../packages/syntax-highlighter"
 vendor := kit + "/Vendor"
 
+# libghostty-vt, which the terminal component links the same way.
+ghostty_pkg := "../../packages/ghostty-vt"
+
 # `platform=macOS` alone matches both arm64 and x86_64, which makes xcodebuild warn
 # that it picked one. Naming this machine's arch keeps the output clean.
 arch := `uname -m`
@@ -22,7 +25,7 @@ default:
     @just --list --unsorted
 
 # Set up a fresh clone
-bootstrap: syntax project
+bootstrap: syntax ghostty project
     @echo "Ready. Open {{ proj }}"
 
 # Build the syntax crate and put its XCFramework where HerderKit expects it.
@@ -37,6 +40,17 @@ syntax:
     mkdir -p {{ vendor }}
     rsync --archive --delete \
         {{ crate }}/target/HerderSyntaxFFI.xcframework {{ vendor }}/
+
+# Build libghostty-vt and put its XCFramework where HerderKit expects it.
+# Needs Zig 0.17.x. Skipped when the framework already came from the pinned
+# commit, so this is cheap to depend on.
+ghostty:
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    just --justfile {{ ghostty_pkg }}/justfile --working-directory {{ ghostty_pkg }} build
+    mkdir -p {{ vendor }}
+    rsync --archive --delete \
+        {{ ghostty_pkg }}/target/GhosttyVt.xcframework {{ vendor }}/
 
 # Check the import rules from docs/ARCHITECTURE.md that the compiler cannot
 #
@@ -60,11 +74,11 @@ project:
 # depends on how many products the package exports: with several it is
 # `HerderKit-Package` instead. If this starts failing with "does not contain a
 # scheme", run `xcodebuild -list` in {{ kit }} and use what it prints.
-test *args: syntax
+test *args: syntax ghostty
     cd {{ kit }} && xcodebuild test -scheme HerderKit -destination 'platform=macOS,arch={{ arch }}' {{ args }}
 
 # Build the app
-build: project syntax
+build: project syntax ghostty
     @{{ xcodebuild }} -configuration Debug -quiet build
 
 # Build and run the app, with its output in this terminal
@@ -123,4 +137,5 @@ clean:
     # to skip the rest of it.
     rm -rf {{ kit }}/.build {{ vendor }} 2>/dev/null || true
     just --justfile {{ crate }}/justfile --working-directory {{ crate }} clean
+    just --justfile {{ ghostty_pkg }}/justfile --working-directory {{ ghostty_pkg }} clean
     {{ xcodebuild }} clean >/dev/null 2>&1 || true

@@ -1,0 +1,56 @@
+set shell := ["zsh", "-cu"]
+
+# Recipes for the libghostty-vt build. Callable from here, or from the repo
+# root as `just <recipe> packages/ghostty-vt`.
+#
+# This package holds no source: only the commit of Ghostty to build, in
+# GHOSTTY_COMMIT, and the recipe that builds it. Moving to a newer Ghostty is
+# changing that one line, building, and fixing whatever `TerminalUI` breaks.
+# The output is an XCFramework, the only form a SwiftPM `.binaryTarget`
+# accepts; whoever consumes it copies it in.
+
+xcframework := "target/GhosttyVt.xcframework"
+
+# Show available recipes
+default:
+    @just --list --unsorted
+
+# Build the XCFramework the Swift package links
+build:
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    command -v zig >/dev/null || { print -u2 "zig not found: brew install zig"; exit 1 }
+    # Ghostty needs the same major and minor as its build.zig.zon names; any
+    # patch release of it does.
+    [[ "$(zig version)" == 0.17.* ]] || { print -u2 "zig 0.17.x required, found $(zig version)"; exit 1 }
+
+    commit=$(<GHOSTTY_COMMIT)
+    commit=${commit//[[:space:]]/}
+    src=target/ghostty-${commit}
+
+    # The stamp is the whole cache key: the build is skipped only when the
+    # framework on disk came from this commit.
+    if [[ -d {{ xcframework }} && "$(cat target/built-commit 2>/dev/null)" == "${commit}" ]]; then
+        exit 0
+    fi
+
+    mkdir -p target
+    if [[ ! -d ${src} ]]; then
+        rm -rf "${src}.tmp"; mkdir "${src}.tmp"
+        curl --fail --silent --show-error --location \
+            "https://github.com/ghostty-org/ghostty/archive/${commit}.tar.gz" \
+            | tar -xz --strip-components=1 -C "${src}.tmp"
+        mv "${src}.tmp" "${src}"
+    fi
+
+    rm -rf {{ xcframework }}
+    (cd ${src} && zig build -Doptimize=ReleaseFast -Demit-lib-vt -Demit-xcframework=true)
+    cp -R ${src}/zig-out/lib/ghostty-vt.xcframework {{ xcframework }}
+    print -r -- "${commit}" > target/built-commit
+
+# The build is the test: there is no code here of our own to run
+test: build
+
+# Remove build output and the downloaded source
+clean:
+    rm -rf target

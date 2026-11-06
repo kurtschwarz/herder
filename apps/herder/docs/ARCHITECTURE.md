@@ -7,6 +7,7 @@ This is the target architecture for Herder and the rulebook for anyone (human or
 - Swift 6 language mode, `swift-tools-version: 6.2`, macOS 26 and later
 - SwiftUI for the app shell and panels; AppKit (`NSTextView` with TextKit 2) for the editor surface
 - Rust for performance-sensitive work, starting with the syntax highlighter in `packages/syntax-highlighter`. That package stays where it is and keeps its own build and binding setup.
+- Zig, only to build libghostty-vt (the terminal emulation under the terminal panel) from a pinned Ghostty commit: `packages/ghostty-vt`. Zig 0.17.x, `brew install zig`. We write no Zig.
 - Distributed with Developer ID signing and notarization. No App Sandbox, because Herder spawns processes and opens arbitrary folders.
 
 ## Layers
@@ -50,7 +51,9 @@ AppFeature            composition root: windows, menus, builds real services
 6. **SwiftData is not imported at all.** It is gone; state is JSON files behind `StateStore`. Reaching for a `@Model` is reintroducing a dependency the app deliberately dropped.
 7. **RustBridge types never leave Services.** Services translate FFI types to Core types at the boundary.
 
-Rules 1, 2, 3 and 5 are enforced by target dependencies in `Package.swift`. Rules 4 and 6 (and the no-singletons rule below) are enforced by `scripts/check-boundaries.sh`, which must pass before any merge. Rule 7 is enforced in review.
+8. **GhosttyVt types never leave `TerminalUI`.** libghostty-vt's API is not stable, so an ABI break must cost one module. `TerminalUI` translates at its boundary: what it exposes is Core and SwiftUI types, never a `GhosttyTerminal` handle.
+
+Rules 1, 2, 3 and 5 are enforced by target dependencies in `Package.swift`. Rules 4 and 6 (and the no-singletons rule below) are enforced by `scripts/check-boundaries.sh`, which must pass before any merge. Rule 7 is enforced in review. Rule 8's import half is enforced by `check-boundaries.sh`; the types crossing is review's job, as with rule 7.
 
 ### Feature scope
 
@@ -79,7 +82,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │
 │   │   ├── HerderKit/
 │   │   │   ├── Package.swift
-│   │   │   ├── Vendor/                  # gitignored: HerderSyntaxFFI.xcframework, built by `just syntax`
+│   │   │   ├── Vendor/                  # gitignored: HerderSyntaxFFI.xcframework (`just syntax`), GhosttyVt.xcframework (`just ghostty`)
 │   │   │   ├── Sources/
 │   │   │   │   ├── Core/
 │   │   │   │   │   ├── Models/          # Sendable value types
@@ -99,7 +102,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   ├── DesignSystem/        # Liquid Glass components, tokens, icons
 │   │   │   │   ├── TestSupport/         # fakes for every service protocol (#if DEBUG)
 │   │   │   │   ├── Components/
-│   │   │   │   │   └── TerminalUI/      # shared building blocks, module <Name>UI
+│   │   │   │   │   └── TerminalUI/      # shared building blocks, module <Name>UI; the only importer of GhosttyVt
 │   │   │   │   ├── Features/
 │   │   │   │   │   ├── Editor/          # module EditorFeature
 │   │   │   │   │   ├── FileTree/        # module FileTreeFeature
@@ -125,6 +128,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │
 └── packages/
     ├── syntax-highlighter/              # Rust highlighter: stays here, owns its own build
+    ├── ghostty-vt/                      # a pinned Ghostty commit and the recipe that builds libghostty-vt
     └── ...                              # other shared packages
 ```
 
@@ -504,8 +508,9 @@ shows it.
 Run from `apps/herder/`.
 
 ```
-just bootstrap # syntax + project. Needed once in a fresh clone, and needs a Rust toolchain.
+just bootstrap # syntax + ghostty + project. Needed once in a fresh clone, and needs Rust and Zig toolchains.
 just syntax    # runs packages/syntax-highlighter's own build, then copies the XCFramework into Vendor/
+just ghostty   # builds libghostty-vt at the commit in packages/ghostty-vt/GHOSTTY_COMMIT (needs Zig 0.17.x), copies it into Vendor/
 just project   # xcodegen generate. Needed after changing Herder/ or UITests/, not HerderKit.
 just build     # project + syntax, then xcodebuild
 just test      # the Swift Testing suites, via xcodebuild
@@ -516,4 +521,4 @@ just check     # scripts/check-boundaries.sh
 
 `just test` goes through `xcodebuild test -scheme HerderKit-Package` rather than `swift test`, because PhosphorSwift ships its icons as an asset catalog without declaring it a resource, which only Xcode's build system bundles. `swift test` does not work here.
 
-`build`, `test` and `bootstrap` all depend on `syntax`, because a stale static library links without complaint: the app would highlight with yesterday's grammars and nothing would say so.
+`build`, `test` and `bootstrap` all depend on `syntax` and `ghostty` (the latter is skipped when the framework already came from the pinned commit), because a stale static library links without complaint: the app would highlight with yesterday's grammars and nothing would say so.
