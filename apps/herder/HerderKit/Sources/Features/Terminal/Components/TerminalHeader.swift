@@ -1,3 +1,4 @@
+import AppKit
 import DesignSystem
 import PhosphorSwift
 import SwiftUI
@@ -72,6 +73,7 @@ private struct TerminalTabView: View {
     @State private var isEditing = false
     @State private var draft = ""
     @FocusState private var isFieldFocused: Bool
+    @State private var outsideClick = ClickMonitor()
     @State private var isHovering = false
     @State private var isFlashing = false
 
@@ -123,6 +125,7 @@ private struct TerminalTabView: View {
             Button("Close", action: close)
         }
         .onHover { isHovering = $0 }
+        .onDisappear { outsideClick.stop() }
         // A bell is a silent flash of the tab, and only of one not in front:
         // the one in front is being looked at.
         .onChange(of: tab.screen.bellCount) {
@@ -135,6 +138,10 @@ private struct TerminalTabView: View {
     private func beginEditing() {
         draft = tab.displayTitle
         isEditing = true
+        // Focus leaves a text field only for something that takes it, and
+        // most of the window does not. So a click anywhere but the field ends
+        // the edit itself.
+        outsideClick.start { finishEditing(keep: true) }
         // The field is made by this change, so it can take focus only after.
         Task { isFieldFocused = true }
     }
@@ -142,6 +149,38 @@ private struct TerminalTabView: View {
     private func finishEditing(keep: Bool) {
         guard isEditing else { return }
         isEditing = false
+        outsideClick.stop()
         if keep { rename(draft) } else { select() }
     }
+}
+
+/// Calls back on a mouse-down anywhere in the window outside the text being
+/// edited, and lets the click carry on to what it was aimed at.
+@MainActor
+private final class ClickMonitor {
+    private var token: Any?
+
+    func start(onOutsideClick: @escaping () -> Void) {
+        stop()
+        token = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+            MainActor.assumeIsolated {
+                // The field editor is the one text view AppKit lends the
+                // field while it is being typed in.
+                if let editor = event.window?.firstResponder as? NSTextView, editor.isFieldEditor,
+                   editor.bounds.contains(editor.convert(event.locationInWindow, from: nil))
+                {
+                    return
+                }
+                onOutsideClick()
+            }
+            return event
+        }
+    }
+
+    func stop() {
+        if let token { NSEvent.removeMonitor(token) }
+        token = nil
+    }
+
+    isolated deinit { stop() }
 }
