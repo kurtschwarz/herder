@@ -53,9 +53,18 @@ public struct AppView: View {
         .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
         // Restores what this window was showing. Once, on appear: after that
         // the window is the source of truth and the storage follows it.
+        //
+        // The scene storage is the window's own record but only comes back
+        // when the system restores the scene, so a window without it shows
+        // whatever was shown last. Both wait for the app to start, which is
+        // where the folder access a workspace needs is taken.
         .task {
-            if window.activeWorkspaceID == nil, let path = activeWorkspacePath {
+            guard window.activeWorkspaceID == nil else { return }
+            if let path = activeWorkspacePath {
+                await environment.start()
                 window.activate(WorkspaceID(PathKey(canonical: path)))
+            } else if let id = await environment.restoredWorkspace() {
+                window.activate(id)
             }
         }
         .onChange(of: window.activeWorkspaceID) { _, id in
@@ -64,9 +73,16 @@ public struct AppView: View {
         // Switching workspaces is this, and only this: the id changed, so open
         // what it names. Nothing else is torn down.
         .task(id: window.activeWorkspaceID) {
-            // A file from the worktree before is stale, not preserved.
+            // The file from the worktree before is not this one's. Each
+            // workspace remembers its own, so this shows that one instead.
             environment.editor.close()
-            await environment.fileTree.setRoot(window.activeWorkspaceID?.url)
+            let id = window.activeWorkspaceID
+            // Opened here, ahead of the tree, so the editor has the workspace
+            // to read from. Opening is idempotent: the tree's open finds it.
+            let workspace = if let id { await environment.worktrees.open(id) } else { nil as Workspace? }
+            guard !Task.isCancelled else { return }
+            await environment.editor.restore(in: workspace)
+            await environment.fileTree.setRoot(id?.url)
         }
         // Tells the registry what this window is showing, which is what
         // decides whether that workspace drains. Idempotent, so saying it

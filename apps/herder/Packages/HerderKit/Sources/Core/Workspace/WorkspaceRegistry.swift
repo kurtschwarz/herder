@@ -135,7 +135,7 @@ public final class WorkspaceRegistry {
         workspace.stop()
         states[key] = nil
         updateDraining()
-        await saveOpenWorkspaces()
+        await saveOpenWorkspaces(forgetting: id)
     }
 
     /// Opens again whatever was open when the app last saved.
@@ -157,9 +157,15 @@ public final class WorkspaceRegistry {
     ///
     /// Idempotent: a window may say the same thing twice. Call it whenever what
     /// the window shows changes, and ``stopDisplaying(from:)`` when it closes.
+    ///
+    /// A workspace is also remembered as the last one shown, for the next
+    /// launch. Only a real one: `nil` is a window showing nothing, which at
+    /// launch is said before the remembered workspace has been asked for.
     public func display(_ id: WorkspaceID?, from window: AnyObject) {
         displayed[ObjectIdentifier(window)] = id
         updateDraining()
+        guard let id else { return }
+        enqueue { snapshot, _ in snapshot.lastActiveWorkspace = id }
     }
 
     public func stopDisplaying(from window: AnyObject) {
@@ -185,13 +191,56 @@ public final class WorkspaceRegistry {
 
     /// Records which workspaces are open, leaving the rest of the snapshot
     /// alone: the repository list shares this key.
-    private func saveOpenWorkspaces() async {
-        var snapshot = await state.loadIfReadable(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)
-            ?? AppSnapshot()
-        let open = states.keys.map(WorkspaceID.init).sorted { $0.root.path < $1.root.path }
-        guard snapshot.openWorkspaces != open else { return }
-        snapshot.openWorkspaces = open
-        try? await state.save(snapshot, forKey: AppSnapshot.persistenceKey)
+    private func saveOpenWorkspaces(forgetting closed: WorkspaceID? = nil) async {
+        await update { snapshot, states in
+            snapshot.openWorkspaces = states.keys.map(WorkspaceID.init).sorted { $0.root.path < $1.root.path }
+            if let closed, snapshot.lastActiveWorkspace == closed { snapshot.lastActiveWorkspace = nil }
+        }
+    }
+
+    /// The workspace most recently shown by any window, as of the last save.
+    /// For a window with nothing of its own to restore.
+    public func lastActiveWorkspace() async -> WorkspaceID? {
+        await flushPendingWrites()
+        return await state.loadIfReadable(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)?.lastActiveWorkspace
+    }
+
+    /// Waits for every write queued so far.
+    public func flushPendingWrites() async {
+        await writes?.value
+    }
+
+    /// Writes made by ``display(_:from:)``, which is synchronous and so cannot
+    /// await. Chained rather than concurrent: each one reads the app snapshot
+    /// and writes it back whole, and two doing that at once would lose a field.
+    private var writes: Task<Void, Never>?
+
+    /// Reads the app snapshot, lets `change` edit it, and writes it back if it
+    /// came out different. Every write to the snapshot from here goes through
+    /// this, in order, so none can overwrite another's field.
+    private func update(_ change: @escaping @MainActor (inout AppSnapshot, [PathKey: Workspace]) -> Void) async {
+        await enqueue(change).value
+    }
+
+    /// Puts `change` in line without waiting for it. Joins the queue before it
+    /// returns, which is what lets a synchronous caller flush straight after.
+    @discardableResult
+    private func enqueue(
+        _ change: @escaping @MainActor (inout AppSnapshot, [PathKey: Workspace]) -> Void
+    ) -> Task<Void, Never> {
+        let previous = writes
+        let task = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            var snapshot = await state.loadIfReadable(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)
+                ?? AppSnapshot()
+            let before = snapshot
+            change(&snapshot, states)
+            guard snapshot != before else { return }
+            try? await state.save(snapshot, forKey: AppSnapshot.persistenceKey)
+        }
+        writes = task
+        return task
     }
 
     /// Puts every workspace away, keeping where its watcher had got to.

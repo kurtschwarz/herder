@@ -137,7 +137,30 @@ public final class AppEnvironment {
     ///
     /// `async`, because the list comes from ``StateStore``. The window renders
     /// before this finishes, showing an empty sidebar for the moment it takes.
+    ///
+    /// Once per environment however many windows ask: each window runs this
+    /// from its own task, and they all join the same one.
     public func start() async {
+        let task = starting ?? Task { await begin() }
+        starting = task
+        await task.value
+    }
+
+    @ObservationIgnored
+    private var starting: Task<Void, Never>?
+
+    /// The workspace a window with nothing of its own to restore should show:
+    /// the one most recently shown by any window.
+    ///
+    /// Starts the app first, and waits for it. `@SceneStorage` is read where
+    /// the window appears, but the folder access a workspace needs is taken in
+    /// ``start()``, and the two run side by side with no promised order.
+    public func restoredWorkspace() async -> WorkspaceID? {
+        await start()
+        return await worktrees.lastActiveWorkspace()
+    }
+
+    private func begin() async {
         // Compiling the editor's grammars takes a few hundred milliseconds in
         // total, and all of it is paid the first time a file of each language
         // is opened unless it is paid here instead. Detached and unawaited:

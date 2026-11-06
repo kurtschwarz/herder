@@ -1,3 +1,4 @@
+import Core
 import Services
 import TestSupport
 import Testing
@@ -31,5 +32,35 @@ import Testing
     @Test func startsWithNoRepositories() async throws {
         await environment.start()
         #expect(environment.repositories.repositories.isEmpty)
+    }
+
+    @Test func aFirstLaunchHasNoWorkspaceToRestore() async {
+        #expect(await environment.restoredWorkspace() == nil)
+    }
+
+    /// For a window whose scene storage is empty, which is every window after
+    /// a quit that closed them.
+    @Test func theLastWorkspaceShownComesBack() async throws {
+        let id = WorkspaceID(PathKey(canonical: "/code/api"))
+        try await environment.state.save(
+            AppSnapshot(lastActiveWorkspace: id),
+            forKey: AppSnapshot.persistenceKey
+        )
+
+        #expect(await environment.restoredWorkspace() == id)
+    }
+
+    /// Asking is also starting: a window's restore task may run before the
+    /// task that starts the app, and the folder access it needs is taken there.
+    @Test func askingForTheWorkspaceStartsTheApp() async throws {
+        let id = WorkspaceID(PathKey(canonical: "/code/api"))
+        try await environment.state.save(
+            AppSnapshot(openWorkspaces: [id], lastActiveWorkspace: id),
+            forKey: AppSnapshot.persistenceKey
+        )
+
+        _ = await environment.restoredWorkspace()
+
+        #expect(environment.worktrees.workspace(for: id) != nil)
     }
 }

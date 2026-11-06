@@ -80,9 +80,32 @@ public final class EditorModel {
     /// selection keeps the scroll position, and nothing for a path outside every
     /// worktree being held.
     public func open(_ url: URL) async {
+        await open(url, remembering: true)
+    }
+
+    /// Shows what `workspace` had open when it was last shown, or empties the
+    /// pane when there is nothing, or no workspace. The file is read only now,
+    /// when something is showing the workspace: restoring a workspace at launch
+    /// costs a watcher, and this is the cost of looking at it.
+    ///
+    /// A remembered file that has since gone is shown as deleted, and stays
+    /// remembered.
+    public func restore(in workspace: Workspace?) async {
+        close()
+        guard let workspace, let key = workspace.uiState(EditorUIState.self).file else { return }
+        await open(key.url, remembering: false)
+    }
+
+    private func open(_ url: URL, remembering: Bool) async {
         let key = PathKey(canonical: url.path(percentEncoded: false))
         guard key != fileKey, let state = store.state(containing: key) else { return }
 
+        if remembering {
+            state.uiState(EditorUIState.self).file = key
+            // Observation reports reads, not writes, so the workspace cannot
+            // notice this for itself.
+            state.scheduleSnapshotSave()
+        }
         registration?.cancel()
         worktree = state
         file = url
@@ -99,8 +122,8 @@ public final class EditorModel {
         await reload()
     }
 
-    /// Empties the pane. Called when the worktree changes: a file from the one
-    /// before is stale context, not preserved context.
+    /// Empties the pane. What the workspace remembers is left alone: this is
+    /// the pane letting go, not the user closing the file.
     public func close() {
         registration?.cancel()
         registration = nil
@@ -201,5 +224,7 @@ public final class EditorModel {
         let moved = Workspace.moved(fileKey, from: old, to: new)
         self.fileKey = moved
         file = moved.url
+        worktree?.uiState(EditorUIState.self).file = moved
+        worktree?.scheduleSnapshotSave()
     }
 }

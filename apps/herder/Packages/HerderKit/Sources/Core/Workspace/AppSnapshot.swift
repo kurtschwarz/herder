@@ -25,9 +25,20 @@ public struct AppSnapshot: Codable, Sendable, Equatable {
     /// writing it for that reason.
     public var repositories: [Repository]
 
-    public init(openWorkspaces: [WorkspaceID] = [], repositories: [Repository] = []) {
+    /// The workspace most recently shown by any window, for a window that has
+    /// nothing of its own to restore. `@SceneStorage` is the per-window record
+    /// but only comes back when the system restores the scene; this is what
+    /// covers quitting with the windows closed.
+    public var lastActiveWorkspace: WorkspaceID?
+
+    public init(
+        openWorkspaces: [WorkspaceID] = [],
+        repositories: [Repository] = [],
+        lastActiveWorkspace: WorkspaceID? = nil
+    ) {
         self.openWorkspaces = openWorkspaces
         self.repositories = repositories
+        self.lastActiveWorkspace = lastActiveWorkspace
     }
 
     public init(from decoder: any Decoder) throws {
@@ -35,6 +46,7 @@ public struct AppSnapshot: Codable, Sendable, Equatable {
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
         openWorkspaces = try container.decodeIfPresent([WorkspaceID].self, forKey: .openWorkspaces) ?? []
         repositories = try container.decodeIfPresent([Repository].self, forKey: .repositories) ?? []
+        lastActiveWorkspace = try container.decodeIfPresent(WorkspaceID.self, forKey: .lastActiveWorkspace)
     }
 }
 
