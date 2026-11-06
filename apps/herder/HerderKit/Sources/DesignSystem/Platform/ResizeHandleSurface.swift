@@ -13,7 +13,11 @@ import SwiftUI
 /// `pop`: AppKit owns its lifetime, so it cannot stick when the pointer leaves
 /// mid-drag or the view is swapped out.
 struct ResizeHandleSurface: NSViewRepresentable {
-    /// Horizontal distance since the drag began, once it has gone a few points.
+    var axis: Axis = .horizontal
+
+    /// Distance along `axis` since the drag began, once it has gone a few
+    /// points. Vertically, up is positive, which is AppKit's and is the way a
+    /// panel under the editor grows.
     let onDrag: (CGFloat) -> Void
     let onDragEnded: () -> Void
     let onDoubleClick: () -> Void
@@ -24,6 +28,7 @@ struct ResizeHandleSurface: NSViewRepresentable {
     }
 
     func updateNSView(_ view: SurfaceView, context: Context) {
+        view.axis = axis
         view.onDrag = onDrag
         view.onDragEnded = onDragEnded
         view.onDoubleClick = onDoubleClick
@@ -31,6 +36,9 @@ struct ResizeHandleSurface: NSViewRepresentable {
     }
 
     final class SurfaceView: NSView {
+        var axis: Axis = .horizontal {
+            didSet { window?.invalidateCursorRects(for: self) }
+        }
         var onDrag: (CGFloat) -> Void = { _ in }
         var onDragEnded: () -> Void = {}
         var onDoubleClick: () -> Void = {}
@@ -45,7 +53,7 @@ struct ResizeHandleSurface: NSViewRepresentable {
         override var mouseDownCanMoveWindow: Bool { false }
 
         override func resetCursorRects() {
-            addCursorRect(bounds, cursor: .resizeLeftRight)
+            addCursorRect(bounds, cursor: axis == .horizontal ? .resizeLeftRight : .resizeUpDown)
         }
 
         override func updateTrackingAreas() {
@@ -60,6 +68,10 @@ struct ResizeHandleSurface: NSViewRepresentable {
             )
         }
 
+        private func position(of event: NSEvent) -> CGFloat {
+            axis == .horizontal ? event.locationInWindow.x : event.locationInWindow.y
+        }
+
         override func mouseEntered(with event: NSEvent) { onHover(true) }
         override func mouseExited(with event: NSEvent) { onHover(false) }
 
@@ -70,14 +82,14 @@ struct ResizeHandleSurface: NSViewRepresentable {
             } else {
                 // The window's coordinates, not this view's: the view moves as
                 // the pane does, and a translation measured in it would not.
-                dragOrigin = event.locationInWindow.x
+                dragOrigin = position(of: event)
             }
             isDragging = false
         }
 
         override func mouseDragged(with event: NSEvent) {
             guard let origin = dragOrigin else { return }
-            let distance = event.locationInWindow.x - origin
+            let distance = position(of: event) - origin
             if !isDragging {
                 guard abs(distance) >= threshold else { return }
                 isDragging = true

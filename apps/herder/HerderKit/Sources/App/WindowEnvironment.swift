@@ -4,6 +4,7 @@ import FileTreeFeature
 import Foundation
 import Observation
 import RepositoriesFeature
+import TerminalFeature
 
 /// Everything one window owns: which workspace it is showing, and the models
 /// behind its panes.
@@ -38,6 +39,7 @@ final class WindowEnvironment {
 
     /// The file open in this window's middle pane.
     let editor: EditorModel
+    let terminal: TerminalModel
 
     @ObservationIgnored
     private let worktrees: WorkspaceRegistry
@@ -63,6 +65,7 @@ final class WindowEnvironment {
         repositoryList: RepositoriesModel,
         fileTree: FileTreeModel,
         editor: EditorModel,
+        terminal: TerminalModel,
         worktrees: WorkspaceRegistry,
         windows: WindowStore,
         restoring snapshot: WindowSnapshot? = nil
@@ -72,6 +75,7 @@ final class WindowEnvironment {
         self.repositoryList = repositoryList
         self.fileTree = fileTree
         self.editor = editor
+        self.terminal = terminal
         self.worktrees = worktrees
         self.windows = windows
         self.activeWorkspaceID = snapshot?.activeWorkspace
@@ -105,6 +109,7 @@ final class WindowEnvironment {
     /// holding it.
     func forget(_ id: WorkspaceID) async {
         openWorkspaces.removeAll { $0 == id }
+        terminal.discard(id)
         if activeWorkspaceID == id { activeWorkspaceID = nil }
         scheduleSave()
         await worktrees.close(id, holder: self)
@@ -133,6 +138,7 @@ final class WindowEnvironment {
         let workspace = if let id { await worktrees.open(id, holder: self) } else { nil as Workspace? }
         guard !Task.isCancelled else { return }
         await editor.restore(in: workspace)
+        await terminal.show(workspace)
         await fileTree.setRoot(id?.url)
     }
 
@@ -211,6 +217,7 @@ final class WindowEnvironment {
     /// This window is closing for good, as opposed to the app quitting: lets go
     /// of the workspaces only it held and forgets its snapshot.
     func didClose() async {
+        terminal.terminateAll()
         await flushSaves()
         await worktrees.release(holder: self)
         worktrees.stopDisplaying(from: self)

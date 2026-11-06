@@ -4,6 +4,7 @@ import EditorFeature
 import FileTreeFeature
 import RepositoriesFeature
 import SwiftUI
+import TerminalFeature
 
 /// Root view. Owns the window layout and composes features; holds no feature logic.
 ///
@@ -76,6 +77,9 @@ private struct WindowView: View {
     /// so the panes sit at their minimum for that one frame.
     @State private var availableWidth: CGFloat = 0
 
+    /// What the editor and the terminal panel share, before the status bar.
+    @State private var columnHeight: CGFloat = 0
+
     private let limits = PaneWidths.Limits(
         defaultWidth: Theme.Size.defaultSidebarWidth,
         minimumPane: Theme.Size.minSidebarWidth,
@@ -100,10 +104,27 @@ private struct WindowView: View {
             )
 
             VStack(spacing: 0) {
-                EditorView(model: window.editor, rootName: activeWorkspaceName)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 0) {
+                    EditorView(model: window.editor, rootName: activeWorkspaceName)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    if window.terminal.isOpen {
+                        let shared = columnHeight - Theme.Spacing.paneGap
+                        let panelHeight = window.terminal.height(in: shared)
+                        PanelResizeHandle(
+                            height: panelHeight,
+                            onResize: { window.terminal.resize(to: $0, in: shared) },
+                            onCommit: { window.terminal.commitHeight() },
+                            onReset: { withAnimation(.easeOut(duration: 0.15)) { window.terminal.resetHeight() } }
+                        )
+                        TerminalPanel(model: window.terminal)
+                            .frame(height: panelHeight)
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { columnHeight = $0 }
 
                 StatusBar {
+                    TerminalToggle(model: window.terminal)
                     if let checkout = window.activeWorkspace?.checkout {
                         CheckoutLabel(checkout)
                     }
@@ -172,7 +193,7 @@ private struct WindowView: View {
         .overlay { NewSessionOverlay(model: window.repositoryList) }
         // Where ⇧⌘N finds the window it should open the modal in.
         .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
-        .modifier(EditorCommandValues(editor: window.editor))
+        .modifier(TabCommandValues(editor: window.editor, terminal: window.terminal))
     }
 
     private func resize(_ side: PaneWidths.Side, to proposed: CGFloat) {
@@ -200,30 +221,25 @@ private struct WindowView: View {
 /// What the menu commands act on in this window: each is `nil` when it would do
 /// nothing. Apart from ``WindowView`` because the one expression was too much
 /// for the type checker.
-private struct EditorCommandValues: ViewModifier {
+///
+/// Tab commands mean the terminal's tabs while a terminal has the keyboard and
+/// the editor's otherwise: the same keys, in the place the person is looking.
+private struct TabCommandValues: ViewModifier {
     let editor: EditorModel
+    let terminal: TerminalModel
 
     func body(content: Content) -> some View {
         content
             // `nil` rather than a disabled-looking closure: an item with no action
             // is the one AppKit skips, which is what lets ⌘W reach the window's
             // own Close when there are no tabs. See ``AppCommands``.
-            .focusedSceneValue(
-                \.closeEditorTab,
-                editor.tabs.isEmpty ? nil : { Task { await editor.closeActiveTab() } }
-            )
+            .focusedSceneValue(\.closeEditorTab, closeTab)
             .focusedSceneValue(
                 \.saveEditorFile,
                 editor.canSave ? { Task { await editor.save() } } : nil
             )
-            .focusedSceneValue(
-                \.selectPreviousEditorTab,
-                editor.tabs.count > 1 ? { Task { await editor.selectPreviousTab() } } : nil
-            )
-            .focusedSceneValue(
-                \.selectNextEditorTab,
-                editor.tabs.count > 1 ? { Task { await editor.selectNextTab() } } : nil
-            )
+            .focusedSceneValue(\.selectPreviousEditorTab, previousTab)
+            .focusedSceneValue(\.selectNextEditorTab, nextTab)
             .focusedSceneValue(
                 \.moveEditorTabLeft,
                 editor.canMoveActiveTab(by: -1) ? { editor.moveActiveTab(by: -1) } : nil
@@ -232,6 +248,29 @@ private struct EditorCommandValues: ViewModifier {
                 \.moveEditorTabRight,
                 editor.canMoveActiveTab(by: 1) ? { editor.moveActiveTab(by: 1) } : nil
             )
+            .focusedSceneValue(
+                \.toggleTerminal,
+                terminal.workspace == nil ? nil : { Task { await terminal.toggle() } }
+            )
+            .focusedSceneValue(
+                \.newTerminalTab,
+                terminal.workspace == nil ? nil : { Task { await terminal.openTab() } }
+            )
+    }
+
+    private var closeTab: (() -> Void)? {
+        if terminal.hasFocus { return { terminal.closeActiveTab() } }
+        return editor.tabs.isEmpty ? nil : { Task { await editor.closeActiveTab() } }
+    }
+
+    private var previousTab: (() -> Void)? {
+        if terminal.hasFocus, terminal.canSelectOtherTab { return { terminal.selectPreviousTab() } }
+        return editor.tabs.count > 1 ? { Task { await editor.selectPreviousTab() } } : nil
+    }
+
+    private var nextTab: (() -> Void)? {
+        if terminal.hasFocus, terminal.canSelectOtherTab { return { terminal.selectNextTab() } }
+        return editor.tabs.count > 1 ? { Task { await editor.selectNextTab() } } : nil
     }
 }
 

@@ -5,6 +5,7 @@ import Foundation
 import Observation
 import RepositoriesFeature
 import Services
+import TerminalFeature
 
 /// Composition root.
 ///
@@ -60,6 +61,8 @@ public final class AppEnvironment {
     private let files: any FileClient
     private let folderPicker: any FolderPickerClient
     private let highlighter: any SyntaxHighlighter
+    private let pty: any PTYClient
+    private let clock: any ClockClient
 
     /// The live app: every service is the real one.
     ///
@@ -120,7 +123,8 @@ public final class AppEnvironment {
         watcher: any FileWatcherClient,
         clock: any ClockClient,
         persistence: PersistenceStack,
-        highlighter: any SyntaxHighlighter = TreeSitterHighlighter()
+        highlighter: any SyntaxHighlighter = TreeSitterHighlighter(),
+        pty: any PTYClient = LivePTYClient()
     ) {
         self.persistence = persistence
         self.state = persistence.state
@@ -137,6 +141,8 @@ public final class AppEnvironment {
         self.files = files
         self.folderPicker = folderPicker
         self.highlighter = highlighter
+        self.pty = pty
+        self.clock = clock
     }
 
     /// A window's own state and the models behind its panes.
@@ -152,6 +158,7 @@ public final class AppEnvironment {
             repositoryList: RepositoriesModel(repositories: list, git: git, picker: folderPicker),
             fileTree: FileTreeModel(store: worktrees),
             editor: EditorModel(store: worktrees, files: files, highlighter: highlighter),
+            terminal: TerminalModel(pty: pty, clock: clock),
             worktrees: worktrees,
             windows: windows,
             restoring: snapshot

@@ -9,9 +9,19 @@ public struct PaneBackground: ViewModifier {
     /// A fixed radius rather than `ConcentricRectangle`: concentric means the
     /// window's radius *minus* the inset, which reads tighter than the window's
     /// corner. `Theme.Radius.pane` matches the window outright.
-    private let shape = RoundedRectangle(cornerRadius: Theme.Radius.pane, style: .continuous)
+    private let shape: UnevenRoundedRectangle
 
-    public init() {}
+    /// `topRadius` is `0` for a pane that hangs from something above it, such
+    /// as the terminal panel under the editor.
+    public init(topRadius: CGFloat = Theme.Radius.pane) {
+        shape = UnevenRoundedRectangle(
+            topLeadingRadius: topRadius,
+            bottomLeadingRadius: Theme.Radius.pane,
+            bottomTrailingRadius: Theme.Radius.pane,
+            topTrailingRadius: topRadius,
+            style: .continuous
+        )
+    }
 
     public func body(content: Content) -> some View {
         content
@@ -43,6 +53,11 @@ extension View {
     /// Draws this view as a floating pane.
     public func paneBackground() -> some View {
         modifier(PaneBackground())
+    }
+
+    /// A pane with square top corners, for one that sits flush under another.
+    public func paneBackgroundSquareTop() -> some View {
+        modifier(PaneBackground(topRadius: 0))
     }
 
     /// Draws this view as a floating pane made of Liquid Glass, the same material

@@ -22,6 +22,14 @@ public final class TerminalScreen {
     /// The process ended and its output has all been drawn.
     public private(set) var hasEnded = false
 
+    /// This terminal's view has the keyboard. What the window's menu commands
+    /// read to decide whether ⌘W means a terminal tab or an editor one.
+    public internal(set) var isFocused = false
+
+    /// Asked for instead of sending a key to a process that is gone: what to
+    /// do when a key is pressed in a terminal that has nothing left to hear it.
+    @ObservationIgnored public var onKeyWhileEnded: (() -> Void)?
+
     @ObservationIgnored let emulator: TerminalEmulator
     @ObservationIgnored private let session: any PTYSession
     @ObservationIgnored weak var view: TerminalNSView?
@@ -119,6 +127,13 @@ public final class TerminalScreen {
     /// Pastes `text`, bracketed if the program asked for that.
     public func paste(_ text: String) {
         send(emulator.encodePaste(text))
+    }
+
+    /// The text on the screen now, a line to a row, without trailing blanks.
+    public var visibleText: String {
+        emulator.cells
+            .map { row in row.map { $0.text.isEmpty ? " " : $0.text }.joined().replacing(/\s+$/, with: "") }
+            .joined(separator: "\n")
     }
 
     /// What is selected, for the clipboard.

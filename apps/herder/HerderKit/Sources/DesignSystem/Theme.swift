@@ -122,7 +122,7 @@ public enum Theme {
         public static let ansi: [RGB] = [
             RGB(0x15161e), RGB(0xf7768e), RGB(0x9ece6a), RGB(0xe0af68),
             RGB(0x7aa2f7), RGB(0xbb9af7), RGB(0x7dcfff), RGB(0xa9b1d6),
-            RGB(0x414868), RGB(0xf7768e), RGB(0x9ece6a), RGB(0xe0af68),
+            RGB(0x7982a9), RGB(0xf7768e), RGB(0x9ece6a), RGB(0xe0af68),
             RGB(0x7aa2f7), RGB(0xbb9af7), RGB(0x7dcfff), RGB(0xc0caf5),
         ]
     }

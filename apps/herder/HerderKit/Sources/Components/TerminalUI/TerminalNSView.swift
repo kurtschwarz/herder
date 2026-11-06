@@ -93,9 +93,13 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         let cells = emulator.cells
         guard !cells.isEmpty else { return }
 
-        let first = max(0, Int((dirtyRect.minY - Self.inset.height) / cellSize.height))
-        let last = min(cells.count - 1, Int((dirtyRect.maxY - Self.inset.height) / cellSize.height))
-        guard first <= last else { return }
+        // Clamped as numbers before they are rows: a layer-backed view can be
+        // asked to draw an unbounded rect, which does not fit an `Int`.
+        let top = ((dirtyRect.minY - Self.inset.height) / cellSize.height).rounded(.down)
+        let bottom = ((dirtyRect.maxY - Self.inset.height) / cellSize.height).rounded(.down)
+        let last = Int(min(max(bottom, 0), Double(cells.count - 1)))
+        let first = Int(min(max(top, 0), Double(last)))
+        guard bottom >= 0, top <= Double(cells.count - 1) else { return }
 
         for row in first...last {
             drawRow(row, cells[row], in: context)
@@ -230,11 +234,13 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     // MARK: Focus
 
     override func becomeFirstResponder() -> Bool {
+        screen.isFocused = true
         needsDisplay = true
         return true
     }
 
     override func resignFirstResponder() -> Bool {
+        screen.isFocused = false
         needsDisplay = true
         return true
     }
@@ -268,6 +274,11 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         // and a terminal has no use for the key a program could not tell from
         // them.
         if event.modifierFlags.contains(.command) { return }
+
+        if let handler = screen.onKeyWhileEnded {
+            handler()
+            return
+        }
 
         // Text the key makes, unless it is a control character or one of
         // AppKit's private-use codes for the function keys: the encoder knows

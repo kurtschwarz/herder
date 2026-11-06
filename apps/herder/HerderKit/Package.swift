@@ -107,6 +107,13 @@ let package = Package(
             swiftSettings: ui
         ),
 
+        .target(
+            name: "TerminalFeature",
+            dependencies: ["Core", "DesignSystem", "TestSupport", "TerminalUI", icons],
+            path: "Sources/Features/Terminal",
+            swiftSettings: ui
+        ),
+
         // Composition root, not a feature: the one module that names concrete
         // service types, and so the one that may import `Services`. It lives
         // outside `Sources/Features/` because it is not one, and keeps the
@@ -115,7 +122,7 @@ let package = Package(
             name: "AppFeature",
             dependencies: [
                 "Core", "Services", "DesignSystem", "TestSupport",
-                "RepositoriesFeature", "FileTreeFeature", "EditorFeature",
+                "RepositoriesFeature", "FileTreeFeature", "EditorFeature", "TerminalFeature",
             ],
             path: "Sources/App",
             swiftSettings: ui
@@ -150,6 +157,12 @@ let package = Package(
             name: "EditorFeatureTests",
             dependencies: ["EditorFeature", "Core", "Services", "TestSupport"],
             path: "Tests/Features/EditorFeatureTests",
+            swiftSettings: ui
+        ),
+        .testTarget(
+            name: "TerminalFeatureTests",
+            dependencies: ["TerminalFeature", "Core", "TestSupport"],
+            path: "Tests/Features/TerminalFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(

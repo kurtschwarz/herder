@@ -22,6 +22,13 @@ extension FocusedValues {
     /// end, so the item dims exactly when it would do nothing.
     @Entry var moveEditorTabLeft: (() -> Void)?
     @Entry var moveEditorTabRight: (() -> Void)?
+
+    /// Show or hide the terminal panel, and move into it when it opens. `nil`
+    /// with no workspace showing, since a terminal starts in one.
+    @Entry var toggleTerminal: (() -> Void)?
+
+    /// Start a shell in the workspace showing.
+    @Entry var newTerminalTab: (() -> Void)?
 }
 
 /// The menu commands that act on a window.
@@ -37,6 +44,8 @@ public struct AppCommands: Commands {
     @FocusedValue(\.selectNextEditorTab) private var selectNextEditorTab
     @FocusedValue(\.moveEditorTabLeft) private var moveEditorTabLeft
     @FocusedValue(\.moveEditorTabRight) private var moveEditorTabRight
+    @FocusedValue(\.toggleTerminal) private var toggleTerminal
+    @FocusedValue(\.newTerminalTab) private var newTerminalTab
 
     public init() {}
 
@@ -46,6 +55,10 @@ public struct AppCommands: Commands {
             Button("Add Repository…") { beginAddingRepository?() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(beginAddingRepository == nil)
+
+            Button("New Terminal Tab") { newTerminalTab?() }
+                .keyboardShortcut("t", modifiers: .command)
+                .disabled(newTerminalTab == nil)
 
             Divider()
 
@@ -58,6 +71,13 @@ public struct AppCommands: Commands {
             Button("Close Tab") { closeEditorTab?() }
                 .keyboardShortcut("w", modifiers: .command)
                 .disabled(closeEditorTab == nil)
+        }
+
+        // Where View menus keep what shows and hides panels.
+        CommandGroup(after: .sidebar) {
+            Button("Toggle Terminal") { toggleTerminal?() }
+                .keyboardShortcut("`", modifiers: .control)
+                .disabled(toggleTerminal == nil)
         }
 
         CommandGroup(replacing: .saveItem) {
