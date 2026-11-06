@@ -1,0 +1,165 @@
+import Core
+import Darwin
+import Dispatch
+import Foundation
+import Synchronization
+
+/// A process on the master side of a pseudo-terminal.
+///
+/// The descriptor's life is the one thing here that needs care. Reading, the
+/// exit watcher and the caller's own writes all meet it, and a descriptor
+/// closed under one of them can be a different file by the time it is used
+/// again. So it is closed in exactly one place, the read source's cancel
+/// handler, and everything else uses it under the same lock that handler takes.
+final class LivePTYSession: PTYSession {
+    /// The master side, shared with the read source's handlers. A class
+    /// because a `Mutex` cannot be copied into a closure, and so that the
+    /// handlers need not hold the session, which holds the source.
+    private final class Descriptor: Sendable {
+        let master: Mutex<Int32?>
+
+        init(_ master: Int32) { self.master = Mutex(master) }
+
+        func close() {
+            master.withLock {
+                if let master = $0 { Darwin.close(master) }
+                $0 = nil
+            }
+        }
+    }
+
+    private struct Exit {
+        var status: Int32?
+        var waiters: [CheckedContinuation<Int32, Never>] = []
+    }
+
+    let output: AsyncStream<Data>
+
+    private let pid: pid_t
+    private let descriptor: Descriptor
+    private let exit = Mutex(Exit())
+
+    private let source: any DispatchSourceRead
+
+    init(master: Int32, pid: pid_t) {
+        self.pid = pid
+        let descriptor = Descriptor(master)
+        self.descriptor = descriptor
+
+        let (output, continuation) = AsyncStream<Data>.makeStream(bufferingPolicy: .unbounded)
+        self.output = output
+
+        // CONCURRENCY: kqueue readiness for a descriptor has no `async`
+        // equivalent, and a blocking `read` on the cooperative pool would
+        // starve it. The handler does one non-blocking read and yields.
+        let source = DispatchSource.makeReadSource(
+            fileDescriptor: master, queue: DispatchQueue(label: "herder.pty.read.\(pid)")
+        )
+        self.source = source
+
+        source.setEventHandler { [source] in
+            var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+            let count = read(master, &buffer, buffer.count)
+            if count > 0 {
+                continuation.yield(Data(buffer.prefix(count)))
+            } else if count == 0 || (errno != EAGAIN && errno != EINTR) {
+                // EOF, or EIO, which is what a master reports once every
+                // process holding the slave has gone.
+                source.cancel()
+            }
+        }
+        source.setCancelHandler {
+            descriptor.close()
+            continuation.finish()
+        }
+        continuation.onTermination = { [source] _ in source.cancel() }
+        source.resume()
+
+        // CONCURRENCY: `waitpid` blocks until the process ends, so it gets a
+        // thread of its own rather than one of the cooperative pool's.
+        let thread = Thread { [self] in reap() }
+        thread.name = "herder.pty.reap.\(pid)"
+        thread.start()
+    }
+
+    private func reap() {
+        var raw: Int32 = 0
+        while waitpid(pid, &raw, 0) < 0 && errno == EINTR {}
+        // The macros `WIFEXITED` and friends are not imported: this is what
+        // they expand to.
+        let signal = raw & 0x7f
+        let status = signal == 0 ? (raw >> 8) & 0xff : 128 + signal
+        let waiters = exit.withLock { state -> [CheckedContinuation<Int32, Never>] in
+            state.status = status
+            defer { state.waiters = [] }
+            return state.waiters
+        }
+        for waiter in waiters { waiter.resume(returning: status) }
+    }
+
+    private var hasExited: Bool { exit.withLock { $0.status != nil } }
+
+    func write(_ data: Data) async {
+        var remaining = data[...]
+        while !remaining.isEmpty, !Task.isCancelled {
+            let written: Int? = descriptor.master.withLock { master in
+                guard let master else { return nil }
+                let count = remaining.withUnsafeBytes { Darwin.write(master, $0.baseAddress, $0.count) }
+                if count >= 0 { return count }
+                return errno == EAGAIN || errno == EINTR ? 0 : nil
+            }
+            guard let written else { return }
+            if written == 0 {
+                // The terminal's input buffer is full: the process is not
+                // reading. Wait for it rather than spin.
+                try? await Task.sleep(for: .milliseconds(5))
+            } else {
+                remaining = remaining.dropFirst(written)
+            }
+        }
+    }
+
+    func resize(_ size: PTYSize) async {
+        var window = winsize(ws_row: size.rows, ws_col: size.columns, ws_xpixel: 0, ws_ypixel: 0)
+        descriptor.master.withLock { master in
+            guard let master else { return }
+            _ = ioctl(master, TIOCSWINSZ, &window)
+        }
+    }
+
+    func foregroundProcess() async -> PTYProcess? {
+        guard !hasExited else { return nil }
+        let group = descriptor.master.withLock { master in
+            master.map { tcgetpgrp($0) }
+        }
+        guard let group, group > 0, let arguments = ProcessArguments.of(group), let first = arguments.first else {
+            return nil
+        }
+        var name = URL(filePath: first).lastPathComponent
+        if name.hasPrefix("-") { name.removeFirst() }
+        let commandLine = ([name] + arguments.dropFirst()).joined(separator: " ")
+        return PTYProcess(id: group, name: name, commandLine: commandLine, isShell: group == pid)
+    }
+
+    func workingDirectory() async -> URL? {
+        hasExited ? nil : ProcessArguments.workingDirectory(of: pid)
+    }
+
+    func waitForExit() async -> Int32 {
+        await withCheckedContinuation { continuation in
+            let status = exit.withLock { state -> Int32? in
+                if let status = state.status { return status }
+                state.waiters.append(continuation)
+                return nil
+            }
+            if let status { continuation.resume(returning: status) }
+        }
+    }
+
+    func terminate() {
+        if !hasExited { killpg(pid, SIGHUP) }
+        source.cancel()
+    }
+
+    deinit { source.cancel() }
+}
