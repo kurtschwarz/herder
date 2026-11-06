@@ -114,6 +114,13 @@ let package = Package(
             swiftSettings: ui
         ),
 
+        .target(
+            name: "SettingsFeature",
+            dependencies: ["DesignSystem", icons],
+            path: "Sources/Features/Settings",
+            swiftSettings: ui
+        ),
+
         // Composition root, not a feature: the one module that names concrete
         // service types, and so the one that may import `Services`. It lives
         // outside `Sources/Features/` because it is not one, and keeps the
@@ -123,6 +130,7 @@ let package = Package(
             dependencies: [
                 "Core", "Services", "DesignSystem", "TestSupport",
                 "RepositoriesFeature", "FileTreeFeature", "EditorFeature", "TerminalFeature",
+                "SettingsFeature",
             ],
             path: "Sources/App",
             swiftSettings: ui

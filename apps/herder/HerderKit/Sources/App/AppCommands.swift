@@ -46,10 +46,18 @@ public struct AppCommands: Commands {
     @FocusedValue(\.moveEditorTabRight) private var moveEditorTabRight
     @FocusedValue(\.toggleTerminal) private var toggleTerminal
     @FocusedValue(\.newTerminalTab) private var newTerminalTab
+    @Environment(\.openWindow) private var openWindow
 
     public init() {}
 
     public var body: some Commands {
+        // The settings window is a `Window` scene rather than SwiftUI's
+        // `Settings`, which keeps a title bar that this design hides.
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") { openWindow(id: SettingsWindow.id) }
+                .keyboardShortcut(",", modifiers: .command)
+        }
+
         // ⌘N already opens a new window.
         CommandGroup(after: .newItem) {
             Button("Add Repository…") { beginAddingRepository?() }

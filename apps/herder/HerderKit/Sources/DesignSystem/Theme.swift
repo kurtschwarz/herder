@@ -65,6 +65,13 @@ public enum Theme {
         public static let minEditorHeight: CGFloat = 160
         /// The dot on a tab with unsaved changes.
         public static let unsavedDot: CGFloat = 8
+        /// The settings window. Fixed: it has one column of controls, and a
+        /// wider window would only make the lines longer.
+        public static let settingsWindow = CGSize(width: 780, height: 540)
+        /// The coloured tile beside a settings pane's name in the sidebar.
+        public static let settingsIcon: CGFloat = 22
+        /// The same tile at the head of the pane itself.
+        public static let settingsHeaderIcon: CGFloat = 32
     }
 
     public enum Opacity {
@@ -146,6 +153,10 @@ public enum Theme {
 
         /// Top-edge highlight that reads as a light source above the window.
         public static let paneHighlight = Color.white.opacity(0.04)
+
+        /// The same light catching the rim of a settings icon tile. Stronger
+        /// than a pane's, because the tile is small and brightly filled.
+        public static let tileHighlight = Color.white.opacity(0.35)
 
         public static let text = Color(red: 229 / 255, green: 229 / 255, blue: 234 / 255)
         public static let secondaryText = Color(red: 152 / 255, green: 152 / 255, blue: 159 / 255)
@@ -254,6 +265,18 @@ public enum Theme {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+
+        /// Fills for the settings icon tiles, one per pane, lighter at the top
+        /// like System Settings'. Named for the colour, so a pane picks one
+        /// rather than the theme knowing which panes exist.
+        public static let graphiteTile = tile(
+            Color(red: 169 / 255, green: 173 / 255, blue: 181 / 255),
+            Color(red: 110 / 255, green: 115 / 255, blue: 124 / 255)
+        )
+
+        private static func tile(_ top: Color, _ bottom: Color) -> LinearGradient {
+            LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom)
+        }
     }
 
     public enum Shadow {
@@ -273,5 +296,10 @@ public enum Theme {
         public static let liftColor = Color.black.opacity(0.4)
         public static let liftRadius: CGFloat = 6
         public static let liftOffset: CGFloat = 2
+
+        /// Just enough to seat a settings icon tile on the surface under it.
+        public static let tileColor = Color.black.opacity(0.3)
+        public static let tileRadius: CGFloat = 1
+        public static let tileOffset: CGFloat = 1
     }
 }
