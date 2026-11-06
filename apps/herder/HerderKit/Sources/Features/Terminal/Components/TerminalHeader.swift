@@ -51,7 +51,7 @@ struct TerminalHeader: View {
             Button {
                 model.hide()
             } label: {
-                PhIcon(Ph.x.regular, size: 14)
+                PhIcon(Ph.caretDown.regular, size: 14)
                     .frame(width: Theme.Size.iconButton, height: Theme.Size.iconButton)
             }
             .buttonStyle(.plain)
