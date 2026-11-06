@@ -262,27 +262,6 @@ import Testing
         #expect(model.openTabs.map(\.folder) == [nil, nil])
         _ = registry
     }
-
-    // MARK: - Scroll positions
-
-    @Test func aTabRemembersWhereItWasLeft() async throws {
-        let (model, _) = await open(["a.txt"])
-
-        #expect(model.offset(of: key("a.txt")) == .zero)
-        model.rememberOffset(CGPoint(x: 0, y: 420), of: key("a.txt"))
-
-        #expect(model.offset(of: key("a.txt")) == CGPoint(x: 0, y: 420))
-    }
-
-    /// Reopening a file that was closed starts it at the top again.
-    @Test func closingATabForgetsWhereItWas() async throws {
-        let (model, _) = await open(["a.txt", "b.txt"])
-        model.rememberOffset(CGPoint(x: 0, y: 420), of: key("a.txt"))
-
-        await model.close(tab: key("a.txt"))
-
-        #expect(model.offset(of: key("a.txt")) == .zero)
-    }
 }
 
 /// The stored shape, against bytes this build did not write: a fixture encoded

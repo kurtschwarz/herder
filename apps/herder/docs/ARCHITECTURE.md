@@ -241,8 +241,8 @@ RepositoryStore            app-wide state, not a service: the pool of folders th
 
 WorkspaceRegistry          app-wide, one per process (Core)
  └── Workspace             one checkout: a repository's worktree, or a plain folder
-      ├── DocumentStore        documents being edited, and their dirty state.
-      │                        Not the tab list: see below.
+      ├── (DocumentStore       lives on each window's EditorModel, not here:
+      │                        see "Editor surface")
       ├── AgentSessionStore    agent sessions running in this worktree
       ├── git state            branch, status
       └── UI state bag         per-feature UI state (see below)
@@ -469,6 +469,11 @@ shows it.
 - **Keep token kinds and colours apart.** `Core` says what a span of code *is* and names no colour; `DesignSystem` holds the colours and knows no kinds; `EditorFeature` is the one place that pairs them. That is what lets a grammar be added without touching the theme, and the theme be changed without touching a grammar.
 - **Tokens are only ever applied to the string they were found in.** `SourceText` binds text to its tokens so the pair cannot come apart, and the editor model checks the text still matches before letting a highlight land. Colour does arrive after the text — a quarter of a second of query compilation must not sit between a click and the file appearing — and that is safe only because of those two things. A `SourceText` with no tokens is incomplete; one with another string's tokens paints the wrong characters, or throws.
 - **A reload that finds the same text must change nothing.** The worktree notifies every observer when any folder in it is read, so expanding a folder in the file tree reloads the open file. Compare the text, not the whole content value: a freshly read one carries no tokens yet, so comparing values drops the colour already on screen and flickers it back.
+- **A tab is a `Document` and a `Buffer`.** `Document` (Core) holds the file's `baseline`, the text as the disk last had it, and compares the buffer and every disk read against it. The `Buffer` (`EditorFeature/Platform`) owns the `NSTextStorage`, the layout, the view and the `UndoManager`, and is reached from Core only by `BufferHandle`. A tab switch swaps which pane is mounted, so undo, selection and scroll position survive it. Documents are made when a tab is first shown, not at launch.
+- **A disk read under unsaved edits never replaces them.** The document is marked stale instead. Our own save needs no suppression: it reads back equal to the baseline.
+- **Saves are explicit and byte-faithful.** ⌘S writes the buffer as it is — no trailing newline, no trimming, no line-ending changes — and nothing else writes. A failed save keeps the document dirty and says why. A deleted file is written back; its missing folder is not.
+- **Unsaved text is never persisted.** The tab list is remembered; buffer contents are not.
+- **The `DocumentStore` is per window, on `EditorModel`, not on `Workspace`.** A buffer belongs to the window that made it, so a store shared across windows would hold documents whose buffers only one of them has.
 
 ## Agents and terminal
 

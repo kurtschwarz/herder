@@ -325,13 +325,4 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
         #expect(plainModel.content == plain("let x = 1\n"))
     }
 
-    @Test func openingTheOpenFileAgainKeepsTheSession() async throws {
-        _ = try await start(with: ["a.txt"])
-        await model.open(root.appending(path: "a.txt"))
-        let session = model.session
-
-        await model.open(root.appending(path: "a.txt"))
-
-        #expect(model.session == session)
-    }
 }

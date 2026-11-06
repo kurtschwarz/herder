@@ -43,6 +43,18 @@ public struct EditorView: View {
                 body(of: model.content)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .alert(
+                model.saveFailure.map { "Couldn\u{2019}t save \u{201C}\($0.name)\u{201D}" } ?? "",
+                isPresented: Binding(
+                    get: { model.saveFailure != nil },
+                    set: { if !$0 { model.dismissSaveFailure() } }
+                ),
+                presenting: model.saveFailure
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { failure in
+                Text(failure.reason)
+            }
         } else {
             Text("Select a file to read it.")
                 .font(.callout)
@@ -54,18 +66,10 @@ public struct EditorView: View {
     @ViewBuilder
     private func body(of content: EditorModel.Content?) -> some View {
         switch content {
-        case .text(let source):
-            // There is content only because a tab is showing, so the `if let`
-            // never fails; it is how the tab reaches the scroll position it
-            // was left at.
-            if let tab = model.activeTab {
-                CodeTextView(
-                    source: source,
-                    session: model.session,
-                    restoring: model.offset(of: tab),
-                    onLeave: { model.rememberOffset($0, of: tab) }
-                )
-                .opacity(model.isDeleted ? Theme.Opacity.ignored : 1)
+        case .text:
+            if let buffer = model.activeBuffer {
+                CodeTextView(buffer: buffer)
+                    .opacity(model.isDeleted ? Theme.Opacity.ignored : 1)
             }
         case .unavailable(let reason):
             Text(message(for: reason))

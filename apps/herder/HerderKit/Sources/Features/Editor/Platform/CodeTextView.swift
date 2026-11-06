@@ -1,133 +1,47 @@
 import AppKit
-import Core
-import DesignSystem
 import SwiftUI
 
-/// A read-only, selectable text view with a line-number gutter.
+/// Shows one tab's ``Buffer``: an editable text view with a line-number gutter.
 ///
 /// TextKit 2 under an `NSScrollView`: contiguous selection, copy and find come
-/// with it, and it is the same view an editable one would be. Lines do not wrap,
-/// so a gutter number is one per line.
+/// with it. Lines do not wrap, so a gutter number is one per line.
+///
+/// This only mounts. The text, the undo history and the scroll position belong
+/// to the buffer, so showing another tab is swapping which pane sits in here,
+/// and coming back finds everything as it was left.
 struct CodeTextView: NSViewRepresentable {
-    /// The text and its tokens, which arrive together so colour can never be
-    /// applied to a string it was not computed for.
-    let source: SourceText
+    let buffer: Buffer
 
-    /// Which opening this is. A new one goes to ``restoring``; a re-read of the
-    /// same file keeps where it is.
-    let session: Int
-
-    /// Where this tab was last left. `.zero` for one never scrolled, which is
-    /// the top.
-    let restoring: CGPoint
-
-    /// Reports where the tab being left was, so coming back to it can restore
-    /// it. Called when the session changes under a mounted view, and when the
-    /// view goes away — which is what a tab switch actually does, since the
-    /// pane blanks while the next file is read.
-    let onLeave: (CGPoint) -> Void
-
-    final class Coordinator {
-        var session: Int?
-
-        /// What was last put into the view, so an identical update does no work.
-        /// The text alone is not enough: the same text can arrive with tokens
-        /// after arriving without them.
-        var source: SourceText?
-
-        /// The *previous* value of ``CodeTextView/onLeave``, so the offset on
-        /// screen is reported against the tab it belongs to rather than the one
-        /// arriving.
-        var onLeave: ((CGPoint) -> Void)?
+    func makeNSView(context: Context) -> PaneHost {
+        PaneHost()
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func updateNSView(_ host: PaneHost, context: Context) {
+        host.show(buffer)
+    }
+}
 
-    func makeNSView(context: Context) -> CodePane {
-        let textView = NSTextView(usingTextLayoutManager: true)
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.isRichText = false
-        textView.drawsBackground = false
-        textView.isHorizontallyResizable = true
-        textView.isVerticallyResizable = true
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.textContainer?.widthTracksTextView = false
-        textView.textContainer?.containerSize = textView.maxSize
-        textView.textContainerInset = NSSize(width: Theme.Spacing.normal, height: Theme.Spacing.normal)
+/// Holds whichever pane is showing.
+final class PaneHost: NSView {
+    private var shown: CodePane?
 
-        let scrollView = NSScrollView()
-        scrollView.drawsBackground = false
-        scrollView.clipsToBounds = true
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.documentView = textView
-        scrollView.contentView.postsBoundsChangedNotifications = true
+    func show(_ buffer: Buffer) {
+        let pane = buffer.pane
+        guard pane !== shown else { return }
 
-        return CodePane(
-            scrollView: scrollView,
-            gutter: LineNumberGutter(scrollView: scrollView, textView: textView)
-        )
+        // Typing continues across a tab switch only if the keyboard follows it.
+        let hadFocus = window?.firstResponder.map(isInside) ?? false
+        shown?.removeFromSuperview()
+        shown = pane
+        pane.frame = bounds
+        pane.autoresizingMask = [.width, .height]
+        addSubview(pane)
+
+        if hadFocus, let responder = buffer.responder { window?.makeFirstResponder(responder) }
     }
 
-    func updateNSView(_ pane: CodePane, context: Context) {
-        let scrollView = pane.scrollView
-        guard
-            let textView = scrollView.documentView as? NSTextView,
-            let storage = textView.textStorage
-        else { return }
-
-        let isNewFile = context.coordinator.session != session
-        let offset = scrollView.contentView.bounds.origin
-        // Still the outgoing tab's offset: the text has not been replaced yet.
-        if isNewFile { context.coordinator.onLeave?(offset) }
-        context.coordinator.onLeave = onLeave
-        context.coordinator.session = session
-        guard isNewFile || context.coordinator.source != source else { return }
-        context.coordinator.source = source
-
-        storage.setAttributedString(NSAttributedString(string: source.text, attributes: SyntaxAttributes.base))
-        applyColours(of: source.tokens, to: textView, length: storage.length)
-        // The selection does not survive: a character range means nothing once
-        // the text under it has been rewritten.
-        textView.setSelectedRange(NSRange(location: 0, length: 0))
-
-        let clip = scrollView.contentView
-        // Before constraining: a remembered offset deeper than this text can
-        // reach has to be clamped against the laid-out height, not the old one.
-        textView.layoutSubtreeIfNeeded()
-        let target = isNewFile ? restoring : offset
-        clip.scroll(to: clip.constrainBoundsRect(NSRect(origin: target, size: clip.bounds.size)).origin)
-        scrollView.reflectScrolledClipView(clip)
-
-        pane.gutter.textDidChange(to: source.text)
-    }
-
-    /// Colours the text as rendering attributes on the layout manager, not as
-    /// attributes of the storage: they are not part of the text, so they are
-    /// never an edit and never reach the undo stack.
-    private func applyColours(of tokens: [SyntaxToken], to textView: NSTextView, length: Int) {
-        guard
-            let layout = textView.textLayoutManager,
-            let content = layout.textContentManager
-        else { return }
-
-        layout.removeRenderingAttribute(.foregroundColor, for: content.documentRange)
-        for token in tokens where NSMaxRange(token.range) <= length {
-            guard
-                let start = content.location(content.documentRange.location, offsetBy: token.range.location),
-                let end = content.location(start, offsetBy: token.range.length),
-                let range = NSTextRange(location: start, end: end)
-            else { continue }
-            layout.addRenderingAttribute(.foregroundColor, value: SyntaxAttributes.colour(for: token.kind), for: range)
-        }
-    }
-
-    /// A tab switch blanks the pane while the next file is read, which takes
-    /// this view with it. Without this the offset of the tab being left would
-    /// never be recorded.
-    static func dismantleNSView(_ pane: CodePane, coordinator: Coordinator) {
-        coordinator.onLeave?(pane.scrollView.contentView.bounds.origin)
+    private func isInside(_ responder: NSResponder) -> Bool {
+        guard let view = responder as? NSView, let shown else { return false }
+        return view.isDescendant(of: shown)
     }
 }

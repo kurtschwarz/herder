@@ -4,15 +4,20 @@ import Observation
 
 /// The files open in the editor pane, and which of them is showing.
 ///
-/// Read-only, one tab per file. Owns the set rather than borrowing it from the
-/// file tree's selection: a selection goes when its file does, and a tab keeps
+/// One tab per file. Owns the set rather than borrowing it from the file
+/// tree's selection: a selection goes when its file does, and a tab keeps
 /// showing what it last read, struck through, until it is closed. The contents
 /// are read from disk and re-read whenever the worktree's watcher says
 /// something changed.
 ///
 /// Only the tab showing is ever read. A background tab is a name until it is
 /// clicked, including one whose file has since gone — the same argument as a
-/// workspace not draining until a window shows it.
+/// workspace not draining until a window shows it. Clicking it makes its
+/// ``Document`` and its ``Buffer``, and from then on the text being edited
+/// lives in the buffer, so it survives the tab being left.
+///
+/// Nothing is written until ``save()``. A change on disk under a buffer with
+/// unsaved edits never replaces them.
 @Observable
 public final class EditorModel {
     /// Anything bigger is not opened. An editor holding a whole build log
@@ -51,27 +56,36 @@ public final class EditorModel {
     /// The file showing, or `nil` when none is.
     public private(set) var file: URL?
 
-    /// What was last read from it. `nil` until the first read finishes.
+    /// What was last read from the disk for it. `nil` until the first read
+    /// finishes. Not what is being edited: that is in the buffer, and differs
+    /// from this once anything is typed.
     private(set) var content: Content?
 
     /// The file showing has gone from disk. Its last contents stay up.
     private(set) var isDeleted = false
 
-    /// Changes whenever a different file is shown, and not when the showing
-    /// file is renamed or rewritten. The view uses it to know when to restore
-    /// a scroll position.
-    private(set) var session = 0
+    /// The documents behind the tabs that have been shown, per window. Not the
+    /// workspace's: a buffer belongs to the window that made it.
+    let documents = DocumentStore()
 
-    /// Where each tab was last scrolled to. In memory only, and kept for the
-    /// model's whole life rather than the workspace's, so switching checkouts
-    /// and coming back keeps your place. An offset is sixteen bytes, where
-    /// holding each tab's text would be a megabyte apiece with the watcher to
-    /// invalidate it against.
-    ///
-    /// `@ObservationIgnored` on purpose: it is written on every scroll tick,
-    /// and tracked it would redraw the pane each time.
+    /// The document for the file showing, once it has been read as text.
+    private(set) var activeDocument: Document?
+
+    /// Why the last save did not happen, until it is dismissed.
+    private(set) var saveFailure: SaveFailure?
+
+    /// Each document's buffer. Kept off the observation graph: it changes
+    /// whenever a pane is made, and what the view reads is ``activeBuffer``.
     @ObservationIgnored
-    private var offsets: [PathKey: CGPoint] = [:]
+    private var buffers: [BufferHandle: Buffer] = [:]
+
+    @ObservationIgnored
+    private var rehighlight: Task<Void, Never>?
+
+    /// How long typing has to stop before the text is coloured again. The
+    /// highlighter takes the whole document, so colouring every keystroke
+    /// would parse the file that many times.
+    static let rehighlightDelay = Duration.milliseconds(50)
 
     /// `highlighter` is injected rather than defaulted, even though it is pure —
     /// the same text gives the same tokens — because the real one lives in
@@ -90,6 +104,16 @@ public final class EditorModel {
 
     /// Which tab is showing, or `nil` when none is.
     var activeTab: PathKey? { fileKey }
+
+    /// What the pane mounts for the file showing.
+    var activeBuffer: Buffer? {
+        activeDocument.flatMap { buffers[$0.buffer] }
+    }
+
+    /// Whether the tab for `key` has edits that are not on disk.
+    func isDirty(_ key: PathKey) -> Bool {
+        documents.documents(at: key).contains(where: \.isDirty)
+    }
 
     /// The tabs as the bar draws them, with a folder added to the two that
     /// would otherwise both read `index.ts`.
@@ -153,7 +177,7 @@ public final class EditorModel {
     public func close(tab key: PathKey) async {
         guard let index = tabs.firstIndex(of: key) else { return }
         tabs.remove(at: index)
-        offsets[key] = nil
+        discard(documentsAt: key)
 
         guard key == fileKey else {
             worktree.map(remember(on:))
@@ -178,9 +202,13 @@ public final class EditorModel {
     /// Empties the pane and drops its tabs. What the workspace remembers is
     /// left alone: this is the pane letting go of a checkout, not the user
     /// closing anything.
+    ///
+    /// Documents with unsaved edits are kept, with their buffers, so that
+    /// coming back to the checkout finds the typing where it was left.
     public func close() {
         clear()
         tabs = []
+        for document in documents.documents where !document.isDirty { discard(document) }
     }
 
     /// The next tab along, wrapping at the end. What ⌘⇧] does.
@@ -246,8 +274,8 @@ public final class EditorModel {
         file = key.url
         fileKey = key
         content = nil
+        activeDocument = nil
         isDeleted = false
-        session += 1
         if remembering { remember(on: state) }
         registration = state.observe(
             onChange: { [weak self] in
@@ -266,8 +294,19 @@ public final class EditorModel {
         file = nil
         fileKey = nil
         content = nil
+        activeDocument = nil
         isDeleted = false
+        rehighlight?.cancel()
         generation += 1
+    }
+
+    private func discard(documentsAt key: PathKey) {
+        for document in documents.documents(at: key) { discard(document) }
+    }
+
+    private func discard(_ document: Document) {
+        documents.close(document)
+        buffers[document.buffer] = nil
     }
 
     /// Writes the tabs down on the workspace they belong to.
@@ -281,26 +320,77 @@ public final class EditorModel {
         state.scheduleSnapshotSave()
     }
 
-    // MARK: - Scrolling
+    // MARK: - Editing
 
-    /// Where `key` was left, or the top for a tab never scrolled.
-    func offset(of key: PathKey) -> CGPoint {
-        offsets[key] ?? .zero
+    /// The person using the view changed the text in `buffer`.
+    func bufferDidChange(_ buffer: Buffer) {
+        guard let handle = buffers.first(where: { $0.value === buffer })?.key,
+              let document = documents.documents.first(where: { $0.buffer == handle })
+        else { return }
+
+        document.bufferChanged(to: buffer.text)
+
+        rehighlight?.cancel()
+        rehighlight = Task { [highlighter] in
+            try? await Task.sleep(for: Self.rehighlightDelay)
+            guard !Task.isCancelled else { return }
+            let text = buffer.text
+            let tokens = await highlighter.tokens(in: text, ofFileNamed: document.key.path)
+            // Dropped by the buffer if typing went on while the parser ran.
+            buffer.colour(tokens, foundIn: text)
+        }
     }
 
-    /// Records where a tab was when the pane moved off it.
-    func rememberOffset(_ offset: CGPoint, of key: PathKey) {
-        offsets[key] = offset
+    /// Writes the file showing, exactly as it is in the buffer: no newline
+    /// added, no whitespace trimmed, no line endings changed. A save that
+    /// normalised anything would turn a one-line edit into a whole-file diff.
+    ///
+    /// The disk is only written here. Writing wakes the watcher and the read
+    /// that follows finds what was just written, which the document knows
+    /// from its baseline, so there is nothing to suppress.
+    ///
+    /// A file that was deleted is written back. Its folder is not: making
+    /// back a folder that was deleted is a bigger decision than saving.
+    public func save() async {
+        guard let document = activeDocument, let buffer = buffers[document.buffer], let worktree else { return }
+        let key = document.key
+        let text = buffer.text
+
+        do {
+            if let folder = key.parent, folder != worktree.root, worktree.exists(folder) == false {
+                throw MissingFolder()
+            }
+            try await files.write(text, to: key.path)
+        } catch {
+            saveFailure = SaveFailure(name: key.name, reason: error.localizedDescription)
+            return
+        }
+        document.saved(text, buffer: buffer.text)
+        if key == fileKey { isDeleted = false }
+    }
+
+    /// Whether ``save()`` has anything to do.
+    public var canSave: Bool { activeDocument?.isDirty == true }
+
+    func dismissSaveFailure() {
+        saveFailure = nil
+    }
+
+    private struct MissingFolder: LocalizedError {
+        var errorDescription: String? { "The folder it was in no longer exists." }
     }
 
     // MARK: - Reading
 
     /// Reads the file showing again, unless it has gone, in which case what is
-    /// showing stays. The text is only replaced when it differs: most changes
-    /// are to some other file, and an identical read must not redraw.
+    /// showing stays. Most changes are to some other file, and a read that
+    /// finds what the document already has must change nothing.
     ///
     /// The text is published as soon as it is read, and colour follows when the
     /// highlighter has it. Nothing a reader is waiting on is behind a parser.
+    ///
+    /// A buffer with unsaved edits is never replaced: the document is marked
+    /// stale and the typing stays.
     ///
     /// Tokens landing separately is safe because they are only ever applied to
     /// the exact string they were found in — see `highlight` — and because a
@@ -334,27 +424,43 @@ public final class EditorModel {
 
         isDeleted = false
         guard case .text(let source) = result else {
+            activeDocument = nil
             if content != result { content = result }
             return
         }
 
-        // An identical read must not redraw, and with colour arriving after the
-        // text that means comparing the text rather than the whole value.
-        // `result` never carries tokens, so comparing values would throw away
-        // the colour already on screen and put it back a moment later. A worktree
-        // notifies every observer when any folder in it is read, so expanding a
-        // folder in the file tree reloads an unchanged file — and the flicker was
-        // plain to see.
-        guard shownText != source.text else { return }
-        content = result
-        await highlight(source.text, at: key)
-    }
+        let document: Document
+        let reading: Document.Reading
+        if let existing = documents.documents(at: key).first {
+            document = existing
+            reading = existing.read(source.text)
+        } else {
+            document = documents.open(key, baseline: source.text)
+            let buffer = Buffer(text: source.text)
+            buffer.onEdit = { [weak self, weak buffer] in
+                guard let buffer else { return }
+                self?.bufferDidChange(buffer)
+            }
+            buffers[document.buffer] = buffer
+            reading = .replace
+        }
+        activeDocument = document
 
-    /// The text on screen, or `nil` when the pane is empty or showing a reason
-    /// instead of a file.
-    private var shownText: String? {
-        guard case .text(let source) = content else { return nil }
-        return source.text
+        switch reading {
+        case .unchanged, .stale:
+            // An identical read must not redraw, and with colour arriving
+            // after the text that means leaving `content` alone rather than
+            // resetting it: it would throw away the colour already on screen
+            // and put it back a moment later. A worktree notifies every
+            // observer when any folder in it is read, so expanding a folder in
+            // the file tree reloads an unchanged file — and the flicker was
+            // plain to see.
+            if content == nil { content = .text(SourceText(text: document.baseline)) }
+        case .replace:
+            buffers[document.buffer]?.replace(with: source.text)
+            content = result
+            await highlight(source.text, at: key)
+        }
     }
 
     /// Colours what is on screen, if it is still the text these tokens were
@@ -375,6 +481,7 @@ public final class EditorModel {
             content != highlighted
         else { return }
         content = highlighted
+        activeBuffer?.colour(tokens, foundIn: text)
     }
 
     /// A rename of an open file, or of a folder above one, carries its tab
@@ -393,10 +500,13 @@ public final class EditorModel {
             if !moved.contains(next) { moved.append(next) }
         }
         tabs = moved
-        offsets = Dictionary(
-            offsets.map { (Workspace.moved($0.key, from: old, to: new), $0.value) },
-            uniquingKeysWith: { first, _ in first }
-        )
+
+        // The documents are re-keyed, not rebuilt: a rename costs no typing.
+        let result = documents.move(from: old, to: new)
+        for document in result.collapsed { discard(document) }
+        if let active = activeDocument, result.collapsed.contains(where: { $0 === active }) {
+            activeDocument = result.moved.first { $0.key == Workspace.moved(fileKey ?? old, from: old, to: new) }
+        }
         if let fileKey {
             let next = Workspace.moved(fileKey, from: old, to: new)
             self.fileKey = next
@@ -404,6 +514,12 @@ public final class EditorModel {
         }
         worktree.map(remember(on:))
     }
+}
+
+/// Why a save did not happen, for the alert.
+struct SaveFailure: Equatable {
+    let name: String
+    let reason: String
 }
 
 /// A tab as the bar draws it.

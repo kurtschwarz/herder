@@ -116,29 +116,7 @@ private struct WindowView: View {
         .overlay { NewSessionOverlay(model: window.repositoryList) }
         // Where ⇧⌘N finds the window it should open the modal in.
         .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
-        // `nil` rather than a disabled-looking closure: an item with no action
-        // is the one AppKit skips, which is what lets ⌘W reach the window's
-        // own Close when there are no tabs. See ``AppCommands``.
-        .focusedSceneValue(
-            \.closeEditorTab,
-            window.editor.tabs.isEmpty ? nil : { Task { await window.editor.closeActiveTab() } }
-        )
-        .focusedSceneValue(
-            \.selectPreviousEditorTab,
-            window.editor.tabs.count > 1 ? { Task { await window.editor.selectPreviousTab() } } : nil
-        )
-        .focusedSceneValue(
-            \.selectNextEditorTab,
-            window.editor.tabs.count > 1 ? { Task { await window.editor.selectNextTab() } } : nil
-        )
-        .focusedSceneValue(
-            \.moveEditorTabLeft,
-            window.editor.canMoveActiveTab(by: -1) ? { window.editor.moveActiveTab(by: -1) } : nil
-        )
-        .focusedSceneValue(
-            \.moveEditorTabRight,
-            window.editor.canMoveActiveTab(by: 1) ? { window.editor.moveActiveTab(by: 1) } : nil
-        )
+        .modifier(EditorCommandValues(editor: window.editor))
     }
 
     /// What the panes call the checkout they are showing: the workspace's name,
@@ -147,6 +125,44 @@ private struct WindowView: View {
     private var activeWorkspaceName: String? {
         guard let url = window.activeWorkspaceID?.url else { return nil }
         return window.repositoryList.nameOfRepository(holding: url)
+    }
+}
+
+/// What the menu commands act on in this window: each is `nil` when it would do
+/// nothing. Apart from ``WindowView`` because the one expression was too much
+/// for the type checker.
+private struct EditorCommandValues: ViewModifier {
+    let editor: EditorModel
+
+    func body(content: Content) -> some View {
+        content
+            // `nil` rather than a disabled-looking closure: an item with no action
+            // is the one AppKit skips, which is what lets ⌘W reach the window's
+            // own Close when there are no tabs. See ``AppCommands``.
+            .focusedSceneValue(
+                \.closeEditorTab,
+                editor.tabs.isEmpty ? nil : { Task { await editor.closeActiveTab() } }
+            )
+            .focusedSceneValue(
+                \.saveEditorFile,
+                editor.canSave ? { Task { await editor.save() } } : nil
+            )
+            .focusedSceneValue(
+                \.selectPreviousEditorTab,
+                editor.tabs.count > 1 ? { Task { await editor.selectPreviousTab() } } : nil
+            )
+            .focusedSceneValue(
+                \.selectNextEditorTab,
+                editor.tabs.count > 1 ? { Task { await editor.selectNextTab() } } : nil
+            )
+            .focusedSceneValue(
+                \.moveEditorTabLeft,
+                editor.canMoveActiveTab(by: -1) ? { editor.moveActiveTab(by: -1) } : nil
+            )
+            .focusedSceneValue(
+                \.moveEditorTabRight,
+                editor.canMoveActiveTab(by: 1) ? { editor.moveActiveTab(by: 1) } : nil
+            )
     }
 }
 

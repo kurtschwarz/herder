@@ -9,6 +9,10 @@ extension FocusedValues {
     /// window has none open, which is what leaves ⌘W closing the window.
     @Entry var closeEditorTab: (() -> Void)?
 
+    /// Saves the file showing in the focused window. `nil` when it has no
+    /// unsaved changes, so the item dims instead of rewriting what is there.
+    @Entry var saveEditorFile: (() -> Void)?
+
     /// Cycle the focused window's editor tabs. `nil` with fewer than two, so
     /// the menu items read as unavailable rather than doing nothing.
     @Entry var selectPreviousEditorTab: (() -> Void)?
@@ -28,6 +32,7 @@ extension FocusedValues {
 public struct AppCommands: Commands {
     @FocusedValue(\.beginAddingRepository) private var beginAddingRepository
     @FocusedValue(\.closeEditorTab) private var closeEditorTab
+    @FocusedValue(\.saveEditorFile) private var saveEditorFile
     @FocusedValue(\.selectPreviousEditorTab) private var selectPreviousEditorTab
     @FocusedValue(\.selectNextEditorTab) private var selectNextEditorTab
     @FocusedValue(\.moveEditorTabLeft) private var moveEditorTabLeft
@@ -53,6 +58,12 @@ public struct AppCommands: Commands {
             Button("Close Tab") { closeEditorTab?() }
                 .keyboardShortcut("w", modifiers: .command)
                 .disabled(closeEditorTab == nil)
+        }
+
+        CommandGroup(replacing: .saveItem) {
+            Button("Save") { saveEditorFile?() }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(saveEditorFile == nil)
         }
 
         // Where an AppKit app puts tab navigation.

@@ -40,6 +40,7 @@ struct EditorTabBar: View {
                             // Only the tab showing has been read, so it is the
                             // only one that can be known to have gone.
                             isDeleted: tab.key == model.activeTab && model.isDeleted,
+                            isDirty: model.isDirty(tab.key),
                             isLifted: isLifted,
                             activate: { Task { await model.activate(tab.key) } },
                             close: { Task { await model.close(tab: tab.key) } }
@@ -132,6 +133,8 @@ private struct EditorTabView: View {
     let tab: EditorTab
     let isActive: Bool
     let isDeleted: Bool
+    /// Has edits that are not on disk.
+    let isDirty: Bool
     /// Picked up and being dragged along the strip.
     let isLifted: Bool
     let activate: () -> Void
@@ -193,10 +196,22 @@ private struct EditorTabView: View {
         .overlay(alignment: .trailing) {
             // Gone from the tab in hand, so a drag that ends on it cannot be
             // taken for a close.
-            CloseTabButton(action: close)
-                .padding(.trailing, Theme.Spacing.normal)
-                .opacity(isLifted ? 0 : 1)
-                .allowsHitTesting(!isLifted)
+            Group {
+                // Unsaved edits: a dot where the close button is, until the
+                // pointer is over the tab.
+                if isDirty && !isHovering {
+                    Circle()
+                        .fill(Theme.Palette.secondaryText)
+                        .frame(width: Theme.Size.unsavedDot, height: Theme.Size.unsavedDot)
+                        .frame(width: Theme.Size.chevron, height: Theme.Size.chevron)
+                        .help("Unsaved Changes")
+                } else {
+                    CloseTabButton(action: close)
+                }
+            }
+            .padding(.trailing, Theme.Spacing.normal)
+            .opacity(isLifted ? 0 : 1)
+            .allowsHitTesting(!isLifted)
         }
         .onHover { isHovering = $0 }
         .help(tab.key.path)
@@ -257,6 +272,7 @@ private struct TabStripPreview: View {
                     tab: EditorTab(key: PathKey(canonical: "/code/api/" + name), name: name, folder: nil),
                     isActive: name.hasPrefix("Content"),
                     isDeleted: false,
+                    isDirty: name.hasPrefix("Editor"),
                     isLifted: name.hasPrefix("TabDrag"),
                     activate: {},
                     close: {}

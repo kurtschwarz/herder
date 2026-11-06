@@ -23,6 +23,8 @@ public final class InMemoryFileClient: FileClient {
     private let storage = Mutex<[String: String]>([:])
     private let folders = Mutex(Folders())
     private let fileReads = Mutex<[String]>([])
+    private let fileWrites = Mutex<[Write]>([])
+    private let writeFailure = Mutex<(any Error)?>(nil)
 
     public init() {}
 
@@ -62,7 +64,29 @@ public final class InMemoryFileClient: FileClient {
     }
 
     public func write(_ contents: String, to path: String) async throws {
+        if let failure = writeFailure.withLock({ $0 }) { throw failure }
         storage.withLock { $0[path] = contents }
+        fileWrites.withLock { $0.append(Write(path: path, contents: contents)) }
+    }
+
+    /// Every write that went through, in order. A refused write is not here.
+    public var writes: [Write] {
+        fileWrites.withLock { $0 }
+    }
+
+    public struct Write: Equatable, Sendable {
+        public var path: String
+        public var contents: String
+
+        public init(path: String, contents: String) {
+            self.path = path
+            self.contents = contents
+        }
+    }
+
+    /// Makes `write` throw `error` until called again with `nil`.
+    public func refuseWrites(with error: (any Error)?) {
+        writeFailure.withLock { $0 = error }
     }
 
     public func exists(_ path: String) async -> Bool {

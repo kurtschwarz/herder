@@ -43,6 +43,8 @@ public enum Theme {
         public static let code: CGFloat = 12
         /// Width of the editor's line-number gutter.
         public static let gutter: CGFloat = 48
+        /// The dot on a tab with unsaved changes.
+        public static let unsavedDot: CGFloat = 8
     }
 
     public enum Opacity {
