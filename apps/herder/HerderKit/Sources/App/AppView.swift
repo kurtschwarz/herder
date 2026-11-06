@@ -99,8 +99,18 @@ private struct WindowView: View {
                 onReset: { reset(.leading) }
             )
 
-            EditorView(model: window.editor, rootName: activeWorkspaceName)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 0) {
+                EditorView(model: window.editor, rootName: activeWorkspaceName)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                StatusBar {
+                    if let checkout = window.activeWorkspace?.checkout {
+                        CheckoutLabel(checkout)
+                    }
+                } trailing: {
+                    EditorFileStatus(model: window.editor)
+                }
+            }
 
             ResizeHandle(
                 widens: .leading,

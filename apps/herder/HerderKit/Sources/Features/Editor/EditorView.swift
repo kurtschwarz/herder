@@ -6,7 +6,8 @@ import TestSupport
 
 /// The editor pane's content: a breadcrumb over the open file's text. Has no
 /// surface of its own: it sits straight on the window, and the file tree is the
-/// only floating pane beside it.
+/// only floating pane beside it. The status bar under it is the composition
+/// root's, with ``EditorFileStatus`` as the editor's part of it.
 public struct EditorView: View {
     private let model: EditorModel
 
@@ -25,22 +26,8 @@ public struct EditorView: View {
         return components
     }
 
-    /// The branch, from the workspace the window is showing. Not the model's:
-    /// two panes want it, so it lives on the workspace.
-    @Environment(Workspace.self) private var workspace: Workspace?
-
-    /// Only for text: a file that is not shown has no encoding worth stating.
-    /// Always UTF-8, because that is the only thing a file is read as.
-    private var statusFile: EditorStatusBar.File? {
-        guard case .text = model.content else { return nil }
-        return EditorStatusBar.File(encoding: "UTF-8", language: model.language ?? "Plain Text")
-    }
-
     public var body: some View {
-        VStack(spacing: 0) {
-            content
-            EditorStatusBar(checkout: workspace?.checkout, file: statusFile)
-        }
+        content
     }
 
     @ViewBuilder
