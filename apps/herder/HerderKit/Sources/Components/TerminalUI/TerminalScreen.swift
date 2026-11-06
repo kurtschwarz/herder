@@ -67,6 +67,10 @@ public final class TerminalScreen {
                 guard let self else { return }
                 emulator.write(chunk)
                 scheduleRefresh()
+                // A flood arrives as fast as it is asked for, so without this
+                // the loop would hold the main actor until it stopped, and
+                // the window could not draw it or take the ^C that ends it.
+                await Task.yield()
             }
             self?.finish()
         })

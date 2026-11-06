@@ -156,6 +156,70 @@ import Testing
         #expect(found.path(percentEncoded: false).trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "usr")
     }
 
+    // MARK: Backpressure
+
+    func live(_ session: any PTYSession) throws -> LivePTYSession {
+        try #require(session as? LivePTYSession)
+    }
+
+    @Test func aProcessThatIsNotReadIsHeldToTheLimitRatherThanFillingMemory() async throws {
+        let session = try await spawn(["-c", "exec yes"])
+        defer { session.terminate() }
+        let buffer = try live(session).buffer
+
+        _ = try await poll("the buffer to fill") { buffer.isPaused ? true : nil }
+        try await Task.sleep(for: .milliseconds(300))
+        // One read past the mark at most: the source is paused in the handler
+        // that crossed it.
+        #expect(buffer.bufferedBytes <= buffer.highWater + 64 * 1024)
+    }
+
+    @Test func readingLetsAPausedProcessCarryOn() async throws {
+        let session = try await spawn(["-c", "exec yes"])
+        defer { session.terminate() }
+        let buffer = try live(session).buffer
+        _ = try await poll("the buffer to fill") { buffer.isPaused ? true : nil }
+
+        var received = 0
+        for await chunk in session.output {
+            received += chunk.count
+            if received > 8 * buffer.highWater { break }
+        }
+        #expect(received > 8 * buffer.highWater)
+    }
+
+    @Test func aPausedProcessCanStillBeEnded() async throws {
+        let session = try await spawn(["-c", "exec yes"])
+        let buffer = try live(session).buffer
+        _ = try await poll("the buffer to fill") { buffer.isPaused ? true : nil }
+
+        session.terminate()
+        #expect(await session.waitForExit() == 129)
+        // The output ends too: what was held is handed out, then nothing.
+        var received = 0
+        for await chunk in session.output { received += chunk.count }
+        #expect(received <= buffer.highWater + 64 * 1024)
+    }
+
+    @Test func everythingAProcessWritesArrivesInOrderThroughThePauses() async throws {
+        // More than the limit several times over, numbered so a lost or
+        // repeated piece shows.
+        let session = try await spawn(["-c", "i=0; while [ $i -lt 200000 ]; do echo $i; i=$((i+1)); done"])
+        var data = Data()
+        for await chunk in session.output {
+            data.append(chunk)
+            // Slower than the process, so the limit is hit.
+            if data.count % (256 << 10) < chunk.count { try await Task.sleep(for: .milliseconds(5)) }
+        }
+        let lines = String(decoding: data, as: UTF8.self)
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        #expect(lines.count == 200_000)
+        #expect(lines.first == "0")
+        #expect(lines.last == "199999")
+        #expect(lines.enumerated().allSatisfy { $0.element == String($0.offset) })
+    }
+
     @Test func nothingIsLeftToAskOnceItHasExited() async throws {
         let session = try await spawn(["-c", "exit 0"])
         _ = await session.waitForExit()

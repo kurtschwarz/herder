@@ -11,6 +11,10 @@ import Synchronization
 /// closed under one of them can be a different file by the time it is used
 /// again. So it is closed in exactly one place, the read source's cancel
 /// handler, and everything else uses it under the same lock that handler takes.
+///
+/// Output is held to a limit by ``PTYOutputBuffer``, which pauses reading when
+/// the consumer falls behind, so a process that writes without end is slowed
+/// to the speed of whatever is drawing it instead of filling memory.
 final class LivePTYSession: PTYSession {
     /// The master side, shared with the read source's handlers. A class
     /// because a `Mutex` cannot be copied into a closure, and so that the
@@ -40,28 +44,32 @@ final class LivePTYSession: PTYSession {
     private let exit = Mutex(Exit())
 
     private let source: any DispatchSourceRead
+    let buffer: PTYOutputBuffer
 
     init(master: Int32, pid: pid_t) {
         self.pid = pid
         let descriptor = Descriptor(master)
         self.descriptor = descriptor
 
-        let (output, continuation) = AsyncStream<Data>.makeStream(bufferingPolicy: .unbounded)
-        self.output = output
-
         // CONCURRENCY: kqueue readiness for a descriptor has no `async`
         // equivalent, and a blocking `read` on the cooperative pool would
-        // starve it. The handler does one non-blocking read and yields.
+        // starve it. The handler does one non-blocking read and hands it on.
         let source = DispatchSource.makeReadSource(
             fileDescriptor: master, queue: DispatchQueue(label: "herder.pty.read.\(pid)")
         )
         self.source = source
 
+        let buffer = PTYOutputBuffer(
+            pause: { [source] in source.suspend() },
+            resume: { [source] in source.resume() }
+        )
+        self.buffer = buffer
+
         source.setEventHandler { [source] in
-            var buffer = [UInt8](repeating: 0, count: 64 * 1024)
-            let count = read(master, &buffer, buffer.count)
+            var bytes = [UInt8](repeating: 0, count: 64 * 1024)
+            let count = read(master, &bytes, bytes.count)
             if count > 0 {
-                continuation.yield(Data(buffer.prefix(count)))
+                buffer.append(Data(bytes.prefix(count)))
             } else if count == 0 || (errno != EAGAIN && errno != EINTR) {
                 // EOF, or EIO, which is what a master reports once every
                 // process holding the slave has gone.
@@ -70,10 +78,14 @@ final class LivePTYSession: PTYSession {
         }
         source.setCancelHandler {
             descriptor.close()
-            continuation.finish()
+            buffer.finish()
         }
-        continuation.onTermination = { [source] _ in source.cancel() }
         source.resume()
+
+        output = AsyncStream(
+            unfolding: { await buffer.next() },
+            onCancel: { [source] in Self.stop(source, buffer) }
+        )
 
         // CONCURRENCY: `waitpid` blocks until the process ends, so it gets a
         // thread of its own rather than one of the cooperative pool's.
@@ -158,8 +170,16 @@ final class LivePTYSession: PTYSession {
 
     func terminate() {
         if !hasExited { killpg(pid, SIGHUP) }
-        source.cancel()
+        Self.stop(source, buffer)
     }
 
-    deinit { source.cancel() }
+    /// Cancels reading. A source paused for backpressure is let go as well,
+    /// because a suspended source never runs its cancel handler, and that is
+    /// where the descriptor is closed and the output ended.
+    private static func stop(_ source: any DispatchSourceRead, _ buffer: PTYOutputBuffer) {
+        source.cancel()
+        buffer.release()
+    }
+
+    deinit { Self.stop(source, buffer) }
 }

@@ -5,6 +5,10 @@ public protocol PTYSession: AnyObject, Sendable {
     /// What the process wrote, as it arrives. Ends when the terminal closes,
     /// which is after the process has gone and everything it wrote was read.
     /// One consumer: a second `for await` would split the bytes between them.
+    ///
+    /// Bounded: what is not yet taken is held to a limit, and past it the
+    /// process is made to wait for its reader. A consumer that reads slowly
+    /// slows the process; one that stops reading stops it.
     var output: AsyncStream<Data> { get }
 
     /// Sends bytes to the process as if typed. Waits while the terminal's input
