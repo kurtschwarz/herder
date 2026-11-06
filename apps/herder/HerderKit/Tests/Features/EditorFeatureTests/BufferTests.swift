@@ -99,6 +99,25 @@ import Testing
         #expect(colour(in: buffer, at: string.location) != stringColour)
     }
 
+    /// TextKit may grow a coloured span over text typed at its edge. The parse
+    /// finds the same tokens as the shifted ones there, so nothing differs to
+    /// repaint, and only repainting what was typed puts it right.
+    @Test func textTypedAtATokensEdgeIsRepaintedEvenWhenTheTokensAgree() {
+        let text = "let name = \"Herder\"\n"
+        let (buffer, textView) = drawn(text)
+        let string = (text as NSString).range(of: "\"Herder\"")
+        buffer.colour([SyntaxToken(range: string, kind: .string)], foundIn: text)
+        let stringColour = SyntaxAttributes.colour(for: .string)
+
+        let end = NSMaxRange(string)
+        buffer.storage.replaceCharacters(in: NSRange(location: end, length: 0), with: "x")
+        buffer.textDidChange(Notification(name: NSText.didChangeNotification, object: textView))
+        buffer.colour([SyntaxToken(range: string, kind: .string)], foundIn: buffer.text)
+
+        #expect(colour(in: buffer, at: end - 1) == stringColour)
+        #expect(colour(in: buffer, at: end) != stringColour)
+    }
+
     /// Sizes the two costs behind the colour lag. Prints, and asserts nothing
     /// about time: a budget here would fail on a busy machine.
     @Test func colouringALargeFileIsTimed() {
@@ -117,6 +136,13 @@ import Testing
         let clock = ContinuousClock()
         let elapsed = clock.measure { buffer.colour(tokens, foundIn: text) }
         print("colour: \(tokens.count) tokens in \(text.utf16.count) UTF-16 units took \(elapsed)")
+
+        // A keystroke in the middle: the parse finds the shifted tokens again.
+        let middle = text.utf16.count / 2
+        buffer.storage.replaceCharacters(in: NSRange(location: middle, length: 0), with: "x")
+        let shifted = tokens.applying(TextEdit(replaced: NSRange(location: middle, length: 0), length: 1))
+        let keystroke = clock.measure { buffer.colour(shifted, foundIn: buffer.text) }
+        print("colour after one keystroke took \(keystroke)")
     }
 
     /// Tokens for text the buffer no longer holds change nothing, so there is

@@ -14,6 +14,22 @@ public struct TextEdit: Equatable, Sendable {
     }
 
     var change: Int { length - replaced.length }
+
+    /// Where `range` sits once this edit has been made, widened to take in
+    /// anything the edit cut into. Used to keep a span that has to be
+    /// repainted pointing at the right text.
+    public func carrying(_ range: NSRange) -> NSRange {
+        let start = replaced.location
+        let end = NSMaxRange(replaced)
+        func moved(_ offset: Int, keeping edge: Int) -> Int {
+            if offset <= start { return offset }
+            if offset >= end { return offset + change }
+            return edge
+        }
+        let from = moved(range.location, keeping: start)
+        let to = moved(NSMaxRange(range), keeping: start + length)
+        return NSRange(location: from, length: max(0, to - from))
+    }
 }
 
 extension [SyntaxToken] {
@@ -52,6 +68,32 @@ extension [SyntaxToken] {
             }
         }
         return result
+    }
+}
+
+extension [SyntaxToken] {
+    /// The smallest range of the text that has to be repainted to go from
+    /// painting these tokens to painting `new`, or `nil` when they paint the
+    /// same thing.
+    ///
+    /// Both runs must be positioned in the same text: shift the old one with
+    /// ``applying(_:)`` first. Whatever the two share at the start and at the
+    /// end is left out, so a keystroke that changes one token repaints one.
+    public func changedRange(to new: [SyntaxToken]) -> NSRange? {
+        let shared = Swift.min(count, new.count)
+        var head = 0
+        while head < shared, self[head] == new[head] { head += 1 }
+        if head == count && head == new.count { return nil }
+
+        var tail = 0
+        while tail < shared - head, self[count - 1 - tail] == new[new.count - 1 - tail] { tail += 1 }
+
+        let differing = self[head..<(count - tail)] + new[head..<(new.count - tail)]
+        guard
+            let first = differing.map(\.range.location).min(),
+            let last = differing.map({ NSMaxRange($0.range) }).max()
+        else { return nil }
+        return NSRange(location: first, length: last - first)
     }
 }
 

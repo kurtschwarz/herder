@@ -62,7 +62,7 @@ final class Buffer: NSObject, NSTextViewDelegate {
     func replace(with text: String) {
         storage.setAttributedString(NSAttributedString(string: text, attributes: SyntaxAttributes.base))
         tokens = []
-        shifted = false
+        edited = nil
         layout.removeRenderingAttribute(.foregroundColor, for: layout.documentRange)
         undoManager.removeAllActions()
         textView?.setSelectedRange(NSRange(location: 0, length: 0))
@@ -74,27 +74,40 @@ final class Buffer: NSObject, NSTextViewDelegate {
     /// never an edit and never reach the undo stack.
     ///
     /// Only if the buffer still holds the `text` the tokens were found in.
+    ///
+    /// Only what differs from what is painted is touched: the tokens already
+    /// on screen have followed the text through every edit, so a keystroke
+    /// that changes one token repaints one. The text typed since the last
+    /// paint is repainted as well, because that is where TextKit's idea of
+    /// the colour and ours can differ.
     func colour(_ tokens: [SyntaxToken], foundIn text: String) {
         guard storage.string == text else { return }
+        let changed = self.tokens.changedRange(to: tokens)
         self.tokens = tokens
-        paint()
+        let range = [changed, edited].compactMap { $0 }.reduce(nil) { (union: NSRange?, next) in
+            union.map { NSUnionRange($0, next) } ?? next
+        }
+        edited = nil
+        if let range { paint(range) }
     }
 
-    /// Paints ``tokens``, replacing whatever colour was there.
-    private func paint() {
-        let interval = Self.signposter.beginInterval("colour", "\(self.tokens.count) tokens")
+    /// Paints the tokens that touch `range`, after clearing the colour there.
+    private func paint(_ range: NSRange) {
+        let range = NSIntersectionRange(range, NSRange(location: 0, length: storage.length))
+        guard range.length > 0, let cleared = textRange(range) else { return }
+
+        let interval = Self.signposter.beginInterval("colour", "\(range.length) units")
         defer { Self.signposter.endInterval("colour", interval) }
 
-        layout.removeRenderingAttribute(.foregroundColor, for: layout.documentRange)
+        layout.removeRenderingAttribute(.foregroundColor, for: cleared)
         let length = storage.length
 
-        for token in tokens where NSMaxRange(token.range) <= length {
-            guard
-                let start = content.location(content.documentRange.location, offsetBy: token.range.location),
-                let end = content.location(start, offsetBy: token.range.length),
-                let range = NSTextRange(location: start, end: end)
-            else { continue }
-            layout.addRenderingAttribute(.foregroundColor, value: SyntaxAttributes.colour(for: token.kind), for: range)
+        for token in tokens
+        where NSMaxRange(token.range) <= length
+            && NSMaxRange(token.range) > range.location
+            && token.range.location < NSMaxRange(range) {
+            guard let painted = textRange(token.range) else { continue }
+            layout.addRenderingAttribute(.foregroundColor, value: SyntaxAttributes.colour(for: token.kind), for: painted)
         }
         // Being no part of the text is why this has to be said out loud. TextKit
         // paints each paragraph into a view of its own inside the text view,
@@ -108,6 +121,14 @@ final class Buffer: NSObject, NSTextViewDelegate {
         // Only what is on screen has a view, so this is a few dozen at most;
         // the rest is painted with its colour as it scrolls in.
         textView.map(markForDisplay)
+    }
+
+    private func textRange(_ range: NSRange) -> NSTextRange? {
+        guard
+            let start = content.location(content.documentRange.location, offsetBy: range.location),
+            let end = content.location(start, offsetBy: range.length)
+        else { return nil }
+        return NSTextRange(location: start, end: end)
     }
 
     private func markForDisplay(_ view: NSView) {
@@ -166,33 +187,30 @@ final class Buffer: NSObject, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         gutter?.textDidChange(to: storage.string)
-        if shifted {
-            shifted = false
-            paint()
-        }
         onEdit()
     }
 
     // MARK: - Following edits
 
-    /// Whether ``tokens`` moved for an edit that has not been painted yet.
-    private var shifted = false
+    /// The text changed since the last paint, in today's offsets. `nil` when
+    /// none has.
+    private var edited: NSRange?
 
-    /// Moves the colour with the text, so that between a keystroke and the next
-    /// parse everything after the caret is not painted where the text was.
-    /// Painting waits for `textDidChange`, which is after layout has settled.
+    /// Moves ``tokens`` with the text, so they stay comparable with the next
+    /// parse. TextKit moves what is on screen by itself; nothing is repainted
+    /// here, which is what keeps a keystroke cheap.
     ///
     /// A notification rather than the storage's delegate: the content manager
     /// takes that over when the storage is attached to it.
     @objc private func storageDidProcessEditing(_ note: Notification) {
         guard storage.editedMask.contains(.editedCharacters), !tokens.isEmpty else { return }
-        let edited = storage.editedRange
+        let range = storage.editedRange
         let edit = TextEdit(
-            replaced: NSRange(location: edited.location, length: edited.length - storage.changeInLength),
-            length: edited.length
+            replaced: NSRange(location: range.location, length: range.length - storage.changeInLength),
+            length: range.length
         )
         tokens = tokens.applying(edit)
-        shifted = true
+        edited = edited.map { NSUnionRange(edit.carrying($0), range) } ?? range
     }
 
     func undoManager(for view: NSTextView) -> UndoManager? {
