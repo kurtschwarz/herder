@@ -28,11 +28,17 @@ final class LineNumberGutter: NSView {
     private let attributes: [NSAttributedString.Key: Any]
     private let currentAttributes: [NSAttributedString.Key: Any]
 
-    /// The 1-based line the caret is on, or `nil` for a selection, which is
-    /// marked by its own highlight. As `CurrentLineHighlight` decides it.
-    private var currentLine: Int? {
-        guard let range = textView?.selectedRange(), range.length == 0 else { return nil }
-        return number(at: range.location)
+    /// The 1-based lines the caret is on or a selection touches. A selection
+    /// that ends where a line starts, as a triple-click's does, leaves that
+    /// line out: nothing on it is selected.
+    private var currentLines: IndexSet {
+        var lines = IndexSet()
+        for value in textView?.selectedRanges ?? [] {
+            let range = value.rangeValue
+            let last = range.length == 0 ? range.location : NSMaxRange(range) - 1
+            lines.insert(integersIn: number(at: range.location)...number(at: last))
+        }
+        return lines
     }
 
     init(scrollView: NSScrollView, textView: NSTextView) {
@@ -91,7 +97,7 @@ final class LineNumberGutter: NSView {
         else { return }
 
         let originY = textView.textContainerOrigin.y
-        let currentLine = currentLine
+        let currentLines = currentLines
         let start = layout.textViewportLayoutController.viewportRange?.location ?? layout.documentRange.location
 
         // Where the empty line after the last fragment has its baseline.
@@ -123,7 +129,7 @@ final class LineNumberGutter: NSView {
             let lineNumber = number(at: offset)
             let label = NSAttributedString(
                 string: "\(lineNumber)",
-                attributes: lineNumber == currentLine ? currentAttributes : attributes
+                attributes: currentLines.contains(lineNumber) ? currentAttributes : attributes
             )
             let size = label.size()
             // Sat on the text's own baseline. Centring in the line box drifts
@@ -140,7 +146,7 @@ final class LineNumberGutter: NSView {
         let baseline = emptyLineBaseline ?? convert(NSPoint(x: 0, y: originY), from: textView).y + font.ascender
         let label = NSAttributedString(
             string: "\(lineStarts.count)",
-            attributes: lineStarts.count == currentLine ? currentAttributes : attributes
+            attributes: currentLines.contains(lineStarts.count) ? currentAttributes : attributes
         )
         label.draw(at: NSPoint(
             x: bounds.width - label.size().width - Theme.Spacing.normal,
