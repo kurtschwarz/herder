@@ -2,6 +2,11 @@ import Foundation
 
 /// A folder on disk the user has adopted, one to one.
 ///
+/// The record of the folder and nothing about where it sits. Which windows list
+/// it, in what order and whether it is folded are each window's own, in a
+/// ``RepositoryMembership``: the same record can be in several sidebars at once,
+/// arranged differently in each, and the bookmark behind it exists exactly once.
+///
 /// A value type, held by ``RepositoryStore``. It used to be a SwiftData
 /// `@Model`, which meant a reference the views mutated directly and a `@Query`
 /// to see the list; now the store owns the array and Observation does what
@@ -29,21 +34,8 @@ public struct Repository: Identifiable, Sendable, Codable, Equatable {
     /// an open panel, so nothing may drop it.
     public var bookmark: Data
 
-    /// Position in the sidebar. Renumbered across every row on reorder.
-    public var order: Int
-
-    /// Tiebreaker for equal ``order``, and the natural sort before the user has
-    /// ever reordered anything.
+    /// When it was adopted. The order the pool is kept in.
     public var addedAt: Date
-
-    /// Whether the sidebar is hiding this repository's worktrees.
-    ///
-    /// View state kept on the record, like ``order``, and for the same reason:
-    /// it is about this repository, there is one sidebar, and it is worth
-    /// remembering across launches. Folded rather than unfolded, so a
-    /// repository the user has never touched — and one added later — starts
-    /// open.
-    public var isCollapsed: Bool
 
     /// Whether the folder could be reached. Not persisted: an unmounted volume
     /// is a fact about right now, not about the repository, and a stored `false`
@@ -55,27 +47,25 @@ public struct Repository: Identifiable, Sendable, Codable, Equatable {
         name: String,
         path: String,
         bookmark: Data,
-        order: Int,
         addedAt: Date = .now,
-        isCollapsed: Bool = false,
         isAvailable: Bool = true
     ) {
         self.id = id
         self.name = name
         self.path = path
         self.bookmark = bookmark
-        self.order = order
         self.addedAt = addedAt
-        self.isCollapsed = isCollapsed
         self.isAvailable = isAvailable
     }
 
     public var url: URL { URL(filePath: path) }
 
     /// ``isAvailable`` is deliberately absent: it is about the present moment.
-    /// Everything else is what the user would have to recreate by hand.
+    /// Everything else is what the user would have to recreate by hand. A record
+    /// written when the sidebar's arrangement lived here still decodes: the
+    /// keys it carried that no longer exist are ignored.
     private enum CodingKeys: String, CodingKey {
-        case id, name, path, bookmark, order, addedAt, isCollapsed
+        case id, name, path, bookmark, addedAt
     }
 
     public init(from decoder: any Decoder) throws {
@@ -84,11 +74,7 @@ public struct Repository: Identifiable, Sendable, Codable, Equatable {
         name = try container.decode(String.self, forKey: .name)
         path = try container.decode(String.self, forKey: .path)
         bookmark = try container.decode(Data.self, forKey: .bookmark)
-        order = try container.decode(Int.self, forKey: .order)
         addedAt = try container.decode(Date.self, forKey: .addedAt)
-        // Added after the first repositories were written, so absent state
-        // means open rather than meaning anything.
-        isCollapsed = try container.decodeIfPresent(Bool.self, forKey: .isCollapsed) ?? false
         // Decided by resolving the bookmark at load, not by what was written.
         isAvailable = true
     }

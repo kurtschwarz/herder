@@ -3,7 +3,7 @@ import Foundation
 import Observation
 
 /// The add-repository modal's state: the folder picked, the name, and whether
-/// the store would take them.
+/// the window's list would take them.
 ///
 /// A folder is validated the moment it is picked, so Add is only ever enabled
 /// for something that should succeed. `submit()` still validates again, because
@@ -29,7 +29,7 @@ final class AddRepositoryModel {
         }
     }
 
-    private let store: RepositoryStore
+    private let repositories: WindowRepositories
     private let picker: any FolderPickerClient
 
     /// What git made of `folder`, set only once the store has accepted it.
@@ -45,8 +45,8 @@ final class AddRepositoryModel {
 
     var canAdd: Bool { kind != nil && refusal == nil && !isSubmitting }
 
-    init(store: RepositoryStore, picker: any FolderPickerClient) {
-        self.store = store
+    init(repositories: WindowRepositories, picker: any FolderPickerClient) {
+        self.repositories = repositories
         self.picker = picker
     }
 
@@ -79,7 +79,7 @@ final class AddRepositoryModel {
 
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            try await store.add(url: folder, name: trimmed.isEmpty ? nil : trimmed)
+            try await repositories.add(url: folder, name: trimmed.isEmpty ? nil : trimmed)
             return true
         } catch {
             kind = nil
@@ -94,7 +94,7 @@ final class AddRepositoryModel {
         refusal = nil
 
         do {
-            let kind = try await store.validate(url: url)
+            let kind = try await repositories.validate(url: url)
             // Another pick landed while this one was being checked.
             guard folder == url else { return }
             self.kind = kind

@@ -137,6 +137,18 @@ private nonisolated struct Snapshot: Codable, Sendable, Equatable {
         #expect(files[0].hasSuffix(".json"))
     }
 
+    @Test func aWindowSnapshotGoesUnderWindows() async throws {
+        let store = makeStore()
+        let id = UUID()
+
+        try await store.save(Snapshot(openTabs: ["a"]), forKey: WindowSnapshot.persistenceKey(for: id))
+
+        let files = try FileManager.default.contentsOfDirectory(atPath: root.appending(path: "windows").path)
+        #expect(files.count == 1)
+        #expect(files[0].hasPrefix(id.uuidString))
+        #expect(try await store.load(Snapshot.self, forKey: WindowSnapshot.persistenceKey(for: id))?.openTabs == ["a"])
+    }
+
     /// The whole point of files over a SQLite blob: what the app remembers can
     /// be read without the app.
     @Test func whatIsWrittenIsReadableJSON() async throws {
@@ -216,7 +228,7 @@ private nonisolated struct Snapshot: Codable, Sendable, Equatable {
         let store = makeStore()
         let bookmark = Data((0..<740).map { UInt8($0 % 251) })
         let snapshot = AppSnapshot(repositories: [
-            Repository(name: "herder", path: "/code/herder", bookmark: bookmark, order: 0)
+            Repository(name: "herder", path: "/code/herder", bookmark: bookmark)
         ])
 
         try await store.save(snapshot, forKey: AppSnapshot.persistenceKey)

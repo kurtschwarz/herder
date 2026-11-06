@@ -83,14 +83,18 @@ import Testing
         }
     }
 
-    @Test func refusesAFolderThatIsAlreadyOpen() async throws {
+    /// The pool holds a folder once. Another window picking it joins the
+    /// record, which is what keeps one bookmark and one hold on the sandbox per
+    /// folder.
+    @Test func aFolderAlreadyAdoptedIsJoinedNotAddedAgain() async throws {
         let url = repository("/code/api")
-        try await store.add(url: url)
+        let first = try await store.add(url: url, name: "api")
 
-        await #expect(throws: RepositoryStoreError.alreadyOpen(url)) {
-            _ = try await store.add(url: url)
-        }
+        let second = try await store.add(url: url, name: "something else")
+
+        #expect(second == first)
         #expect(repositories.count == 1)
+        #expect(bookmarks.accessedURLs.count == 1)
     }
 
     @Test func recognisesAFolderItAlreadyHasUnderAnewPath() async throws {
@@ -101,9 +105,16 @@ import Testing
         let moved = repository("/elsewhere/api")
         bookmarks.redirect(workspace.bookmark, to: moved)
 
-        await #expect(throws: RepositoryStoreError.alreadyOpen(moved)) {
-            _ = try await store.add(url: moved)
-        }
+        #expect(try await store.add(url: moved).id == workspace.id)
+        #expect(repositories.count == 1)
+    }
+
+    @Test func aPooledFolderCanBeFoundByItsPath() async throws {
+        let url = repository("/code/api")
+        let added = try await store.add(url: url)
+
+        #expect(store.pooled(holding: url) == added)
+        #expect(store.pooled(holding: self.url("/code/web")) == nil)
     }
 
     // MARK: - Ordering
@@ -133,9 +144,8 @@ import Testing
         await #expect(throws: RepositoryStoreError.isLinkedWorktree(mainRepository: main)) {
             try await store.validate(url: worktree)
         }
-        await #expect(throws: RepositoryStoreError.alreadyOpen(open)) {
-            try await store.validate(url: open)
-        }
+        // Already in the pool is not a refusal: another window may want it.
+        #expect(try await store.validate(url: open) == .mainWorkingTree)
     }
 
     @Test func theDefaultNameIsWhatAddingWouldUse() async throws {
@@ -181,20 +191,6 @@ import Testing
         #expect(repositories.map(\.name) == ["api", "web", "infra"])
     }
 
-    @Test func reorderingRenumbersEveryRow() async throws {
-        for name in ["api", "web", "infra"] {
-            try await store.add(url: repository("/code/\(name)"))
-        }
-
-        var ordered = repositories
-        ordered.insert(ordered.removeLast(), at: 0)
-        await store.reorder(to: ordered)
-
-        let reloaded = repositories
-        #expect(reloaded.map(\.name) == ["infra", "api", "web"])
-        #expect(reloaded.map(\.order) == [0, 1, 2])
-    }
-
     @Test func removingAWorkspaceLeavesTheOthersWhereTheyWere() async throws {
         for name in ["api", "web", "infra"] {
             try await store.add(url: repository("/code/\(name)"))
@@ -202,11 +198,7 @@ import Testing
 
         await store.delete(try #require(repositories.first))
 
-        // The gap is deliberate: renumbering here would move rows the user never
-        // touched, and would collide with an undone delete.
-        let remaining = repositories
-        #expect(remaining.map(\.name) == ["web", "infra"])
-        #expect(remaining.map(\.order) == [1, 2])
+        #expect(repositories.map(\.name) == ["web", "infra"])
     }
 
     @Test func addingAfterADeleteStillGoesToTheBottom() async throws {
@@ -237,7 +229,6 @@ import Testing
 
         let readded = try await store.add(url: url)
         #expect(readded.name == "api")
-        #expect(readded.order == 0)
     }
 
     // MARK: - Opening at launch

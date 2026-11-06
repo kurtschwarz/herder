@@ -10,19 +10,21 @@ import Testing
     let git = StubGitClient()
     let state = InMemoryStateStore()
     let store: RepositoryStore
+    let list: WindowRepositories
     let picker = StubFolderPickerClient()
     let model: RepositoriesModel
 
     init() throws {
         store = RepositoryStore(bookmarks: bookmarks, git: git, state: state)
-        model = RepositoriesModel(store: store, git: git, picker: picker)
+        list = WindowRepositories(store: store)
+        model = RepositoriesModel(repositories: list, git: git, picker: picker)
     }
 
     func addRepository(_ path: String) async throws -> Repository {
         let url = URL(filePath: path)
         git.seed(url, .mainWorkingTree)
         git.seed(worktrees: [GitWorktree(path: url, checkout: .branch("main"), isMainWorkingTree: true)], at: url)
-        return try await store.add(url: url)
+        return try await list.add(url: url)
     }
 
     @Test func refreshReadsTheWorktreesOfOpenRepositories() async throws {
@@ -79,30 +81,63 @@ import Testing
         #expect(model.listings[repository.id] != nil)
     }
 
-    /// Folding is the user's arrangement, so it is on the repository record and
-    /// comes back with it rather than being redone every launch.
+    /// Folding is the user's arrangement of this window, so it is in the
+    /// window's list and comes back with it rather than being redone every
+    /// launch.
     @Test func collapsingSurvivesALaunch() async throws {
         let repository = try await addRepository("/code/api")
         await model.toggle(repository)
 
         let relaunched = RepositoryStore(bookmarks: bookmarks, git: git, state: state)
         await relaunched.load()
-        let next = RepositoriesModel(store: relaunched, git: git, picker: picker)
+        let next = RepositoriesModel(
+            repositories: WindowRepositories(store: relaunched, members: list.members),
+            git: git,
+            picker: picker
+        )
 
         #expect(!next.isExpanded(try #require(relaunched.repositories.first)))
     }
 
-    @Test func removingForgetsTheRepositoryAndItsState() async throws {
+    /// Folding in one window is not folding in another.
+    @Test func collapsingIsPerWindow() async throws {
+        let repository = try await addRepository("/code/api")
+        let other = RepositoriesModel(
+            repositories: WindowRepositories(store: store, members: [RepositoryMembership(repositoryID: repository.id)]),
+            git: git,
+            picker: picker
+        )
+
+        await model.toggle(repository)
+
+        #expect(!model.isExpanded(repository))
+        #expect(other.isExpanded(repository))
+    }
+
+    /// Removing takes it out of this window and nothing else: the record and
+    /// its bookmark stay, because they cannot be rebuilt.
+    @Test func removingTakesTheRepositoryOutOfThisWindowOnly() async throws {
         let repository = try await addRepository("/code/api")
         let id = repository.id
         await model.refresh([repository])
-        await model.toggle(repository)
 
-        await model.remove(repository)
+        model.remove(repository)
 
-        #expect(store.repositories.isEmpty)
+        #expect(model.repositories.isEmpty)
         #expect(model.listings[id] == nil)
-        #expect(store[id] == nil)
+        #expect(store[id] != nil)
+    }
+
+    /// The name is the pool's, so a rename elsewhere is seen here without
+    /// reading the worktrees again.
+    @Test func theNameOfARepositoryFollowsARenameInAnotherWindow() async throws {
+        let repository = try await addRepository("/code/api")
+        await model.refresh([repository])
+        let other = WindowRepositories(store: store, members: list.members)
+
+        await other.rename(repository, to: "Gateway")
+
+        #expect(model.nameOfRepository(holding: URL(filePath: "/code/api")) == "Gateway")
     }
 
     @Test func committingARenameEndsEditingAndSavesTheName() async throws {
@@ -236,7 +271,7 @@ import Testing
     // MARK: - Which repository a worktree belongs to
     //
     // These replace four tests about `selectedWorktree`, which this model no
-    // longer owns: which workspace is active is the window's, in `WindowModel`.
+    // longer owns: which workspace is active is the window's, in `WindowEnvironment`.
     // What is left here is the association the old selection kept by hand — and
     // which the listings already knew — plus the panes' need to name it.
 

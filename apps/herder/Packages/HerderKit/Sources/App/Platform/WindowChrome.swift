@@ -9,16 +9,27 @@ import SwiftUI
 /// is still laid out beneath it. `.fullSizeContentView` reclaims the strip. Neither
 /// has a SwiftUI spelling, hence reaching for the `NSWindow`.
 struct WindowChrome: NSViewRepresentable {
+    /// Called when the user closes the window. Not when the app quits: AppKit
+    /// does not post the notification this listens for while terminating, which
+    /// is the whole difference between a window being closed and a window
+    /// merely going away with the app.
+    var onClose: () -> Void = {}
+
     /// Holds the resize observer for as long as the view is alive.
     final class Coordinator {
         var observer: NSObjectProtocol?
+        var closeObserver: NSObjectProtocol?
         var doubleClickMonitor: Any?
+        var onClose: () -> Void = {}
 
         // Isolated so it can reach `observer`, which this module's default
         // `MainActor` isolation otherwise puts out of a nonisolated deinit's reach.
         isolated deinit {
             if let observer {
                 NotificationCenter.default.removeObserver(observer)
+            }
+            if let closeObserver {
+                NotificationCenter.default.removeObserver(closeObserver)
             }
             if let doubleClickMonitor {
                 NSEvent.removeMonitor(doubleClickMonitor)
@@ -44,6 +55,19 @@ struct WindowChrome: NSViewRepresentable {
 
     private func configure(_ window: NSWindow?, _ coordinator: Coordinator) {
         guard let window else { return }
+
+        // Reassigned every time, because the closure captures the window's
+        // state, which does not exist when the view is first made.
+        coordinator.onClose = onClose
+        if coordinator.closeObserver == nil {
+            coordinator.closeObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { [weak coordinator] _ in
+                MainActor.assumeIsolated { coordinator?.onClose() }
+            }
+        }
 
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true

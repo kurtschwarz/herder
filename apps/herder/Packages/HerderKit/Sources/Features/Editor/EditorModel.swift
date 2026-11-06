@@ -42,7 +42,7 @@ public final class EditorModel {
     private var generation = 0
 
     /// The file open, or `nil` when none is.
-    private(set) var file: URL?
+    public private(set) var file: URL?
 
     /// What was last read from it. `nil` until the first read finishes.
     private(set) var content: Content?

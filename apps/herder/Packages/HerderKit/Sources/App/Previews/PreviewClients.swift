@@ -63,7 +63,8 @@ struct PreviewFileWatcherClient: FileWatcherClient {
 }
 
 extension AppEnvironment {
-    /// An app environment over fakes, with two repositories already adopted.
+    /// An app environment over fakes, with two repositories already adopted and
+    /// listed by the window that appears.
     ///
     /// State goes to a throwaway directory under the system temporary
     /// directory, one per preview, so a canvas never reads or writes the real
@@ -79,10 +80,17 @@ extension AppEnvironment {
             persistence: PersistenceStack.temporary()
         )
 
+        // Adopted into the pool, then listed by a window the preview's own
+        // window adopts: a repository no window lists is not on screen.
         Task {
+            var members: [RepositoryMembership] = []
             for name in ["agent-editor", "herder"] {
-                _ = try? await environment.repositories.add(url: URL(filePath: "/preview/\(name)"), name: name)
+                let url = URL(filePath: "/preview/\(name)")
+                if let repository = try? await environment.repositories.add(url: url, name: name) {
+                    members.append(RepositoryMembership(repositoryID: repository.id))
+                }
             }
+            await environment.windows.save(WindowSnapshot(id: UUID(), repositories: members))
         }
         return environment
     }

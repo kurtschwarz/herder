@@ -82,8 +82,10 @@ struct RepositoryRow: View {
 
             Divider()
 
-            Button("Remove", role: .destructive) {
-                Task { await model.remove(repository) }
+            // This window's list only: other windows keep it, and so does the
+            // app, which is why this is not a deletion.
+            Button("Remove from This Window", role: .destructive) {
+                model.remove(repository)
             }
         }
     }

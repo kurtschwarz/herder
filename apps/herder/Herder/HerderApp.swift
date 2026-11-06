@@ -33,12 +33,6 @@ struct HerderApp: App {
         // The design puts the traffic lights inside the sidebar's header rather
         // than in a title bar of their own.
         .windowStyle(.hiddenTitleBar)
-        .commands {
-            // ⌘N already opens a new window.
-            CommandGroup(after: .newItem) {
-                Button("Add Repository…") { environment.beginAddingRepository() }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
-            }
-        }
+        .commands { AppCommands() }
     }
 }

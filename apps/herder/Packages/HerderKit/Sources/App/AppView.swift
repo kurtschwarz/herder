@@ -13,77 +13,76 @@ import SwiftUI
 public struct AppView: View {
     @State private var environment: AppEnvironment
 
-    /// This window's own state. `@State`, so a second window gets a second one
-    /// and the two can show different checkouts.
-    @State private var window = WindowModel()
+    /// This window's own state and models, once it has claimed them. `@State`,
+    /// so a second window gets a second one and the two can show different
+    /// checkouts. `nil` for the moment between appearing and learning who it is.
+    @State private var window: WindowEnvironment?
 
-    /// Which workspace this window was showing, kept by the system per window
-    /// rather than by the app globally. The path, because `WorkspaceID` is a
-    /// path and `@SceneStorage` takes the primitives.
-    @SceneStorage("activeWorkspacePath") private var activeWorkspacePath: String?
+    /// What names this window across launches, kept by the system per scene.
+    /// All it holds: everything else about the window is in its snapshot, which
+    /// is found by this. The system only returns it when it restores the scene,
+    /// and ``AppEnvironment/claimWindow(id:)`` covers the case where it does not.
+    @SceneStorage("windowID") private var storedID: String?
 
     public init(environment: AppEnvironment) {
         _environment = State(initialValue: environment)
     }
 
-    /// The workspace this window is showing, resolved from the id. `nil` until
-    /// the task below has opened it, and again once its folder goes away.
-    private var activeWorkspace: Workspace? {
-        guard let id = window.activeWorkspaceID else { return nil }
-        return environment.worktrees.workspace(for: id)
+    public var body: some View {
+        Group {
+            if let window {
+                WindowView(window: window, environment: environment)
+            }
+        }
+        .frame(minWidth: 960, minHeight: 460)
+        .background { WindowGlass() }
+        .background(WindowChrome { close() })
+        // After the backgrounds, so the glass runs under the title bar too.
+        .ignoresSafeArea()
+        .preferredColorScheme(.dark)
+        // Once, on appear. Waits for the app to start, which is where the
+        // folder access a workspace needs is taken.
+        .task {
+            guard window == nil else { return }
+            let claimed = await environment.claimWindow(id: storedID.flatMap(UUID.init(uuidString:)))
+            storedID = claimed.id.uuidString
+            window = claimed
+            await claimed.reopenHeldWorkspaces()
+        }
     }
 
-    public var body: some View {
+    private func close() {
+        guard let window else { return }
+        Task { await environment.close(window) }
+    }
+}
+
+/// A window once it knows who it is.
+private struct WindowView: View {
+    let window: WindowEnvironment
+    let environment: AppEnvironment
+
+    var body: some View {
         HStack(spacing: Theme.Spacing.paneGap) {
-            Sidebar(model: environment.repositoryList, store: environment.repositories)
+            Sidebar(model: window.repositoryList)
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
 
-            EditorView(model: environment.editor, rootName: activeWorkspaceName)
+            EditorView(model: window.editor, rootName: activeWorkspaceName)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            FileTreeView(model: environment.fileTree, rootName: activeWorkspaceName)
+            FileTreeView(model: window.fileTree, rootName: activeWorkspaceName)
                 .frame(width: Theme.Size.sidebarWidth)
                 .glassPaneBackground()
         }
         // Features read the workspace; they never ask which one is active.
-        .environment(activeWorkspace)
+        .environment(window.activeWorkspace)
         // And they ask for a different one through here, rather than reaching
         // for a window they cannot see.
         .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
-        // Restores what this window was showing. Once, on appear: after that
-        // the window is the source of truth and the storage follows it.
-        //
-        // The scene storage is the window's own record but only comes back
-        // when the system restores the scene, so a window without it shows
-        // whatever was shown last. Both wait for the app to start, which is
-        // where the folder access a workspace needs is taken.
-        .task {
-            guard window.activeWorkspaceID == nil else { return }
-            if let path = activeWorkspacePath {
-                await environment.start()
-                window.activate(WorkspaceID(PathKey(canonical: path)))
-            } else if let id = await environment.restoredWorkspace() {
-                window.activate(id)
-            }
-        }
-        .onChange(of: window.activeWorkspaceID) { _, id in
-            activeWorkspacePath = id?.root.path
-        }
         // Switching workspaces is this, and only this: the id changed, so open
         // what it names. Nothing else is torn down.
-        .task(id: window.activeWorkspaceID) {
-            // The file from the worktree before is not this one's. Each
-            // workspace remembers its own, so this shows that one instead.
-            environment.editor.close()
-            let id = window.activeWorkspaceID
-            // Opened here, ahead of the tree, so the editor has the workspace
-            // to read from. Opening is idempotent: the tree's open finds it.
-            let workspace = if let id { await environment.worktrees.open(id) } else { nil as Workspace? }
-            guard !Task.isCancelled else { return }
-            await environment.editor.restore(in: workspace)
-            await environment.fileTree.setRoot(id?.url)
-        }
+        .task(id: window.activeWorkspaceID) { await window.showActiveWorkspace() }
         // Tells the registry what this window is showing, which is what
         // decides whether that workspace drains. Idempotent, so saying it
         // again on every change is the whole protocol.
@@ -97,33 +96,25 @@ public struct AppView: View {
         // it, and the workspace with it: there is nothing left to keep open.
         // The workspace marks itself unavailable when its folder goes, so this
         // is the one place that has to notice.
-        .onChange(of: activeWorkspace?.isAvailable) { _, isAvailable in
+        .onChange(of: window.activeWorkspace?.isAvailable) { _, isAvailable in
             guard isAvailable == false, let id = window.activeWorkspaceID else { return }
-            window.activate(nil)
-            Task { await environment.worktrees.close(id) }
+            Task { await window.forget(id) }
         }
-        // Selection only ever opens. A file that goes from disk loses its
-        // selection but not its pane: the editor keeps it, struck through.
-        .task(id: environment.fileTree.selected) {
-            guard let file = environment.fileTree.selected else { return }
-            await environment.editor.open(file)
-        }
+        .task(id: window.fileTree.selected) { await window.openSelectedFile() }
         // The modal's scrim swallows clicks; this stops the keyboard reaching
         // what it covers.
-        .disabled(environment.repositoryList.isModalPresented)
+        .disabled(window.repositoryList.isModalPresented)
         .padding(Theme.Spacing.windowPadding)
-        .frame(minWidth: 960, minHeight: 460)
-        .background { WindowGlass() }
-        .background(WindowChrome())
         // The window draws no title bar, but SwiftUI still reserves a safe area
         // the height of one. Without this the panes start below the traffic
         // lights instead of around them.
         .ignoresSafeArea()
         // After the safe area is ignored, so the scrim covers the whole window,
         // title bar included.
-        .overlay { AddRepositoryOverlay(model: environment.repositoryList) }
-        .overlay { NewSessionOverlay(model: environment.repositoryList) }
-        .preferredColorScheme(.dark)
+        .overlay { AddRepositoryOverlay(model: window.repositoryList) }
+        .overlay { NewSessionOverlay(model: window.repositoryList) }
+        // Where ⇧⌘N finds the window it should open the modal in.
+        .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
     }
 
     /// What the panes call the checkout they are showing: the workspace's name,
@@ -131,7 +122,7 @@ public struct AppView: View {
     /// what it belongs to.
     private var activeWorkspaceName: String? {
         guard let url = window.activeWorkspaceID?.url else { return nil }
-        return environment.repositoryList.nameOfRepository(holding: url)
+        return window.repositoryList.nameOfRepository(holding: url)
     }
 }
 

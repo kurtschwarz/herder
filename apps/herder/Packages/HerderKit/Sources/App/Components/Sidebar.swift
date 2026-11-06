@@ -7,12 +7,11 @@ import SwiftUI
 /// `AppFeature` uses it.
 struct Sidebar: View {
     let model: RepositoriesModel
-    let store: RepositoryStore
 
     var body: some View {
         VStack(spacing: 0) {
             SidebarHeader()
-            RepositoriesView(model: model, store: store)
+            RepositoriesView(model: model)
         }
         // The empty list has nothing tall in it, and the pane would shrink to
         // fit; the pane's height is the window's, not its content's.
@@ -36,7 +35,7 @@ private struct SidebarHeader: View {
 #if DEBUG
 #Preview {
     let environment = AppEnvironment.preview
-    Sidebar(model: environment.repositoryList, store: environment.repositories)
+    Sidebar(model: environment.makeWindow().repositoryList)
         .frame(width: Theme.Size.sidebarWidth, height: 420)
         .glassPaneBackground()
         .padding(Theme.Spacing.windowPadding)

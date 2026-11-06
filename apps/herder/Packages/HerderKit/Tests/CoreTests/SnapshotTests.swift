@@ -67,26 +67,66 @@ import Testing
     // MARK: - AppSnapshot
 
     @Test func appSnapshotSurvivesARoundTrip() throws {
-        let snapshot = AppSnapshot(openWorkspaces: [
-            WorkspaceID(PathKey(canonical: "/code/api")),
-            WorkspaceID(PathKey(canonical: "/code/web")),
-        ])
+        let snapshot = AppSnapshot(windows: [UUID(), UUID()])
         #expect(try decoder.decode(AppSnapshot.self, from: try encoder.encode(snapshot)) == snapshot)
     }
 
-    /// Reopening in a different order would shuffle the sidebar for no reason
-    /// the user caused.
-    @Test func appSnapshotKeepsTheOrderWorkspacesWereOpenedIn() throws {
-        let ids = ["/code/web", "/code/api", "/code/tools"].map { WorkspaceID(PathKey(canonical: $0)) }
+    /// The order is the point of the index: it says which window was used last.
+    @Test func appSnapshotKeepsTheOrderWindowsWereUsedIn() throws {
+        let ids = [UUID(), UUID(), UUID()]
 
-        let decoded = try decoder.decode(AppSnapshot.self, from: try encoder.encode(AppSnapshot(openWorkspaces: ids)))
+        let decoded = try decoder.decode(AppSnapshot.self, from: try encoder.encode(AppSnapshot(windows: ids)))
 
-        #expect(decoded.openWorkspaces == ids)
+        #expect(decoded.windows == ids)
     }
 
     @Test func anEmptyAppSnapshotDecodes() throws {
         let snapshot = try decoder.decode(AppSnapshot.self, from: Data("{}".utf8))
-        #expect(snapshot.openWorkspaces.isEmpty)
+        #expect(snapshot.windows.isEmpty)
+        #expect(snapshot.repositories.isEmpty)
         #expect(snapshot.version == 1)
+    }
+
+    /// Written before windows had state of their own. The fields it carried are
+    /// ignored rather than failing the load, which would lose the repositories
+    /// beside them.
+    @Test func anOlderAppSnapshotWithFieldsThatMovedStillDecodes() throws {
+        let json = Data(#"{"openWorkspaces":["/code/api"],"lastActiveWorkspace":"/code/api"}"#.utf8)
+        #expect(try decoder.decode(AppSnapshot.self, from: json).windows.isEmpty)
+    }
+
+    // MARK: - WindowSnapshot
+
+    @Test func windowSnapshotSurvivesARoundTrip() throws {
+        let snapshot = WindowSnapshot(
+            id: UUID(),
+            openWorkspaces: [WorkspaceID(PathKey(canonical: "/code/api")), WorkspaceID(PathKey(canonical: "/code/web"))],
+            activeWorkspace: WorkspaceID(PathKey(canonical: "/code/web"))
+        )
+        #expect(try decoder.decode(WindowSnapshot.self, from: try encoder.encode(snapshot)) == snapshot)
+    }
+
+    @Test func windowSnapshotMissingEverythingOptionalStillDecodes() throws {
+        let id = UUID()
+        let snapshot = try decoder.decode(WindowSnapshot.self, from: Data(#"{"id":"\#(id.uuidString)"}"#.utf8))
+
+        #expect(snapshot.id == id)
+        #expect(snapshot.openWorkspaces.isEmpty)
+        #expect(snapshot.activeWorkspace == nil)
+    }
+
+    @Test func windowSnapshotWithoutAnIdentityIsRefused() {
+        #expect(throws: (any Error).self) {
+            try decoder.decode(WindowSnapshot.self, from: Data("{}".utf8))
+        }
+    }
+
+    @Test func eachWindowGetsItsOwnKey() {
+        #expect(WindowSnapshot(id: UUID()).persistenceKey != WindowSnapshot(id: UUID()).persistenceKey)
+    }
+
+    @Test func aWindowWithNothingInItIsBlank() {
+        #expect(WindowSnapshot(id: UUID()).isBlank)
+        #expect(!WindowSnapshot(id: UUID(), activeWorkspace: WorkspaceID(PathKey(canonical: "/code/api"))).isBlank)
     }
 }

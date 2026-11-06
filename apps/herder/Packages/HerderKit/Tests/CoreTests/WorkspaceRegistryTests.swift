@@ -154,79 +154,94 @@ import Testing
         #expect(registry.workspace(for: api) != nil)
     }
 
-    // MARK: - Across a launch
+    // MARK: - Holding
 
-    @Test func whatIsOpenIsRecorded() async throws {
+    /// A workspace lives while any window names it, so one window letting go
+    /// of a checkout another is still on does not close it underneath.
+    @Test func aWorkspaceStaysWhileAnotherHolderWantsIt() async throws {
         let registry = makeRegistry()
+        let first = NSObject()
+        let second = NSObject()
+        let opened = await registry.open(api, holder: first)
+        await registry.open(api, holder: second)
 
-        await registry.open(api)
-        await registry.open(web)
+        await registry.close(api, holder: first)
 
-        let snapshot = try await state.load(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)
-        #expect(snapshot?.openWorkspaces.map(\.root.path).sorted() == ["/code/api", "/code/web"])
+        #expect(registry.workspace(for: api) === opened)
     }
 
-    @Test func closingTakesItOutOfWhatIsOpen() async throws {
+    @Test func theLastHolderLettingGoClosesIt() async throws {
         let registry = makeRegistry()
-        await registry.open(api)
-        await registry.open(web)
+        let first = NSObject()
+        let second = NSObject()
+        await registry.open(api, holder: first)
+        await registry.open(api, holder: second)
+
+        await registry.close(api, holder: first)
+        await registry.close(api, holder: second)
+
+        #expect(registry.workspace(for: api) == nil)
+    }
+
+    /// Closing without saying who is the old behaviour, and still drops it
+    /// whoever holds it.
+    @Test func closingOutrightIgnoresHolders() async throws {
+        let registry = makeRegistry()
+        await registry.open(api, holder: NSObject())
 
         await registry.close(api)
 
-        let snapshot = try await state.load(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)
-        #expect(snapshot?.openWorkspaces.map(\.root.path) == ["/code/web"])
+        #expect(registry.workspace(for: api) == nil)
     }
 
-    @Test func restoringReopensWhatWasOpen() async throws {
-        let first = makeRegistry()
-        await first.open(api)
-        await first.open(web)
-
-        let relaunched = makeRegistry()
-        await relaunched.restore()
-
-        #expect(relaunched.workspaces.count == 2)
-        #expect(relaunched.workspace(for: api) != nil)
-        #expect(relaunched.workspace(for: web) != nil)
-    }
-
-    /// Restoring is a watcher apiece and no subprocesses: nothing is on screen
-    /// yet, so nothing drains.
-    @Test func restoringAsksGitAboutNothing() async throws {
-        let first = makeRegistry()
-        await first.open(api)
-        await first.open(web)
-        let before = git.statusLookups.count
-
-        let relaunched = makeRegistry()
-        await relaunched.restore()
-        await settle()
-
-        #expect(git.statusLookups.count == before)
-    }
-
-    /// Quitting leaves the open set alone: these workspaces are open, the app
-    /// is merely stopping, and the next launch is meant to bring them back.
-    @Test func stoppingDoesNotForgetWhatWasOpen() async throws {
+    /// A holder naming a workspace twice is one hold.
+    @Test func holdingTwiceIsHoldingOnce() async throws {
         let registry = makeRegistry()
-        await registry.open(api)
+        let window = NSObject()
+        await registry.open(api, holder: window)
+        await registry.open(api, holder: window)
 
-        registry.stop()
+        await registry.close(api, holder: window)
 
-        let snapshot = try await state.load(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)
-        #expect(snapshot?.openWorkspaces.map(\.root.path) == ["/code/api"])
+        #expect(registry.workspace(for: api) == nil)
     }
 
-    /// The repository list shares the key, so neither may write the other away.
-    @Test func recordingWhatIsOpenKeepsTheRepositoryList() async throws {
-        let repositories = RepositoryStore(bookmarks: InMemoryBookmarkClient(), git: git, state: state)
-        git.seed(api.url, .mainWorkingTree)
-        try await repositories.add(url: api.url, name: "api")
+    /// A window closing lets go of everything it held that no other window
+    /// does, and nothing else.
+    @Test func releasingAHolderKeepsWhatOthersHold() async throws {
+        let registry = makeRegistry()
+        let closing = NSObject()
+        let staying = NSObject()
+        await registry.open(api, holder: closing)
+        await registry.open(web, holder: closing)
+        await registry.open(web, holder: staying)
 
-        await makeRegistry().open(web)
+        await registry.release(holder: closing)
 
-        let snapshot = try await state.load(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)
-        #expect(snapshot?.repositories.map(\.name) == ["api"])
-        #expect(snapshot?.openWorkspaces.map(\.root.path) == ["/code/web"])
+        #expect(registry.workspace(for: api) == nil)
+        #expect(registry.workspace(for: web) != nil)
+    }
+
+    /// Switching away is not letting go: showing and holding are separate.
+    @Test func displayingSomethingElseDoesNotLetGo() async throws {
+        let registry = makeRegistry()
+        let window = NSObject()
+        await registry.open(api, holder: window)
+        await registry.open(web, holder: window)
+        registry.display(api, from: window)
+
+        registry.display(web, from: window)
+
+        #expect(registry.workspace(for: api) != nil)
+    }
+
+    /// The registry writes nothing about who holds what: that is each window's
+    /// to record.
+    @Test func openingWritesNothingToTheAppSnapshot() async throws {
+        let registry = makeRegistry()
+
+        await registry.open(api, holder: NSObject())
+
+        #expect(try await state.load(AppSnapshot.self, forKey: AppSnapshot.persistenceKey) == nil)
     }
 }

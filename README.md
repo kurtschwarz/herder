@@ -133,7 +133,7 @@ Two levels, because the app has two:
   has a sidebar position, and it holds a security-scoped bookmark — the one piece
   of state in the app that cannot be rebuilt from disk, because regenerating it
   means asking the user to find the folder again in an open panel. `RepositoryStore`
-  owns the list.
+  owns the pool; each window lists some of it.
 - A **`Workspace`** is one checkout: a repository's worktree, or a plain folder.
   It holds that checkout's listings, its git state and each feature's UI state.
   `WorkspaceRegistry` holds however many are open.
@@ -141,7 +141,8 @@ Two levels, because the app has two:
 A feature takes `@Environment(Workspace.self)` and gets whichever one its window
 resolved, so nothing ever asks "which is active?" — which is what keeps two
 windows from disagreeing. Which workspace a window is showing belongs to the
-window, in `WindowModel`.
+window, in `WindowEnvironment`, along with that window's own editor, file tree
+and sidebar models.
 
 Opening a workspace is idempotent and closing is explicit, so switching away from
 a worktree keeps it: its listings, its git state, and later its terminals and
@@ -296,7 +297,8 @@ The source of truth for code is the disk and git. Herder persists only its own
 state, as JSON under `~/Library/Application Support/Herder/`:
 
 ```
-state.json                       # the repository list, and which workspaces were open
+state.json                       # the repository pool, and an index of the windows
+windows/<id>-<hash>.json         # one per window: what it lists, keeps open and shows
 workspaces/<name>-<hash>.json    # one per workspace: its features' UI state
 ```
 
@@ -326,9 +328,9 @@ Two things that are not obvious:
   feature was renamed, because changing the key would leave every saved blob
   unreachable and close every folder the user had open.
 
-Which workspace each window is showing is `@SceneStorage`, so macOS restores it
-per window — and only on a clean quit, which means killing the process never
-exercises it.
+Each window has an id kept in `@SceneStorage` and a snapshot found by it. macOS
+only restores the id on a clean quit, so a window without one adopts the window
+used last when no other is open, and a new window beside another starts blank.
 
 ## Testing
 

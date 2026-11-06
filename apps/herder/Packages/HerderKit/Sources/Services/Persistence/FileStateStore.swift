@@ -14,6 +14,7 @@ import Foundation
 /// ```
 /// ~/Library/Application Support/Herder/
 /// ├── state.json                       # AppSnapshot
+/// ├── windows/<id>-<hash>.json         # WindowSnapshot, one per window
 /// └── workspaces/<name>-<hash>.json    # WorkspaceSnapshot, one per workspace
 /// ```
 ///
@@ -112,6 +113,12 @@ public actor FileStateStore: StateStore {
             return root.appending(path: "state.json")
         }
 
+        if let id = key.dropping(prefix: Self.windowPrefix) {
+            return root
+                .appending(path: "windows", directoryHint: .isDirectory)
+                .appending(path: "\(Self.fileName(for: id, fullKey: key)).json")
+        }
+
         if let path = key.dropping(prefix: Self.workspacePrefix) {
             return root
                 .appending(path: "workspaces", directoryHint: .isDirectory)
@@ -122,6 +129,7 @@ public actor FileStateStore: StateStore {
     }
 
     private static let workspacePrefix = "workspace:"
+    private static let windowPrefix = "window:"
 
     /// A file name for a key that is usually an absolute path.
     ///

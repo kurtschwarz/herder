@@ -38,19 +38,24 @@ public final class AppEnvironment {
     /// ``StateStore``.
     public let repositories: RepositoryStore
 
+    /// Where windows' snapshots are kept, and which exist.
+    let windows: WindowStore
+
+    /// Windows that have claimed an identity and not yet closed.
+    @ObservationIgnored
+    private var liveWindows: Set<UUID> = []
+
     /// The authoritative file and git state of the worktrees being watched.
     /// Held here rather than inside a feature because more than one pane reads
     /// it and features never import each other.
     public let worktrees: WorkspaceRegistry
 
-    /// What the sidebar shows beside the list itself.
-    public let repositoryList: RepositoriesModel
-
-    /// The file tree of the worktree selected in the sidebar.
-    public let fileTree: FileTreeModel
-
-    /// The file open in the middle pane.
-    public let editor: EditorModel
+    /// What each window's models are built from. The services are the app's;
+    /// the models made from them are the window's. See ``makeWindow(id:)``.
+    private let git: any GitClient
+    private let files: any FileClient
+    private let folderPicker: any FolderPickerClient
+    private let highlighter: any SyntaxHighlighter
 
     /// The live app: every service is the real one.
     ///
@@ -115,25 +120,78 @@ public final class AppEnvironment {
     ) {
         self.persistence = persistence
         self.state = persistence.state
-        let repositories = RepositoryStore(bookmarks: bookmarks, git: git, state: persistence.state)
+        let snapshots = AppSnapshotStore(state: persistence.state)
+        let repositories = RepositoryStore(
+            bookmarks: bookmarks, git: git, state: persistence.state, snapshots: snapshots
+        )
         self.repositories = repositories
-        self.repositoryList = RepositoriesModel(store: repositories, git: git, picker: folderPicker)
-        let worktrees = WorkspaceRegistry(
+        self.windows = WindowStore(snapshots: snapshots, state: persistence.state)
+        self.worktrees = WorkspaceRegistry(
             files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
         )
-        self.worktrees = worktrees
-        self.fileTree = FileTreeModel(store: worktrees)
-        self.editor = EditorModel(store: worktrees, files: files, highlighter: highlighter)
+        self.git = git
+        self.files = files
+        self.folderPicker = folderPicker
+        self.highlighter = highlighter
     }
 
-    /// Opens the add-repository modal. Here rather than on the sidebar because a
-    /// menu command, not just the sidebar's button, asks for it.
-    public func beginAddingRepository() {
-        repositoryList.beginAdding()
+    /// A window's own state and the models behind its panes.
+    ///
+    /// Built here because this is the only module allowed to name the services
+    /// they are made from. Each call makes a new set, which is the point: two
+    /// windows must not share an editor.
+    func makeWindow(id: UUID = UUID(), restoring snapshot: WindowSnapshot? = nil) -> WindowEnvironment {
+        let list = WindowRepositories(store: repositories, members: snapshot?.repositories ?? [])
+        return WindowEnvironment(
+            id: id,
+            repositories: list,
+            repositoryList: RepositoriesModel(repositories: list, git: git, picker: folderPicker),
+            fileTree: FileTreeModel(store: worktrees),
+            editor: EditorModel(store: worktrees, files: files, highlighter: highlighter),
+            worktrees: worktrees,
+            windows: windows,
+            restoring: snapshot
+        )
     }
 
-    /// Reads the repository list, takes access to every folder, and reopens the
-    /// worktrees that were open last time.
+    /// Gives a window that has just appeared its identity and its state.
+    ///
+    /// `stored` is the id the system kept for this window, which it hands back
+    /// only when it restores the scene. A window without one is either new or
+    /// had its scene lost, and the two look alike: quitting with every window
+    /// closed loses them all. So when no other window is open, it adopts the one
+    /// used last, and a relaunch never looks like the app forgot everything.
+    /// With another window open it is a blank slate, which is what ⌘N means.
+    ///
+    /// Waits for ``start()``, because the folder access a workspace needs is
+    /// taken there and a window's task may run before the app's.
+    func claimWindow(id stored: UUID?) async -> WindowEnvironment {
+        await start()
+        let index = await windows.index()
+
+        // No suspension from here to the insert, so two windows appearing at
+        // once cannot both adopt the same snapshot.
+        let id: UUID
+        if let stored, !liveWindows.contains(stored) {
+            id = stored
+        } else if liveWindows.isEmpty, let adopted = index.first {
+            id = adopted
+        } else {
+            id = UUID()
+        }
+        liveWindows.insert(id)
+
+        return makeWindow(id: id, restoring: await windows.load(id))
+    }
+
+    /// A window was closed by the user, as opposed to the app quitting.
+    func close(_ window: WindowEnvironment) async {
+        liveWindows.remove(window.id)
+        await window.didClose()
+    }
+
+    /// Reads the repository list and takes access to every folder. Windows reopen
+    /// their own worktrees when they claim themselves — see ``claimWindow(id:)``.
     ///
     /// `async`, because the list comes from ``StateStore``. The window renders
     /// before this finishes, showing an empty sidebar for the moment it takes.
@@ -149,17 +207,6 @@ public final class AppEnvironment {
     @ObservationIgnored
     private var starting: Task<Void, Never>?
 
-    /// The workspace a window with nothing of its own to restore should show:
-    /// the one most recently shown by any window.
-    ///
-    /// Starts the app first, and waits for it. `@SceneStorage` is read where
-    /// the window appears, but the folder access a workspace needs is taken in
-    /// ``start()``, and the two run side by side with no promised order.
-    public func restoredWorkspace() async -> WorkspaceID? {
-        await start()
-        return await worktrees.lastActiveWorkspace()
-    }
-
     private func begin() async {
         // Compiling the editor's grammars takes a few hundred milliseconds in
         // total, and all of it is paid the first time a file of each language
@@ -169,11 +216,6 @@ public final class AppEnvironment {
         Task.detached { await TreeSitterHighlighter.warmUp() }
 
         await repositories.load()
-
-        // Reopens the worktrees that were open last time. Cheap: none of them
-        // drains until a window shows one, so this is a watcher apiece and no
-        // subprocesses.
-        await worktrees.restore()
     }
 
     /// Hands back every folder the sandbox is holding open and stops watching

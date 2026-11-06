@@ -166,7 +166,7 @@ public final class FileTreeModel {
         }
     }
 
-    func select(_ file: URL) {
+    public func select(_ file: URL) {
         selected = file
     }
 

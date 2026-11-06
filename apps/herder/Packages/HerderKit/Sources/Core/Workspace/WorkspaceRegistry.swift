@@ -46,6 +46,14 @@ public final class WorkspaceRegistry {
     /// no count to drift. Several windows may name the same workspace.
     private var displayed: [ObjectIdentifier: WorkspaceID] = [:]
 
+    /// Who is keeping each workspace open. A workspace is held while any window
+    /// names it in its open set, and let go when the last of them lets go.
+    ///
+    /// Distinct from ``displayed``: showing a workspace and holding one are
+    /// different things. Switching away from a worktree must not tear it down,
+    /// so only holding decides how long it lives.
+    private var holders: [PathKey: Set<ObjectIdentifier>] = [:]
+
     /// Whether any of the app's windows is in front. Drains are suspended when
     /// none is: the worst event storms happen while the user is in a terminal
     /// watching the build that is causing them.
@@ -92,9 +100,14 @@ public final class WorkspaceRegistry {
     /// Returns before anything has been read. The caller is expected to hold
     /// the workspace and then refresh it, so the folders show as they are read
     /// rather than all at once after git has also answered.
+    ///
+    /// `holder` is whoever wants it kept: a window, for the workspaces in its
+    /// open set. Without one the workspace is held by nobody in particular and
+    /// lasts until ``close(_:holder:)`` is asked to drop it outright.
     @discardableResult
-    public func open(_ id: WorkspaceID) async -> Workspace? {
+    public func open(_ id: WorkspaceID, holder: AnyObject? = nil) async -> Workspace? {
         let key = id.root
+        if let holder { holders[key, default: []].insert(ObjectIdentifier(holder)) }
         if let existing = states[key], existing.isAvailable { return existing }
 
         // A folder that is not a working tree has no index to watch, which is
@@ -116,17 +129,25 @@ public final class WorkspaceRegistry {
         await workspace.restoreSnapshot()
         workspace.beginWatching()
         updateDraining()
-        await saveOpenWorkspaces()
         return workspace
     }
 
-    /// Closes a workspace: writes what it was showing, stops watching, and lets
-    /// it go.
+    /// Lets go of a workspace: writes what it was showing, stops watching, and
+    /// drops it.
+    ///
+    /// With a `holder`, only that holder lets go, and the workspace goes with it
+    /// only if nobody else is holding it: a second window on the same checkout
+    /// keeps it open. Without one it is dropped whoever holds it.
     ///
     /// Keeps where its watcher had got to, so opening it again replays what
     /// changed in between rather than starting blind.
-    public func close(_ id: WorkspaceID) async {
+    public func close(_ id: WorkspaceID, holder: AnyObject? = nil) async {
         let key = id.root
+        if let holder {
+            holders[key]?.remove(ObjectIdentifier(holder))
+            guard holders[key]?.isEmpty ?? true else { return }
+        }
+        holders[key] = nil
         guard let workspace = states[key] else { return }
         if let position = workspace.position { positions[key] = position }
         // Before stopping it, which cancels any save still waiting out its
@@ -135,19 +156,14 @@ public final class WorkspaceRegistry {
         workspace.stop()
         states[key] = nil
         updateDraining()
-        await saveOpenWorkspaces(forgetting: id)
     }
 
-    /// Opens again whatever was open when the app last saved.
-    ///
-    /// Cheap, because none of them drains until a window shows one: the cost of
-    /// restoring a worktree is a watcher, not a `git status`.
-    public func restore() async {
-        guard let snapshot = await state.loadIfReadable(AppSnapshot.self, forKey: AppSnapshot.persistenceKey) else {
-            return
-        }
-        for id in snapshot.openWorkspaces {
-            await open(id)
+    /// Lets go of everything `holder` was holding that nobody else is. For a
+    /// window closing.
+    public func release(holder: AnyObject) async {
+        let mine = ObjectIdentifier(holder)
+        for key in holders.filter({ $0.value.contains(mine) }).keys {
+            await close(WorkspaceID(key), holder: holder)
         }
     }
 
@@ -157,15 +173,9 @@ public final class WorkspaceRegistry {
     ///
     /// Idempotent: a window may say the same thing twice. Call it whenever what
     /// the window shows changes, and ``stopDisplaying(from:)`` when it closes.
-    ///
-    /// A workspace is also remembered as the last one shown, for the next
-    /// launch. Only a real one: `nil` is a window showing nothing, which at
-    /// launch is said before the remembered workspace has been asked for.
     public func display(_ id: WorkspaceID?, from window: AnyObject) {
         displayed[ObjectIdentifier(window)] = id
         updateDraining()
-        guard let id else { return }
-        enqueue { snapshot, _ in snapshot.lastActiveWorkspace = id }
     }
 
     public func stopDisplaying(from window: AnyObject) {
@@ -187,61 +197,7 @@ public final class WorkspaceRegistry {
         }
     }
 
-    // MARK: - Persisting
-
-    /// Records which workspaces are open, leaving the rest of the snapshot
-    /// alone: the repository list shares this key.
-    private func saveOpenWorkspaces(forgetting closed: WorkspaceID? = nil) async {
-        await update { snapshot, states in
-            snapshot.openWorkspaces = states.keys.map(WorkspaceID.init).sorted { $0.root.path < $1.root.path }
-            if let closed, snapshot.lastActiveWorkspace == closed { snapshot.lastActiveWorkspace = nil }
-        }
-    }
-
-    /// The workspace most recently shown by any window, as of the last save.
-    /// For a window with nothing of its own to restore.
-    public func lastActiveWorkspace() async -> WorkspaceID? {
-        await flushPendingWrites()
-        return await state.loadIfReadable(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)?.lastActiveWorkspace
-    }
-
-    /// Waits for every write queued so far.
-    public func flushPendingWrites() async {
-        await writes?.value
-    }
-
-    /// Writes made by ``display(_:from:)``, which is synchronous and so cannot
-    /// await. Chained rather than concurrent: each one reads the app snapshot
-    /// and writes it back whole, and two doing that at once would lose a field.
-    private var writes: Task<Void, Never>?
-
-    /// Reads the app snapshot, lets `change` edit it, and writes it back if it
-    /// came out different. Every write to the snapshot from here goes through
-    /// this, in order, so none can overwrite another's field.
-    private func update(_ change: @escaping @MainActor (inout AppSnapshot, [PathKey: Workspace]) -> Void) async {
-        await enqueue(change).value
-    }
-
-    /// Puts `change` in line without waiting for it. Joins the queue before it
-    /// returns, which is what lets a synchronous caller flush straight after.
-    @discardableResult
-    private func enqueue(
-        _ change: @escaping @MainActor (inout AppSnapshot, [PathKey: Workspace]) -> Void
-    ) -> Task<Void, Never> {
-        let previous = writes
-        let task = Task { [weak self] in
-            await previous?.value
-            guard let self else { return }
-            var snapshot = await state.loadIfReadable(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)
-                ?? AppSnapshot()
-            let before = snapshot
-            change(&snapshot, states)
-            guard snapshot != before else { return }
-            try? await state.save(snapshot, forKey: AppSnapshot.persistenceKey)
-        }
-        writes = task
-        return task
-    }
+    // MARK: - Stopping
 
     /// Puts every workspace away, keeping where its watcher had got to.
     ///
@@ -254,8 +210,8 @@ public final class WorkspaceRegistry {
     /// pending debounce; closing it properly means
     /// `applicationShouldTerminate` returning `.terminateLater`.
     ///
-    /// The open set is **not** cleared from the snapshot here: these workspaces
-    /// are open, the app is merely stopping, and the next launch restores them.
+    /// Which workspaces each window held is **not** cleared: they are open, the
+    /// app is merely stopping, and the next launch brings them back.
     public func stop() {
         for (path, workspace) in states {
             if let position = workspace.position { positions[path] = position }
@@ -263,5 +219,6 @@ public final class WorkspaceRegistry {
         }
         states = [:]
         displayed = [:]
+        holders = [:]
     }
 }

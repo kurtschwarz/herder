@@ -58,7 +58,7 @@ Features come in two kinds, and which kind a feature is decides how it gets its 
 
 **Workspace-scoped** features operate inside one checkout and receive it from the environment: `Editor`, `FileTree`, `AgentSessions`, `Terminal`, `Search`. They take `@Environment(Workspace.self)` and never look up "the active workspace" themselves.
 
-**App-scoped** features operate above any single workspace: `Repositories`, `Settings`. `Repositories` is the UI for `WorkspaceRegistry.open(_:)` and `close(_:)` and for setting `WindowModel.activeWorkspaceID` — it is the feature that *picks* the workspace the others run in, so it cannot be scoped to one. `CommandPalette` is app-scoped but reads the active workspace when there is one.
+**App-scoped** features operate above any single workspace: `Repositories`, `Settings`. `Repositories` is the UI for `WorkspaceRegistry.open(_:)` and `close(_:)` and for `WindowEnvironment.activate(_:)` — it is the feature that *picks* the workspace the others run in, so it cannot be scoped to one. `CommandPalette` is app-scoped but reads the active workspace when there is one.
 
 This mirrors the service scoping table below, and it is the rule for where a new feature goes: if it needs the registry rather than a workspace, it is app-scoped.
 
@@ -230,13 +230,14 @@ Each feature's test target takes `path: "Tests/Features/<Name>FeatureTests"`. Sw
 
 ### Hierarchy
 
-Two app-wide things, because Herder's model has two levels: the repositories the user has adopted, and the checkouts currently open.
+Two app-wide things, because Herder's model has two levels: the repositories the user has adopted, and the checkouts currently open. A third thing is per window, and is what makes the first two usable from more than one window at once.
 
 ```
-RepositoryStore            app-wide state, not a service: the folders the
+RepositoryStore            app-wide state, not a service: the pool of folders the
                            user has adopted (Core/Repositories)
- └── Repository            one adopted repository. Persisted: name, bookmark,
-                           sidebar order. Has N git worktrees.
+ └── Repository            one adopted repository. Persisted: name, bookmark.
+                           Has N git worktrees. Says nothing about where it
+                           is listed.
 
 WorkspaceRegistry          app-wide, one per process (Core)
  └── Workspace             one checkout: a repository's worktree, or a plain folder
@@ -245,20 +246,27 @@ WorkspaceRegistry          app-wide, one per process (Core)
       ├── git state            branch, status
       └── UI state bag         per-feature UI state (see below)
 
-WindowModel                one per window (AppFeature)
- └── activeWorkspaceID     which workspace this window is showing
+WindowEnvironment          one per window (AppFeature). Persisted as WindowSnapshot.
+ ├── id                    names the window across launches
+ ├── WindowRepositories    the repositories this window lists, in its order,
+ │                         each with whether it is folded here (Core)
+ ├── openWorkspaces        the checkouts this window keeps open
+ ├── activeWorkspaceID     which one it is showing
+ └── RepositoriesModel, FileTreeModel, EditorModel
+                           the models behind its panes
 ```
 
-`Repository` is what the user adds and names and arranges; `Workspace` is what a pane shows. One `Repository` can have several `Workspace`s open at once, one per worktree. A plain folder that is not a repository is still a `Workspace`.
+`Repository` is what the user adds and names; a window arranges it, in its own `WindowRepositories`; `Workspace` is what a pane shows. One `Repository` can have several `Workspace`s open at once, one per worktree. A plain folder that is not a repository is still a `Workspace`.
 
 **`WorkspaceID` is the canonical path of the folder, not a generated id.** A workspace *is* a folder, so the folder identifies it; a `UUID` would have to be persisted beside the path and kept in step with it, and all it would buy is surviving a move — which for a checkout means a different checkout. `Repository` is the level that genuinely needs identity independent of its path, because the user names it and its bookmark follows the folder around, which is why that one has a `UUID` and this does not.
 
 ### Rules
 
 - **`Workspace` is the single source of truth for one checkout.** If two places hold the same fact, one of them is a bug.
-- **Switching workspaces or worktrees changes `WindowModel.activeWorkspaceID` and nothing else.** Never tear down documents, terminals, or agent sessions on a switch. Background worktrees keep running.
-- **"Active" is per window, not global.** Multiple windows can show different workspaces.
-- Opening and closing go through `WorkspaceRegistry.open(_:)` and `close(_:)`. Opening is idempotent; nothing but `close(_:)` ever drops a workspace. Closing must prompt for dirty documents and running agents.
+- **Switching workspaces or worktrees changes `WindowEnvironment.activeWorkspaceID` and nothing else.** Never tear down documents, terminals, or agent sessions on a switch. Background worktrees keep running.
+- **"Active" is per window, not global.** Multiple windows can show different workspaces, and each has its own editor, file tree and sidebar models. A click in one window must not be visible in another.
+- **A workspace lives while any window holds it.** A window holds the workspaces in its `openWorkspaces` by passing itself as `holder` to `open(_:holder:)` and `close(_:holder:)`; the registry drops one only when the last holder lets go. Showing and holding are different sets — switching away from a workspace does not let go of it. A window closing calls `release(holder:)`.
+- Opening and closing go through `WorkspaceRegistry.open(_:holder:)` and `close(_:holder:)`. Opening is idempotent; nothing but `close(_:)` ever drops a workspace. Closing must prompt for dirty documents and running agents.
 - **A workspace drains only while a frontmost window is showing it.** Holding a worktree open costs a file watcher; *refreshing* it costs a `git status` for the whole repository, so only what is on screen refreshes. Background workspaces accumulate their events and act on them in one go when they come forward. Windows declare what they show with `display(_:from:)`, keyed by window identity rather than counted, so saying it twice is harmless.
 - **No cap on how many workspaces are held.** A cap means closing one the user did not ask to close. If it becomes a problem, the answer is a visible "close worktree", not an eviction they cannot see.
 - Stores are `@MainActor @Observable public final class` with `public private(set)` state. Mutation happens only through methods (`workspace.documents.open(url)`, never `workspace.documents.tabs.append(...)`).
@@ -278,7 +286,7 @@ if let workspace = registry.workspace(for: window.activeWorkspaceID) {
 
 Reading is free: a feature takes `@Environment(Workspace.self)` and gets whatever this window resolved. Nothing asks "which one is active?", which is what keeps two windows from disagreeing.
 
-Writing cannot be, because `WindowModel` is in the App target and no feature may import it. So a feature says what it wants through `OpenWorkspaceAction` — declared in `Core`, supplied by App as an environment value, and shaped like SwiftUI's `openWindow`:
+Writing cannot be, because `WindowEnvironment` is in the App target and no feature may import it. So a feature says what it wants through `OpenWorkspaceAction` — declared in `Core`, supplied by App as an environment value, and shaped like SwiftUI's `openWindow`:
 
 ```swift
 // RepositoriesFeature
@@ -355,7 +363,12 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 - Saves are debounced (a few hundred milliseconds after changes settle) **by their callers, not by the store**. A workspace waits 400ms after its UI state settles; the repository list does not wait at all, for the reason two lines down. A debounce inside `StateStore` would flatten that distinction and delay the one thing that must not be delayed. Writes are atomic.
 - **Nothing is saved on termination.** `willTerminate` is a synchronous callback and writing is not, so a task started there races the process exiting. The debounce is short for that reason. If a change ever matters enough to guarantee, the answer is `applicationShouldTerminate` returning `.terminateLater`, not a save in `stop()`.
 - The repository list is the exception: it saves immediately on every change, because each addition mints a security-scoped bookmark that cannot be remade.
-- Which workspace a window shows is remembered twice. `@SceneStorage` is the per-window record, but it only comes back when the system restores the scene, so it is a preference and not the record. `AppSnapshot.lastActiveWorkspace` — the workspace most recently shown by any window, cleared when that workspace is closed — is what a window without scene storage falls back on. Both are applied after `AppEnvironment.start()`, which is where folder access is taken.
+- **A window is remembered by a `WindowSnapshot`, found by an id kept in `@SceneStorage`.** The scene storage holds that id and nothing else: it only comes back when the system restores the scene, so everything that has to survive lives in the snapshot. The snapshot is the repositories the window lists (with each one's fold), the workspaces it keeps open, and the one it shows. `AppSnapshot` holds only the pool of repositories and `windows`, an index of which snapshots exist, most recently used first. If something about a window is in `AppSnapshot` beyond that index, the split has not held.
+- **A window with no stored id adopts the one used last, if no other window is open; otherwise it is blank.** Quitting with every window closed loses all the scene storage, and a relaunch that opened blank would look like the app forgot everything. With another window open, a new window is ⌘N and is a blank slate. This is decided in `AppEnvironment.claimWindow(id:)` with no suspension between the decision and recording it, so two windows appearing at once cannot adopt the same snapshot. All of it waits for `start()`, which is where folder access is taken.
+- **A window's snapshot is deleted when the user closes it, not when the app quits.** `WindowChrome` reports `NSWindow.willCloseNotification`, which AppKit does not post while terminating. That is an assumption about AppKit and wants checking by hand: quit with two windows open and look for both under `windows/` on relaunch. The index is capped at `WindowStore.maxWindows`, least recently used first, so a close that is missed leaks a bounded number of small files. The **last** window's snapshot is kept when it closes, so that closing everything is not the same as forgetting everything.
+- **A window with nothing in it is not saved.** It would be the most recently used and so the one a relaunch adopted.
+- **Every write to `AppSnapshot` goes through `AppSnapshotStore`.** The repository list and the window index share that key and each change reads the whole snapshot, edits its part and writes it back; two at once would lose a field, and the field could be the bookmarks. `AppSnapshotStore` queues them.
+- **Taking a repository out of a window is not forgetting it.** `WindowRepositories.remove(_:)` changes the window's membership only; the record, its bookmark and its folder access stay in the pool. Adding a folder the pool already has joins the existing record rather than minting a second bookmark. The cost is that a repository no window lists can only be got back by picking its folder again, which works but is clumsy; a list of what was adopted before belongs in the add modal and is not built.
 - Which file a workspace had open is `EditorUIState`, under `"editor.openFile"`, in that workspace's snapshot. It is the workspace's, not the window's, so switching away and back restores it too. A file that has gone from disk stays remembered and is shown struck through; only opening another file forgets it.
 - Agent transcripts are not stored by Herder. Store an `AgentSessionRef` (the Claude Code session ID plus any Herder label) so sessions can be resumed.
 - **Secrets go in the Keychain, never a file. A capability is not a secret.** A credential that grants access to something otherwise out of reach — an API token — is a secret. A security-scoped bookmark is a handle to a folder the user themselves picked, sitting in a file in their own home directory, and anything running as them can already read that folder without it. So the bookmark lives in `state.json` as base64, where it stays in one atomic write with the record it belongs to. Splitting it out would put one repository in two stores and double the window in which a crash leaves a record with no bookmark.
@@ -379,7 +392,7 @@ And the test rule, which also outlived SwiftData: **storage changes are tested a
 
 ### A `Repository` cannot be recreated from disk
 
-`Repository` holds a **security-scoped bookmark**, plus a user-chosen name and sidebar order. None of that is recoverable from disk or git: the bookmark cannot be regenerated without the user re-picking the folder in an `NSOpenPanel`. So the repository list is the one piece of Herder's state where losing the store costs the user real work. It saves immediately on every change, it is written in one atomic write with the bookmark inside it, and `RepositoryStore.save()` reads the key before writing it so that nothing sharing the key can drop it.
+`Repository` holds a **security-scoped bookmark**, plus a user-chosen name. None of that is recoverable from disk or git: the bookmark cannot be regenerated without the user re-picking the folder in an `NSOpenPanel`. So the repository list is the one piece of Herder's state where losing the store costs the user real work. It saves immediately on every change, it is written in one atomic write with the bookmark inside it, and `RepositoryStore.save()` reads the key before writing it so that nothing sharing the key can drop it.
 
 The bookmark's storage was an open question for a long time. It is settled: base64 in `state.json`, for the reason in the list above.
 
@@ -389,7 +402,8 @@ The bookmark's storage was an open question for a long time. It is settled: base
 
 ```
 ~/Library/Application Support/Herder/
-├── state.json                       # AppSnapshot: adopted repositories, open workspaces, recents
+├── state.json                       # AppSnapshot: adopted repositories, index of windows
+├── windows/<id>-<hash>.json         # WindowSnapshot: repositories listed, workspaces open and shown
 └── workspaces/<name>-<hash>.json    # WorkspaceSnapshot: tabs, UI state, agent session refs
 ```
 

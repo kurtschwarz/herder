@@ -2,11 +2,13 @@ import Foundation
 import Observation
 
 /// The repositories the user has adopted, and everything that can be done to
-/// the list.
+/// the pool.
 ///
-/// App-scoped: one list, however many windows. The rules about eligibility,
-/// naming, ordering and folder access live here instead of being re-derived at
-/// each call site.
+/// App-scoped: one pool, however many windows. Each window lists some of it —
+/// see ``WindowRepositories`` — but a folder is adopted once, with one bookmark
+/// and one hold on the sandbox, whichever windows show it. The rules about
+/// eligibility, naming and folder access live here instead of being re-derived
+/// at each call site.
 ///
 /// Views read ``repositories`` and are redrawn by Observation. That is what
 /// replaced `@Query`: the list used to come from SwiftData, read directly in
@@ -20,20 +22,29 @@ import Observation
 @MainActor
 @Observable
 public final class RepositoryStore {
-    /// In sidebar order. Mutated only through the methods below.
+    /// Every folder adopted, in the order they were. Mutated only through the
+    /// methods below.
     public private(set) var repositories: [Repository] = []
 
     private let bookmarks: any BookmarkClient
     private let git: any GitClient
-    private let state: any StateStore
+    private let snapshots: AppSnapshotStore
 
     /// The folder access held open on behalf of these repositories.
     public let access: RepositoryAccess
 
-    public init(bookmarks: any BookmarkClient, git: any GitClient, state: any StateStore) {
+    /// `snapshots` is shared with whatever else writes the app snapshot, so
+    /// that two edits to it cannot overwrite each other. Left out, the store
+    /// makes its own, which is right when nothing else writes.
+    public init(
+        bookmarks: any BookmarkClient,
+        git: any GitClient,
+        state: any StateStore,
+        snapshots: AppSnapshotStore? = nil
+    ) {
         self.bookmarks = bookmarks
         self.git = git
-        self.state = state
+        self.snapshots = snapshots ?? AppSnapshotStore(state: state)
         self.access = RepositoryAccess(bookmarks: bookmarks)
     }
 
@@ -51,8 +62,7 @@ public final class RepositoryStore {
     /// would be data loss from the user's side for something as ordinary as an
     /// external drive being unplugged.
     public func load() async {
-        let snapshot = await state.loadIfReadable(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)
-        repositories = Self.sorted(snapshot?.repositories ?? [])
+        repositories = Self.sorted(await snapshots.read().repositories)
         openFolders()
         // The paths and remade bookmarks resolving may have produced are worth
         // keeping; nothing else about the list changed.
@@ -86,22 +96,28 @@ public final class RepositoryStore {
 
     // MARK: - Changing
 
-    /// Whether a folder could be added, without adding it. Runs exactly the
+    /// Whether a folder could be adopted, without adopting it. Runs exactly the
     /// checks ``add(url:name:)`` runs and throws exactly what it would, so the
     /// UI can say no as soon as a folder is picked instead of when the user
     /// commits.
+    ///
+    /// A folder already in the pool is fine: it is joined, not refused. Whether
+    /// *this window* already lists it is the window's to say.
     ///
     /// Returns what git made of the folder, which is what the default name
     /// depends on.
     @discardableResult
     public func validate(url: URL) async throws -> GitRepositoryKind {
-        let url = url.standardizedFileURL
-        let kind = try await repositoryKind(of: url)
-        guard !isAlreadyAdopted(url) else { throw RepositoryStoreError.alreadyOpen(url) }
-        return kind
+        try await repositoryKind(of: url.standardizedFileURL)
     }
 
-    /// Adopts a folder, appending it to the bottom of the sidebar.
+    /// Adopts a folder, or hands back the record it already has.
+    ///
+    /// A folder is adopted once. Picking one that is already in the pool —
+    /// because another window lists it — joins that record rather than making a
+    /// second, which would mean a second bookmark and a second hold on the
+    /// sandbox for one folder. The name given is then ignored: the record
+    /// already has the one the user chose.
     ///
     /// Passing no name takes the folder's own, which is what the sidebar shows
     /// until the user renames it. Validates again rather than trusting an
@@ -111,12 +127,12 @@ public final class RepositoryStore {
     public func add(url: URL, name: String? = nil) async throws -> Repository {
         let url = url.standardizedFileURL
         let kind = try await validate(url: url)
+        if let existing = pooled(holding: url) { return existing }
 
         var repository = Repository(
             name: name ?? Self.defaultName(for: url, kind: kind),
             path: url.path(percentEncoded: false),
-            bookmark: try bookmarks.makeBookmark(for: url),
-            order: (repositories.last?.order).map { $0 + 1 } ?? 0
+            bookmark: try bookmarks.makeBookmark(for: url)
         )
         repository.isAvailable = access.begin(url, for: repository.id)
         repositories.append(repository)
@@ -125,7 +141,7 @@ public final class RepositoryStore {
     }
 
     /// Points an existing repository at a folder the user found again, after its
-    /// own went missing. Keeps the name, order and identity: this is the same
+    /// own went missing. Keeps the name and identity: this is the same
     /// repository, somewhere else.
     public func relocate(_ repository: Repository, to url: URL) async throws {
         guard let index = index(of: repository) else { return }
@@ -150,42 +166,17 @@ public final class RepositoryStore {
         await save()
     }
 
-    /// Forgets a repository. The folder on disk is untouched: only the app's
-    /// record of it and its hold on the sandbox go away.
+    /// Forgets a repository outright: the app's record of it and its hold on
+    /// the sandbox go, and every window that listed it loses it. The folder on
+    /// disk is untouched.
     ///
-    /// The survivors keep their numbers. Closing the gap would renumber rows the
-    /// user never moved, and an undone delete would then land on a number a
-    /// sibling had taken. A gap in the sequence costs nothing: the sort only
-    /// cares about the relative order.
+    /// Not what a window does to take a repository out of its own sidebar —
+    /// that is ``WindowRepositories/remove(_:)``, which leaves the record, its
+    /// bookmark and its folder access where they are.
     public func delete(_ repository: Repository) async {
         guard let index = index(of: repository) else { return }
         access.end(for: repository.id)
         repositories.remove(at: index)
-        await save()
-    }
-
-    /// Folds a repository's worktrees away in the sidebar, or shows them.
-    ///
-    /// Persisted, because it is the user's arrangement and they would have to
-    /// redo it on every launch otherwise.
-    public func setCollapsed(_ repository: Repository, _ isCollapsed: Bool) async {
-        guard let index = index(of: repository) else { return }
-        guard repositories[index].isCollapsed != isCollapsed else { return }
-        repositories[index].isCollapsed = isCollapsed
-        await save()
-    }
-
-    /// Puts the repositories in the given order, renumbering every row in one
-    /// save. Renumbering wholesale is a handful of assignments at this size, and
-    /// leaves no room for the numbering to go inconsistent.
-    public func reorder(to ordered: [Repository]) async {
-        var byID: [UUID: Int] = [:]
-        for (position, repository) in ordered.enumerated() { byID[repository.id] = position }
-        for index in repositories.indices {
-            guard let position = byID[repositories[index].id] else { continue }
-            repositories[index].order = position
-        }
-        repositories = Self.sorted(repositories)
         await save()
     }
 
@@ -196,12 +187,10 @@ public final class RepositoryStore {
     /// Read-modify-write rather than building a fresh snapshot: the app's other
     /// state shares this key, and replacing the whole thing would drop it.
     public func save() async {
-        var snapshot = await state.loadIfReadable(AppSnapshot.self, forKey: AppSnapshot.persistenceKey)
-            ?? AppSnapshot()
-        snapshot.repositories = repositories
+        let list = repositories
         // A failure here loses the user's list, so it is not swallowed quietly.
         do {
-            try await state.save(snapshot, forKey: AppSnapshot.persistenceKey)
+            try await snapshots.update { $0.repositories = list }
         } catch {
             assertionFailure("Could not save the repository list: \(error)")
         }
@@ -225,12 +214,15 @@ public final class RepositoryStore {
         }
     }
 
+    /// The record for the folder at `url`, if it has been adopted.
+    ///
     /// Compares where each existing repository's bookmark points now, not the
     /// cached path: the same folder reached by a new path is still the same
     /// folder. A repository whose bookmark no longer resolves falls back to its
     /// cached path rather than silently matching nothing.
-    private func isAlreadyAdopted(_ url: URL) -> Bool {
-        repositories.contains { repository in
+    public func pooled(holding url: URL) -> Repository? {
+        let url = url.standardizedFileURL
+        return repositories.first { repository in
             let resolved = (try? bookmarks.resolve(repository.bookmark))?.url
                 ?? URL(filePath: repository.path)
             return resolved.standardizedFileURL == url
@@ -242,9 +234,7 @@ public final class RepositoryStore {
     }
 
     private static func sorted(_ repositories: [Repository]) -> [Repository] {
-        repositories.sorted {
-            $0.order == $1.order ? $0.addedAt < $1.addedAt : $0.order < $1.order
-        }
+        repositories.sorted { $0.addedAt < $1.addedAt }
     }
 
     /// The folder's own name, less the `.git` suffix a bare repository carries:

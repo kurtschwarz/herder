@@ -10,16 +10,13 @@ import TestSupport
 public struct RepositoriesView: View {
     private let model: RepositoriesModel
 
-    /// The list, read straight off the store. This was a `@Query` against
-    /// SwiftData; Observation does the same job, and the sidebar no longer
-    /// knows what backs it.
-    private let store: RepositoryStore
+    /// What this window lists, read straight off the model. This was a `@Query`
+    /// against SwiftData; Observation does the same job, and the sidebar no
+    /// longer knows what backs it.
+    private var repositories: [Repository] { model.repositories }
 
-    private var repositories: [Repository] { store.repositories }
-
-    public init(model: RepositoriesModel, store: RepositoryStore) {
+    public init(model: RepositoriesModel) {
         self.model = model
-        self.store = store
     }
 
     public var body: some View {
@@ -93,11 +90,9 @@ private struct EmptyRepositories: View {
 #Preview {
     let git = StubGitClient()
     let store = RepositoryStore(bookmarks: InMemoryBookmarkClient(), git: git, state: InMemoryStateStore())
+    let list = WindowRepositories(store: store)
 
-    RepositoriesView(
-        model: RepositoriesModel(store: store, git: git, picker: StubFolderPickerClient()),
-        store: store
-    )
+    RepositoriesView(model: RepositoriesModel(repositories: list, git: git, picker: StubFolderPickerClient()))
     .frame(width: Theme.Size.sidebarWidth, height: 420)
     .glassPaneBackground()
     .padding(Theme.Spacing.windowPadding)
@@ -117,7 +112,7 @@ private struct EmptyRepositories: View {
                     isMainWorkingTree: false
                 ),
             ], at: url)
-            _ = try? await store.add(url: url, name: name)
+            _ = try? await list.add(url: url, name: name)
         }
     }
 }

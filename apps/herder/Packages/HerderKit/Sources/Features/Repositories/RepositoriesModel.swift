@@ -4,12 +4,12 @@ import Observation
 
 /// Everything about the repository list that is not the list itself.
 ///
-/// The list itself comes from ``RepositoryStore``, which this never caches.
-/// What it holds is derived or ephemeral: each repository's worktrees as last
-/// read, which repositories the user has folded away, and which row is being
-/// renamed.
+/// The list itself comes from ``WindowRepositories``, which this never caches:
+/// the repositories this window lists, in its order, with its own fold state.
+/// What this holds is derived or ephemeral: each repository's worktrees as last
+/// read, and which row is being renamed.
 ///
-/// **Not** which worktree is active. That is the window's, in `WindowModel`,
+/// **Not** which worktree is active. That is the window's, in `WindowEnvironment`,
 /// because two windows can show different checkouts and a model held once per
 /// app cannot answer for both. Rows learn whether they are the active one from
 /// the `Workspace` in the environment, and ask for a change through
@@ -23,17 +23,11 @@ public final class RepositoriesModel {
         case unreadable
     }
 
-    private let store: RepositoryStore
+    private let list: WindowRepositories
     private let git: any GitClient
     private let picker: any FolderPickerClient
 
     private(set) var listings: [UUID: Listing] = [:]
-
-    /// Each repository's name, as last read. Kept beside ``listings`` so that
-    /// naming the repository a worktree belongs to costs no fetch: a view asks
-    /// for it on every redraw, and the old code cached a whole record to avoid
-    /// exactly that.
-    private var names: [UUID: String] = [:]
 
     /// The repository whose name is being edited in place.
     var renaming: UUID?
@@ -52,14 +46,17 @@ public final class RepositoriesModel {
     public var isModalPresented: Bool { adding != nil || newSession != nil }
 
     public init(
-        store: RepositoryStore,
+        repositories: WindowRepositories,
         git: any GitClient,
         picker: any FolderPickerClient
     ) {
-        self.store = store
+        self.list = repositories
         self.git = git
         self.picker = picker
     }
+
+    /// The repositories this window lists, in its order.
+    var repositories: [Repository] { list.repositories }
 
     /// What the repository holding the worktree at `path` is called.
     ///
@@ -75,14 +72,14 @@ public final class RepositoriesModel {
         for (id, listing) in listings {
             guard case .loaded(let worktrees) = listing else { continue }
             guard worktrees.contains(where: { PathKey($0.path) == key }) else { continue }
-            return names[id]
+            return list.repository(id: id)?.name
         }
         return nil
     }
 
     public func beginAdding() {
         guard !isModalPresented else { return }
-        adding = AddRepositoryModel(store: store, picker: picker)
+        adding = AddRepositoryModel(repositories: list, picker: picker)
     }
 
     func cancelAdding() {
@@ -122,14 +119,14 @@ public final class RepositoriesModel {
     }
 
     func isExpanded(_ repository: Repository) -> Bool {
-        // Read off the store, not off the copy the caller is holding: the row
+        // Read off the list, not off the copy the caller is holding: the list
         // is the one place that knows, and it is what gets persisted.
-        repository.isAvailable && !(store[repository.id]?.isCollapsed ?? repository.isCollapsed)
+        repository.isAvailable && !list.isCollapsed(repository)
     }
 
     func toggle(_ repository: Repository) async {
         // Showing becomes folding, and folding becomes showing.
-        await store.setCollapsed(repository, isExpanded(repository))
+        list.setCollapsed(repository, isExpanded(repository))
         await refresh(repository)
     }
 
@@ -148,7 +145,6 @@ public final class RepositoriesModel {
         do {
             let worktrees = try await git.worktrees(at: URL(filePath: repository.path))
             listings[id] = .loaded(worktrees)
-            names[id] = repository.name
         } catch {
             // The task that asked was cancelled, which says nothing about the
             // folder.
@@ -159,14 +155,13 @@ public final class RepositoriesModel {
 
     func commitRename(_ repository: Repository, to name: String) async {
         renaming = nil
-        await store.rename(repository, to: name)
-        names[repository.id] = store[repository.id]?.name ?? repository.name
+        await list.rename(repository, to: name)
     }
 
-    func remove(_ repository: Repository) async {
-        let id = repository.id
-        await store.delete(repository)
-        listings[id] = nil
-        names[id] = nil
+    /// Takes the repository out of this window. Others listing it keep it, and
+    /// so does the pool: see ``WindowRepositories/remove(_:)``.
+    func remove(_ repository: Repository) {
+        list.remove(repository)
+        listings[repository.id] = nil
     }
 }

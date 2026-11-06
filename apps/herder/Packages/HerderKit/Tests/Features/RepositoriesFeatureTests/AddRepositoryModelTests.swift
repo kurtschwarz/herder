@@ -10,11 +10,13 @@ import Testing
     let git = StubGitClient()
     let picker = StubFolderPickerClient()
     let store: RepositoryStore
+    let list: WindowRepositories
     let model: AddRepositoryModel
 
     init() throws {
         store = RepositoryStore(bookmarks: bookmarks, git: git, state: InMemoryStateStore())
-        model = AddRepositoryModel(store: store, picker: picker)
+        list = WindowRepositories(store: store)
+        model = AddRepositoryModel(repositories: list, picker: picker)
     }
 
     @discardableResult
@@ -66,15 +68,40 @@ import Testing
         #expect(model.name == "")
     }
 
-    @Test func aFolderAlreadyInTheSidebarIsRefused() async throws {
+    @Test func aFolderAlreadyInThisSidebarIsRefused() async throws {
         let url = repository("/code/api")
-        try await store.add(url: url)
+        try await list.add(url: url)
         picker.script(url)
 
         await model.browse()
 
         #expect(model.refusal == .alreadyOpen)
         #expect(!model.canAdd)
+    }
+
+    /// Another window having it is no reason to refuse: adding joins the
+    /// record that window made.
+    @Test func aFolderOnlyAnotherWindowListsIsAccepted() async throws {
+        let url = repository("/code/api")
+        try await store.add(url: url)
+        picker.script(url)
+
+        await model.browse()
+
+        #expect(model.refusal == nil)
+        #expect(model.canAdd)
+    }
+
+    @Test func addingAFolderAnotherWindowListsJoinsItsRecord() async throws {
+        let url = repository("/code/api")
+        let existing = try await store.add(url: url)
+        picker.script(url)
+        await model.browse()
+
+        #expect(await model.submit())
+
+        #expect(store.repositories.count == 1)
+        #expect(list.repositories == [existing])
     }
 
     @Test func aLinkedWorktreeNamesItsRepository() async {
