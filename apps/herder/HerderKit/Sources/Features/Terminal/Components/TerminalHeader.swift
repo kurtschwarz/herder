@@ -14,7 +14,7 @@ struct TerminalHeader: View {
                     tab: tab,
                     isActive: tab.id == model.activeTab?.id,
                     select: { model.select(tab) },
-                    close: { model.close(tab) }
+                    close: { Task { await model.requestClose(tab) } }
                 )
             }
 

@@ -209,6 +209,18 @@ public final class AppEnvironment {
         openWindows.values.flatMap(\.editor.unsavedFiles)
     }
 
+    /// Whether any window has a terminal open.
+    public var hasTerminals: Bool {
+        openWindows.values.contains { $0.terminal.hasTerminals }
+    }
+
+    /// What every window's terminals are running, for the quit prompt.
+    public func runningCommands() async -> [String] {
+        var commands: [String] = []
+        for window in openWindows.values { commands += await window.terminal.runningCommands() }
+        return commands
+    }
+
     /// Saves every window's unsaved files. `false` if any would not save, in
     /// which case its window shows why and the app should not quit.
     public func saveAll() async -> Bool {

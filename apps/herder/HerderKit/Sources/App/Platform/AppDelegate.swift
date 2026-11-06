@@ -12,6 +12,30 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let environment else { return .terminateNow }
+        guard environment.hasTerminals else { return confirmUnsaved(environment, sender) }
+
+        // What is running is asked of the processes, which takes a moment, so
+        // the quit waits and is answered from here.
+        Task {
+            let commands = await environment.runningCommands()
+            if !commands.isEmpty,
+               !RunningCommandsAlert.confirms(RunningCommandsAlert.make(commands: commands, action: .quit).runModal())
+            {
+                sender.reply(toApplicationShouldTerminate: false)
+                return
+            }
+            switch confirmUnsaved(environment, sender) {
+            case .terminateNow: sender.reply(toApplicationShouldTerminate: true)
+            case .terminateCancel: sender.reply(toApplicationShouldTerminate: false)
+            // Replies itself, once the files are written.
+            case .terminateLater: break
+            @unknown default: sender.reply(toApplicationShouldTerminate: false)
+            }
+        }
+        return .terminateLater
+    }
+
+    private func confirmUnsaved(_ environment: AppEnvironment, _ sender: NSApplication) -> NSApplication.TerminateReply {
         let files = environment.unsavedFiles
         guard !files.isEmpty else { return .terminateNow }
 

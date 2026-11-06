@@ -20,6 +20,13 @@ struct WindowChrome: NSViewRepresentable {
     var unsavedFiles: () -> [String] = { [] }
     var saveAll: () async -> Bool = { true }
 
+    /// Whether the window has terminals, so closing it might have commands to
+    /// end. Cheap and synchronous, so a window without any answers at once.
+    var hasTerminals: () -> Bool = { false }
+
+    /// What its terminals are running. Asked of the processes, so it waits.
+    var runningCommands: () async -> [String] = { [] }
+
     /// Holds the resize observer for as long as the view is alive.
     final class Coordinator {
         var observer: NSObjectProtocol?
@@ -73,6 +80,8 @@ struct WindowChrome: NSViewRepresentable {
         }
         coordinator.closeGuard?.unsavedFiles = unsavedFiles
         coordinator.closeGuard?.saveAll = saveAll
+        coordinator.closeGuard?.hasTerminals = hasTerminals
+        coordinator.closeGuard?.runningCommands = runningCommands
         if coordinator.closeObserver == nil {
             coordinator.closeObserver = NotificationCenter.default.addObserver(
                 forName: NSWindow.willCloseNotification,
@@ -206,6 +215,17 @@ final class CloseGuard: NSObject, NSWindowDelegate {
     var unsavedFiles: () -> [String] = { [] }
     var saveAll: () async -> Bool = { true }
 
+    /// Whether the window has terminals, so closing it might have commands to
+    /// end. Cheap and synchronous, so a window without any answers at once.
+    var hasTerminals: () -> Bool = { false }
+
+    /// What its terminals are running. Asked of the processes, so it waits.
+    var runningCommands: () async -> [String] = { [] }
+
+    /// Set while the processes are being asked, so a second click on the close
+    /// button does not start a second question.
+    private var isAsking = false
+
     nonisolated override func responds(to selector: Selector!) -> Bool {
         super.responds(to: selector) || original?.responds(to: selector) == true
     }
@@ -215,6 +235,32 @@ final class CloseGuard: NSObject, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard hasTerminals() else { return confirmUnsaved(sender) }
+        guard !isAsking else { return false }
+        isAsking = true
+
+        // What is running has to be asked of the processes, which takes a
+        // moment, so the answer to the close is no now and the window closes
+        // itself when the person has had their say.
+        Task {
+            let commands = await runningCommands()
+            isAsking = false
+            if !commands.isEmpty {
+                let alert = RunningCommandsAlert.make(commands: commands, action: .closeWindow)
+                alert.beginSheetModal(for: sender) { [weak self] response in
+                    guard RunningCommandsAlert.confirms(response) else { return }
+                    if self?.confirmUnsaved(sender) == true { sender.close() }
+                }
+            } else if confirmUnsaved(sender) {
+                sender.close()
+            }
+        }
+        return false
+    }
+
+    /// The unsaved-files half of closing: `true` if the window may close now,
+    /// and `false` if it was refused or a sheet is asking.
+    private func confirmUnsaved(_ sender: NSWindow) -> Bool {
         let files = unsavedFiles()
         guard !files.isEmpty else { return original?.windowShouldClose?(sender) ?? true }
 

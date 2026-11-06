@@ -36,6 +36,15 @@ public final class TerminalModel {
     /// Changes when the panel should take the keyboard.
     public private(set) var focusRequest = 0
 
+    /// A tab with something running in it, waiting for the person to say
+    /// whether to end it.
+    struct ClosePrompt: Equatable {
+        let tabID: UUID
+        let command: String
+    }
+
+    private(set) var closePrompt: ClosePrompt?
+
     /// Why the last shell would not start, until it is dismissed.
     public private(set) var spawnFailure: String?
 
@@ -195,6 +204,29 @@ public final class TerminalModel {
         if let tab = activeTab { close(tab) }
     }
 
+    /// Closes the tab showing, asking first if it is running something. An
+    /// idle shell goes without a question.
+    public func requestCloseActiveTab() async {
+        if let tab = activeTab { await requestClose(tab) }
+    }
+
+    func requestClose(_ tab: TerminalTab) async {
+        guard let command = await tab.runningCommand() else {
+            close(tab)
+            return
+        }
+        closePrompt = ClosePrompt(tabID: tab.id, command: command)
+    }
+
+    /// Carries out the answer to ``closePrompt``.
+    func answerClose(confirm: Bool) {
+        guard let prompt = closePrompt else { return }
+        closePrompt = nil
+        // The tab may have finished or gone while the question was up.
+        guard confirm, let tab = tabsByWorkspace.values.joined().first(where: { $0.id == prompt.tabID }) else { return }
+        close(tab)
+    }
+
     /// Ends a shell and takes its tab away. The one beside it comes forward,
     /// and the panel goes when it was the last.
     func close(_ tab: TerminalTab) {
@@ -233,6 +265,22 @@ public final class TerminalModel {
     }
 
     // MARK: Letting go
+
+    /// Any shell is open in any workspace of this window, so closing the window
+    /// has something to end.
+    public var hasTerminals: Bool {
+        tabsByWorkspace.values.contains { !$0.isEmpty }
+    }
+
+    /// What every shell of this window is running, for the window and quit
+    /// prompts. Empty when they are all idle.
+    public func runningCommands() async -> [String] {
+        var commands: [String] = []
+        for tab in tabsByWorkspace.values.joined() {
+            if let command = await tab.runningCommand() { commands.append(command) }
+        }
+        return commands
+    }
 
     /// Ends every shell for a workspace this window has stopped keeping.
     public func discard(_ id: WorkspaceID) {

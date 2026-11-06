@@ -44,7 +44,9 @@ public struct AppView: View {
             WindowChrome(
                 onClose: { close() },
                 unsavedFiles: { window?.editor.unsavedFiles ?? [] },
-                saveAll: { await window?.editor.saveAll() ?? true }
+                saveAll: { await window?.editor.saveAll() ?? true },
+                hasTerminals: { window?.terminal.hasTerminals ?? false },
+                runningCommands: { await window?.terminal.runningCommands() ?? [] }
             )
         )
         // After the backgrounds, so the glass runs under the title bar too.
@@ -259,7 +261,7 @@ private struct TabCommandValues: ViewModifier {
     }
 
     private var closeTab: (() -> Void)? {
-        if terminal.hasFocus { return { terminal.closeActiveTab() } }
+        if terminal.hasFocus { return { Task { await terminal.requestCloseActiveTab() } } }
         return editor.tabs.isEmpty ? nil : { Task { await editor.closeActiveTab() } }
     }
 

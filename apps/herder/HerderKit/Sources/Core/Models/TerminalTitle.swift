@@ -16,7 +16,7 @@ public enum TerminalTitle {
         return process.isShell ? process.name : truncated(process.commandLine)
     }
 
-    static func truncated(_ text: String, to limit: Int = maxLength) -> String {
+    public static func truncated(_ text: String, to limit: Int = maxLength) -> String {
         let flattened = text.split(whereSeparator: \.isNewline).joined(separator: " ")
         guard flattened.count > limit else { return flattened }
         return flattened.prefix(limit - 1).trimmingCharacters(in: .whitespaces) + "\u{2026}"

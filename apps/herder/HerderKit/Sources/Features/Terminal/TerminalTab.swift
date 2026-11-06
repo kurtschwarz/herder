@@ -67,11 +67,16 @@ final class TerminalTab: Identifiable {
         if let directory, self.directory != directory { self.directory = directory }
     }
 
-    /// Whether the shell is running something now, asked of the process
-    /// itself: a command started a moment ago is not in ``isBusy`` yet.
+    /// What the shell is running now, as typed, or `nil` when it is idle.
+    /// Asked of the process itself: a command started a moment ago is not in
+    /// ``isBusy`` yet, and this is what decides whether closing needs asking.
+    func runningCommand() async -> String? {
+        guard exitCode == nil, let process = await session.foregroundProcess(), !process.isShell else { return nil }
+        return process.commandLine
+    }
+
     func isRunningSomething() async -> Bool {
-        guard exitCode == nil, let process = await session.foregroundProcess() else { return false }
-        return !process.isShell
+        await runningCommand() != nil
     }
 
     private func didExit(_ code: Int32) {

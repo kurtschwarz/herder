@@ -170,6 +170,79 @@ import Testing
         #expect(model.tabs.count == 1)
     }
 
+    // MARK: Closing with something running
+
+    @Test func anIdleShellClosesWithoutAsking() async throws {
+        let (model, _, _) = try await shown(tabs: 1)
+        await model.requestCloseActiveTab()
+        #expect(model.closePrompt == nil)
+        #expect(model.tabs.isEmpty)
+    }
+
+    @Test func aRunningCommandIsAskedAboutAndTheTabStaysUntilAnswered() async throws {
+        let (model, _, _) = try await shown(tabs: 1)
+        pty.sessions[0].run("swift build")
+        await model.requestCloseActiveTab()
+        #expect(model.closePrompt?.command == "swift build")
+        #expect(model.tabs.count == 1)
+        #expect(!pty.sessions[0].wasTerminated)
+    }
+
+    @Test func confirmingEndsTheCommandAndClosesTheTab() async throws {
+        let (model, _, _) = try await shown(tabs: 1)
+        pty.sessions[0].run("swift build")
+        await model.requestCloseActiveTab()
+        model.answerClose(confirm: true)
+        #expect(model.closePrompt == nil)
+        #expect(model.tabs.isEmpty)
+        #expect(pty.sessions[0].wasTerminated)
+    }
+
+    @Test func decliningLeavesItRunning() async throws {
+        let (model, _, _) = try await shown(tabs: 1)
+        pty.sessions[0].run("swift build")
+        await model.requestCloseActiveTab()
+        model.answerClose(confirm: false)
+        #expect(model.closePrompt == nil)
+        #expect(model.tabs.count == 1)
+        #expect(!pty.sessions[0].wasTerminated)
+    }
+
+    @Test func aCommandThatFinishedWhileTheQuestionWasUpDoesNotCloseAnythingElse() async throws {
+        let (model, _, _) = try await shown(tabs: 2)
+        pty.sessions[1].run("sleep 30")
+        await model.requestCloseActiveTab()
+        model.close(model.tabs[1])
+        model.answerClose(confirm: true)
+        #expect(model.tabs.count == 1)
+        #expect(!pty.sessions[0].wasTerminated)
+    }
+
+    @Test func theWindowAndQuitPromptsSeeEveryRunningCommandInEveryWorkspace() async throws {
+        let registry = makeRegistry()
+        let model = makeModel()
+        let api = try await workspace(root, in: registry)
+        let web = try await workspace(other, in: registry)
+        await model.show(api)
+        await model.openTab()
+        await model.openTab()
+        await model.show(web)
+        await model.openTab()
+
+        #expect(model.hasTerminals)
+        #expect(await model.runningCommands().isEmpty)
+
+        pty.sessions[1].run("just dev")
+        pty.sessions[2].run("tail -f log")
+        #expect(Set(await model.runningCommands()) == ["just dev", "tail -f log"])
+    }
+
+    @Test func aWindowWithNoTerminalsHasNothingToAskAbout() async throws {
+        let (model, _, _) = try await shown()
+        #expect(!model.hasTerminals)
+        #expect(await model.runningCommands().isEmpty)
+    }
+
     // MARK: When a shell exits
 
     @Test func aCleanExitTakesItsTabAway() async throws {
