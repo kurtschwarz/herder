@@ -15,6 +15,7 @@ public final class StubGitClient: GitClient {
     private let addFailure = Mutex<String?>(nil)
     private let unreadable = Mutex<Set<String>>([])
     private let gitDirectories = Mutex<[String: URL?]>([:])
+    private let checkouts = Mutex<[String: GitWorktree.Checkout?]>([:])
     private let statuses = Mutex<[String: [String: GitStatus]]>([:])
     private let statusAsked = Mutex<[URL]>([])
     private let statusFails = Mutex(false)
@@ -79,6 +80,16 @@ public final class StubGitClient: GitClient {
     /// ordinary repository.
     public func gitDirectory(of url: URL) async throws -> URL? {
         gitDirectories.withLock { $0[FolderKey.of(url)] } ?? url.appending(path: ".git")
+    }
+
+    /// Declares what the working tree at `worktree` has checked out. Replaces
+    /// any earlier seed; unseeded, it has nothing.
+    public func seed(checkout: GitWorktree.Checkout?, of worktree: URL) {
+        checkouts.withLock { $0[FolderKey.of(worktree)] = checkout }
+    }
+
+    public func checkout(of url: URL) async throws -> GitWorktree.Checkout? {
+        checkouts.withLock { $0[FolderKey.of(url)] } ?? nil
     }
 
     /// Declares what git would say about the working tree at `worktree`, keyed

@@ -26,6 +26,12 @@ import Testing
         #expect(tokens.contains { $0.kind == .string })
     }
 
+    @Test func aFileIsNamedForItsLanguageAndAnUnknownOneIsNot() {
+        #expect(highlighter.language(of: "", ofFileNamed: "A.swift") == "Swift")
+        #expect(highlighter.language(of: "#!/bin/bash\n", ofFileNamed: "release") == "Shell Script")
+        #expect(highlighter.language(of: "hello", ofFileNamed: "notes.txt") == nil)
+    }
+
     @Test func aTokenCoversExactlyTheTextItStyles() async throws {
         let source = "let name = \"Herder\"\n"
         let tokens = await highlighter.tokens(in: source, ofFileNamed: "A.swift")

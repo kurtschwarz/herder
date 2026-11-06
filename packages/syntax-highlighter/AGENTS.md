@@ -20,7 +20,7 @@ packages/syntax-highlighter/
 │   └── module.modulemap    # makes it `import HerderSyntaxFFI`
 ├── examples/dump.rs        # prints a file's tokens, for debugging colour
 └── src/
-    ├── lib.rs              # the whole FFI surface: four functions
+    ├── lib.rs              # the whole FFI surface
     ├── kind.rs             # token kinds, and the capture names that produce them
     ├── language.rs         # the grammar table, and matching a file to one
     └── highlight.rs        # parse, walk the events, convert offsets
@@ -42,6 +42,7 @@ crate can tell a language was added.
    ```rust
    Language {
        name: "elixir",
+       display_name: c"Elixir",
        aliases: &["ex"],
        extensions: &["ex", "exs"],
        filenames: &[],
@@ -127,7 +128,7 @@ Adding a `Kind` is a bigger change: it has to be mirrored in
   because a conversion left to the caller is one that gets forgotten until a
   file with an emoji in it paints two characters to the left.
 - **The header is hand-written and has to be kept in step with `lib.rs`.** It is
-  four functions and one struct; a generator would be more machinery than it
+  a few functions and one struct; a generator would be more machinery than it
   saves. Changing a signature means changing both.
 - **Nothing here names a colour.** A kind says what a token *is*. The pairing
   with a colour is in `EditorFeature/Platform/SyntaxAttributes.swift`, so a

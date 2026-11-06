@@ -1,6 +1,6 @@
 //! Syntax highlighting for Herder's editor pane, over a C ABI.
 //!
-//! The whole surface is the four functions below. Swift's `Syntax` module wraps
+//! The whole surface is the functions below. Swift's `Syntax` module wraps
 //! them and nothing else in the app knows this crate exists.
 //!
 //! The boundary speaks UTF-8 going in, because that is what tree-sitter parses
@@ -15,6 +15,7 @@ pub use highlight::{MAX_BYTES, Token, highlight};
 pub use kind::{KIND_COUNT, Kind};
 pub use language::{LANGUAGES, Language, NONE, identify, warm};
 
+use std::ffi::c_char;
 use std::slice;
 
 /// A span of source to paint, in UTF-16 offsets from the start of the file.
@@ -109,6 +110,13 @@ pub unsafe extern "C" fn hdr_language_for(
     identify(name, source)
 }
 
+/// The name to show a reader for a language id, nul-terminated and static, or
+/// null for `NONE` and anything out of range. Never freed.
+#[unsafe(no_mangle)]
+pub extern "C" fn hdr_language_name(language: u32) -> *const c_char {
+    language::language(language).map_or(std::ptr::null(), |language| language.display_name.as_ptr())
+}
+
 /// Tokens for `source`, read as the language `hdr_language_for` returned.
 ///
 /// Returns an empty run for an unknown language, a file over the size ceiling,
@@ -185,6 +193,14 @@ mod tests {
         assert!(tokens.count > 0);
         assert!(!tokens.tokens.is_null());
         unsafe { hdr_tokens_free(tokens) };
+    }
+
+    #[test]
+    fn a_language_has_a_name_and_none_has_not() {
+        let name = hdr_language_name(identify("A.swift", ""));
+        assert!(!name.is_null());
+        assert_eq!(unsafe { std::ffi::CStr::from_ptr(name) }.to_str(), Ok("Swift"));
+        assert!(hdr_language_name(NONE).is_null());
     }
 
     #[test]

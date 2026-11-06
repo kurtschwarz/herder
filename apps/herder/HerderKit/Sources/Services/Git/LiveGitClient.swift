@@ -188,6 +188,12 @@ public struct LiveGitClient: GitClient {
         }
     }
 
+    @concurrent
+    public func checkout(of url: URL) async throws -> GitWorktree.Checkout? {
+        guard let directory = try await gitDirectory(of: url) else { return nil }
+        return checkout(inGitDirectory: directory)
+    }
+
     /// `--untracked-files=normal` is the load-bearing flag: it collapses an
     /// untracked or ignored folder into one line instead of walking into it, so
     /// the output stays small no matter what a build has written. `-z` is the

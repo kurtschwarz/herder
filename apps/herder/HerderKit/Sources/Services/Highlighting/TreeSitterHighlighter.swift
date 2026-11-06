@@ -49,6 +49,18 @@ public struct TreeSitterHighlighter: SyntaxHighlighter {
 }
 
 extension TreeSitterHighlighter {
+    public func language(of contents: String, ofFileNamed fileName: String) -> String? {
+        var fileName = fileName
+        var contents = contents
+        return fileName.withUTF8 { name in
+            contents.withUTF8 { source in
+                let language = hdr_language_for(name.baseAddress, name.count, source.baseAddress, source.count)
+                guard let cString = hdr_language_name(language) else { return nil }
+                return String(cString: cString)
+            }
+        }
+    }
+
     /// Compiles every grammar's queries, so the first file opened does not pay
     /// for it.
     ///

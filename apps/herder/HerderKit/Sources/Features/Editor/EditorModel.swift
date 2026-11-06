@@ -61,6 +61,10 @@ public final class EditorModel {
     /// from this once anything is typed.
     private(set) var content: Content?
 
+    /// What the file showing is written in, as the highlighter names it, or
+    /// `nil` when nothing claims it or nothing has been read yet.
+    private(set) var language: String?
+
     /// The file showing has gone from disk. Its last contents stay up.
     private(set) var isDeleted = false
 
@@ -281,6 +285,7 @@ public final class EditorModel {
         fileKey = key
         content = nil
         activeDocument = nil
+        language = nil
         isDeleted = false
         if remembering { remember(on: state) }
         registration = state.observe(
@@ -301,6 +306,7 @@ public final class EditorModel {
         fileKey = nil
         content = nil
         activeDocument = nil
+        language = nil
         isDeleted = false
         rehighlight?.cancel()
         generation += 1
@@ -523,6 +529,7 @@ public final class EditorModel {
         isDeleted = false
         guard case .text(let source) = result else {
             activeDocument = nil
+            language = nil
             if content != result { content = result }
             return
         }
@@ -543,6 +550,8 @@ public final class EditorModel {
             reading = .replace
         }
         activeDocument = document
+        let named = highlighter.language(of: source.text, ofFileNamed: key.path)
+        if language != named { language = named }
 
         switch reading {
         case .unchanged, .stale:

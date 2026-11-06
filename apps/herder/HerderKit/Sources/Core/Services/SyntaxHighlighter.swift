@@ -19,4 +19,13 @@ public protocol SyntaxHighlighter: Sendable {
     /// `@concurrent`; the default isolation rules otherwise run it wherever it
     /// was called from.
     func tokens(in contents: String, ofFileNamed fileName: String) async -> [SyntaxToken]
+
+    /// The language a reader would call the file, such as "Swift", or `nil`
+    /// when no grammar claims it. Judged the same way as ``tokens(in:ofFileNamed:)``.
+    func language(of contents: String, ofFileNamed fileName: String) -> String?
+}
+
+extension SyntaxHighlighter {
+    /// For a highlighter that does not know languages.
+    public func language(of contents: String, ofFileNamed fileName: String) -> String? { nil }
 }

@@ -25,7 +25,26 @@ public struct EditorView: View {
         return components
     }
 
+    /// The branch, from the workspace the window is showing. Not the model's:
+    /// two panes want it, so it lives on the workspace.
+    @Environment(Workspace.self) private var workspace: Workspace?
+
+    /// Only for text: a file that is not shown has no encoding worth stating.
+    /// Always UTF-8, because that is the only thing a file is read as.
+    private var statusFile: EditorStatusBar.File? {
+        guard case .text = model.content else { return nil }
+        return EditorStatusBar.File(encoding: "UTF-8", language: model.language ?? "Plain Text")
+    }
+
     public var body: some View {
+        VStack(spacing: 0) {
+            content
+            EditorStatusBar(checkout: workspace?.checkout, file: statusFile)
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if model.file != nil {
             VStack(spacing: 0) {
                 // The window's header strip, kept clear for the same reason

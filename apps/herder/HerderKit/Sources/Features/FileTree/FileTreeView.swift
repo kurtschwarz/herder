@@ -193,6 +193,7 @@ private struct PreviewGit: GitClient {
     func branches(at url: URL) async throws -> [String] { [] }
     func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {}
     func gitDirectory(of url: URL) async throws -> URL? { nil }
+    func checkout(of url: URL) async throws -> GitWorktree.Checkout? { nil }
     func status(in worktree: URL) async throws -> GitWorktreeStatus { GitWorktreeStatus(root: PathKey(worktree)) }
 }
 

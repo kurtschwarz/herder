@@ -97,6 +97,22 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
         #expect(model.breadcrumb == ["api", "a.txt"])
     }
 
+    @Test func theLanguageIsNamedForAFileAGrammarClaimsAndNilForOneNoneDoes() async throws {
+        _ = try await start(with: ["a.txt", "b.swift"])
+
+        await model.open(root.appending(path: "b.swift"))
+        #expect(model.language == "Swift")
+
+        await model.open(root.appending(path: "a.txt"))
+        #expect(model.language == nil)
+
+        await model.activate(PathKey(root.appending(path: "b.swift")))
+        #expect(model.language == "Swift")
+
+        model.close()
+        #expect(model.language == nil)
+    }
+
     @Test func aFileOutsideEveryWorktreeIsNotOpened() async throws {
         _ = try await start(with: ["a.txt"])
 

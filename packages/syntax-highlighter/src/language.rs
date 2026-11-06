@@ -5,6 +5,7 @@
 //! side, needs to know the language exists.
 
 use crate::kind;
+use std::ffi::CStr;
 use std::sync::{Mutex, OnceLock};
 use tree_sitter_highlight::HighlightConfiguration;
 
@@ -12,6 +13,9 @@ use tree_sitter_highlight::HighlightConfiguration;
 pub struct Language {
     /// Shown to no one yet; used to resolve injections and to name failures.
     pub name: &'static str,
+
+    /// What a reader sees in the editor's footer: "Swift", not "swift".
+    pub display_name: &'static CStr,
 
     /// Other names a grammar's `injections.scm` might call this language by.
     /// `#set! injection.language "js"` has to find the JavaScript row.
@@ -55,6 +59,7 @@ const fn empty() -> String {
 pub static LANGUAGES: &[Language] = &[
     Language {
         name: "bash",
+        display_name: c"Shell Script",
         aliases: &["sh", "shell", "zsh"],
         extensions: &["sh", "bash", "zsh", "zshrc", "bashrc", "zprofile", "bash_profile"],
         filenames: &[".bashrc", ".zshrc", ".bash_profile", ".zprofile", ".profile"],
@@ -67,6 +72,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "c",
+        display_name: c"C",
         aliases: &[],
         extensions: &["c", "h"],
         filenames: &[],
@@ -79,6 +85,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "css",
+        display_name: c"CSS",
         aliases: &[],
         extensions: &["css"],
         filenames: &[],
@@ -91,6 +98,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "gitignore",
+        display_name: c"Git Ignore",
         aliases: &[],
         extensions: &[],
         // One grammar covers the whole family: every one of these files is
@@ -113,6 +121,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "go",
+        display_name: c"Go",
         aliases: &[],
         extensions: &["go"],
         filenames: &[],
@@ -125,6 +134,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "html",
+        display_name: c"HTML",
         aliases: &[],
         extensions: &["html", "htm", "xhtml"],
         filenames: &[],
@@ -137,6 +147,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "javascript",
+        display_name: c"JavaScript",
         aliases: &["js", "jsx"],
         extensions: &["js", "jsx", "mjs", "cjs"],
         filenames: &[],
@@ -157,6 +168,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "json",
+        display_name: c"JSON",
         aliases: &["jsonc"],
         extensions: &["json", "jsonc", "json5", "resolved", "webmanifest"],
         filenames: &[".babelrc", ".eslintrc", ".prettierrc", ".swcrc"],
@@ -169,6 +181,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "just",
+        display_name: c"Justfile",
         aliases: &["justfile"],
         extensions: &["just"],
         filenames: &["justfile", ".justfile"],
@@ -181,6 +194,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "markdown",
+        display_name: c"Markdown",
         aliases: &["md"],
         extensions: &["md", "markdown", "mdx"],
         filenames: &[],
@@ -193,6 +207,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "markdown_inline",
+        display_name: c"Markdown",
         aliases: &["markdown-inline"],
         extensions: &[],
         filenames: &[],
@@ -205,6 +220,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "python",
+        display_name: c"Python",
         aliases: &["py"],
         extensions: &["py", "pyi", "pyw"],
         filenames: &[],
@@ -217,6 +233,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "rust",
+        display_name: c"Rust",
         aliases: &["rs"],
         extensions: &["rs"],
         filenames: &[],
@@ -229,6 +246,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "swift",
+        display_name: c"Swift",
         aliases: &[],
         extensions: &["swift"],
         filenames: &[],
@@ -241,6 +259,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "toml",
+        display_name: c"TOML",
         aliases: &[],
         extensions: &["toml"],
         filenames: &["Cargo.lock"],
@@ -253,6 +272,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "tsx",
+        display_name: c"TSX",
         aliases: &[],
         extensions: &["tsx"],
         filenames: &[],
@@ -265,6 +285,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "typescript",
+        display_name: c"TypeScript",
         aliases: &["ts"],
         extensions: &["ts", "mts", "cts"],
         filenames: &[],
@@ -277,6 +298,7 @@ pub static LANGUAGES: &[Language] = &[
     },
     Language {
         name: "yaml",
+        display_name: c"YAML",
         aliases: &["yml"],
         extensions: &["yaml", "yml"],
         filenames: &[".clang-format", ".clang-tidy"],
@@ -587,6 +609,14 @@ mod tests {
                 language.name
             );
         }
+    }
+
+    #[test]
+    fn every_language_has_a_display_name() {
+        for language in LANGUAGES {
+            assert!(!language.display_name.is_empty(), "{} has none", language.name);
+        }
+        assert_eq!(language(identify("A.swift", "")).unwrap().display_name, c"Swift");
     }
 
     #[test]

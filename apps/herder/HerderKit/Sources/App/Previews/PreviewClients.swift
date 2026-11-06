@@ -45,6 +45,7 @@ struct PreviewGitClient: GitClient {
     func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {}
     func repositoryKind(at url: URL) async throws -> GitRepositoryKind { .mainWorkingTree }
     func gitDirectory(of url: URL) async throws -> URL? { url.appending(path: ".git") }
+    func checkout(of url: URL) async throws -> GitWorktree.Checkout? { .branch("main") }
     func status(in worktree: URL) async throws -> GitWorktreeStatus {
         let root = PathKey(worktree)
         return GitWorktreeStatus(root: root, entries: [root.appending("Package.swift"): .ignored])

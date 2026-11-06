@@ -213,6 +213,24 @@ import Testing
         #expect(git.statusLookups.count == lookupsBefore + 1)
     }
 
+    @Test func theCheckoutIsReadOnRefreshAndFollowsAChangeToTheGitDirectory() async throws {
+        git.seed(checkout: .branch("main"), of: root)
+        let state = try await start(with: [file("a.txt")])
+        #expect(state.checkout == .branch("main"))
+
+        git.seed(checkout: .branch("feature"), of: root)
+        watcher.change([root.appending(path: ".git")])
+        await settle()
+
+        #expect(state.checkout == .branch("feature"))
+    }
+
+    @Test func aFolderGitCannotReadHasNoCheckout() async throws {
+        let state = try await start(with: [file("a.txt")])
+
+        #expect(state.checkout == nil)
+    }
+
     /// The system admitting it dropped events, which degrades into exactly what
     /// a window coming forward always did.
     @Test func droppedEventsFallBackToReadingEverything() async throws {

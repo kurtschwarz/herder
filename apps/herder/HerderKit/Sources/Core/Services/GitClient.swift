@@ -30,6 +30,11 @@ public protocol GitClient: Sendable {
     /// `nil` for a folder that is not a working tree.
     func gitDirectory(of url: URL) async throws -> URL?
 
+    /// What the working tree at `url` has checked out: its branch, or the
+    /// commit when `HEAD` is detached. `nil` for a folder that is not a working
+    /// tree, or one whose `HEAD` cannot be read.
+    func checkout(of url: URL) async throws -> GitWorktree.Checkout?
+
     /// What git says about every path in the working tree at `worktree`.
     ///
     /// One call for the whole tree rather than a question per folder: the cost

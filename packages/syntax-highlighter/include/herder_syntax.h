@@ -1,6 +1,6 @@
 // Syntax highlighting for Herder's editor pane.
 //
-// Hand-written to match `src/lib.rs`. The surface is four functions and one
+// Hand-written to match `src/lib.rs`. The surface is a handful of functions and one
 // struct, so a generator would be more machinery than it saves; the Rust tests
 // cover the behaviour and Swift's `SyntaxTokenKind` asserts `hdr_kind_count`.
 
@@ -53,6 +53,10 @@ void hdr_warm(void);
 /// for a `#!` line.
 uint32_t hdr_language_for(const uint8_t *name, size_t name_len,
                           const uint8_t *source, size_t source_len);
+
+/// The name to show a reader for `language` ("Swift"), a static nul-terminated
+/// string that is never freed. NULL for `HDR_LANGUAGE_NONE`.
+const char *hdr_language_name(uint32_t language);
 
 /// Tokens for `source`, read as `language`. Empty for an unknown language or a
 /// file past the size ceiling.

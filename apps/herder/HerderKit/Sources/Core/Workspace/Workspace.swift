@@ -89,6 +89,10 @@ public final class Workspace {
     public private(set) var listings: [PathKey: Listing] = [:]
     public private(set) var status: WorktreeStatus = .empty
 
+    /// What the worktree has checked out, as of the last read. `nil` until the
+    /// first read finishes, or when git could not say.
+    public private(set) var checkout: GitWorktree.Checkout?
+
     /// False once the worktree's folder has gone from under the watcher, which
     /// `git worktree remove` in a terminal does. Nothing tries to render a
     /// half-dead tree after that.
@@ -296,6 +300,12 @@ public final class Workspace {
     }
 
     private func readStatus() async {
+        // Asked here because a switch of branch writes `HEAD` in the git
+        // directory, which is the same sign a drain already waits for.
+        if let derived = try? await git.checkout(of: root.url), isAvailable, checkout != derived {
+            checkout = derived
+        }
+
         let answer: GitWorktreeStatus
         do {
             answer = try await git.status(in: root.url)
