@@ -46,6 +46,17 @@ build:
     rm -rf {{ xcframework }}
     (cd ${src} && zig build -Doptimize=ReleaseFast -Demit-lib-vt -Demit-xcframework=true)
     cp -R ${src}/zig-out/lib/ghostty-vt.xcframework {{ xcframework }}
+
+    # Ghostty puts `module.modulemap` at the top of each slice's headers, and
+    # so does the syntax crate. Xcode copies both to the same `include/`, and
+    # two build commands that make one file is an error. So this one's goes in
+    # a folder of its own, pointing back at the headers, which stay where
+    # `#include <ghostty/vt/...>` finds them.
+    for headers in {{ xcframework }}/*/Headers; do
+        mkdir -p ${headers}/GhosttyVt
+        rm ${headers}/module.modulemap
+        printf 'module GhosttyVt {\n    umbrella header "../ghostty/vt.h"\n    export *\n}\n' > ${headers}/GhosttyVt/module.modulemap
+    done
     print -r -- "${commit}" > target/built-commit
 
 # The build is the test: there is no code here of our own to run

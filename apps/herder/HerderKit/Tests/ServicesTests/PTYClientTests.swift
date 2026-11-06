@@ -153,7 +153,7 @@ import Testing
         let found = try await poll("the new directory") {
             await session.workingDirectory().flatMap { $0.lastPathComponent == "usr" ? $0 : nil }
         }
-        #expect(found.standardizedFileURL.path(percentEncoded: false) == "/usr")
+        #expect(found.path(percentEncoded: false).trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "usr")
     }
 
     @Test func nothingIsLeftToAskOnceItHasExited() async throws {

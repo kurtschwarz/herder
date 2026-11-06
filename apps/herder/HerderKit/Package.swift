@@ -57,12 +57,30 @@ let package = Package(
         // to run one of them before this package will resolve.
         .binaryTarget(name: "HerderSyntaxFFI", path: "Vendor/HerderSyntaxFFI.xcframework"),
 
+        // libghostty-vt, the terminal emulation under `TerminalUI`. Built from
+        // the commit pinned in `packages/ghostty-vt` by `just ghostty`, and
+        // like the one above a build artifact a fresh clone has to make first.
+        // Its API is not stable, so only `TerminalUI` may import it.
+        .binaryTarget(name: "GhosttyVt", path: "Vendor/GhosttyVt.xcframework"),
+
         // Shared views, styles, tokens.
         // Depends on `Core` only for the environment keys that carry Core's
         // action types across the App/feature boundary: `Core` cannot declare
         // them itself because it may not import SwiftUI. No design token knows
         // anything about a workspace.
         .target(name: "DesignSystem", dependencies: ["Core", icons], swiftSettings: ui),
+
+        // The terminal view: the emulator, the renderer and the input, over a
+        // `PTYSession` from Core. A component rather than a feature because the
+        // terminal panel and agent sessions both draw one. Depends on
+        // `DesignSystem` for the colours and the one font, and on nothing that
+        // knows what a workspace is.
+        .target(
+            name: "TerminalUI",
+            dependencies: ["Core", "DesignSystem", "GhosttyVt"],
+            path: "Sources/Components/TerminalUI",
+            swiftSettings: ui
+        ),
 
         // Feature targets carry an explicit `path` because SwiftPM otherwise
         // looks for them directly under `Sources`. Each one sees `Core`,
@@ -132,6 +150,12 @@ let package = Package(
             name: "EditorFeatureTests",
             dependencies: ["EditorFeature", "Core", "Services", "TestSupport"],
             path: "Tests/Features/EditorFeatureTests",
+            swiftSettings: ui
+        ),
+        .testTarget(
+            name: "TerminalUITests",
+            dependencies: ["TerminalUI", "Core", "DesignSystem", "TestSupport"],
+            path: "Tests/Components/TerminalUITests",
             swiftSettings: ui
         ),
         .testTarget(

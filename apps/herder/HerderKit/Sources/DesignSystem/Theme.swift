@@ -53,6 +53,16 @@ public enum Theme {
         public static let code: CGFloat = 12
         /// Width of the editor's line-number gutter.
         public static let gutter: CGFloat = 48
+        /// Point size of text in the terminal. Its own token, though it matches
+        /// `code` today, so the two can part ways without a hunt.
+        public static let terminal: CGFloat = 12
+        /// The shortest the terminal panel may be dragged.
+        public static let minTerminalHeight: CGFloat = 120
+        /// What the panel measures until the user drags it.
+        public static let defaultTerminalHeight: CGFloat = 240
+        /// What a drag leaves the editor above the panel: a breadcrumb, a tab
+        /// bar and a few lines.
+        public static let minEditorHeight: CGFloat = 160
         /// The dot on a tab with unsaved changes.
         public static let unsavedDot: CGFloat = 8
     }
@@ -74,6 +84,47 @@ public enum Theme {
         public static let fieldGroup: CGFloat = 14
         /// Text fields, chips and buttons.
         public static let control: CGFloat = 9
+    }
+
+    /// What a terminal draws with. Not in `Palette` because it is not a surface
+    /// or a label: a program running in it may ask for any of these by number.
+    /// Tokyo Night, to sit with the rest.
+    public enum Terminal {
+        public struct RGB: Sendable, Equatable {
+            public let red: UInt8
+            public let green: UInt8
+            public let blue: UInt8
+
+            public init(_ hex: UInt32) {
+                red = UInt8(hex >> 16 & 0xff)
+                green = UInt8(hex >> 8 & 0xff)
+                blue = UInt8(hex & 0xff)
+            }
+
+            public var color: Color {
+                Color(red: Double(red) / 255, green: Double(green) / 255, blue: Double(blue) / 255)
+            }
+        }
+
+        public static let foreground = RGB(0xc0caf5)
+
+        /// What a program that asks for the default background is told, and
+        /// the colour inverse text takes. Not painted: the terminal sits
+        /// straight on the window, like the editor.
+        public static let background = RGB(0x1a1b26)
+        public static let cursor = RGB(0xc0caf5)
+
+        /// Behind selected text.
+        public static let selection = RGB(0x283457)
+
+        /// The sixteen colours a program names with SGR 30-37 and 90-97, in
+        /// that order: eight normal, then eight bright.
+        public static let ansi: [RGB] = [
+            RGB(0x15161e), RGB(0xf7768e), RGB(0x9ece6a), RGB(0xe0af68),
+            RGB(0x7aa2f7), RGB(0xbb9af7), RGB(0x7dcfff), RGB(0xa9b1d6),
+            RGB(0x414868), RGB(0xf7768e), RGB(0x9ece6a), RGB(0xe0af68),
+            RGB(0x7aa2f7), RGB(0xbb9af7), RGB(0x7dcfff), RGB(0xc0caf5),
+        ]
     }
 
     public enum Palette {
