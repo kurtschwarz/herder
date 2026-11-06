@@ -8,11 +8,13 @@ nonisolated public struct WolfShape: Shape {
     public init() {}
 
     public func path(in rect: CGRect) -> Path {
-        VectorPath.path(Self.data, viewBox: Self.viewBox, in: rect)
+        VectorPath.fit(Self.path, viewBox: Self.viewBox, in: rect)
     }
 
     /// The coordinate space the path data is authored in.
     static let viewBox = CGRect(x: 220, y: 210, width: 960, height: 1265)
+
+    private static let path = VectorPath.parse(data)
 
     static let data = """
     M 732.5 1452.3 C 740.2 1443.1 749.9 1431.5 754.0 1426.6 C 758.1 1421.6 762.5 1416.4 763.7
