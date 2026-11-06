@@ -48,15 +48,9 @@ struct TerminalHeader: View {
                     .truncationMode(.head)
             }
 
-            Button {
+            HoverIconButton(icon: Ph.caretDown.regular, help: "Hide Terminal") {
                 model.hide()
-            } label: {
-                PhIcon(Ph.caretDown.regular, size: 14)
-                    .frame(width: Theme.Size.iconButton, height: Theme.Size.iconButton)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.Palette.secondaryText)
-            .help("Hide Terminal")
         }
         .padding(.horizontal, Theme.Spacing.normal)
         .padding(.vertical, Theme.Spacing.tight)
@@ -183,4 +177,31 @@ private final class ClickMonitor {
     }
 
     isolated deinit { stop() }
+}
+
+/// A glyph-only button that lights a plate behind it under the pointer, which
+/// becomes a hand.
+private struct HoverIconButton: View {
+    let icon: Image
+    let help: String
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            PhIcon(icon, size: 14)
+                .frame(width: Theme.Size.iconButton, height: Theme.Size.iconButton)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.control)
+                        .fill(isHovering ? Theme.Palette.control : .clear)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.control))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isHovering ? Theme.Palette.text : Theme.Palette.secondaryText)
+        .onHover { isHovering = $0 }
+        .pointerStyle(.link)
+        .help(help)
+    }
 }
