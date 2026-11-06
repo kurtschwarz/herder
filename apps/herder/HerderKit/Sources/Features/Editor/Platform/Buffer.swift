@@ -72,6 +72,23 @@ final class Buffer: NSObject, NSTextViewDelegate {
             else { continue }
             layout.addRenderingAttribute(.foregroundColor, value: SyntaxAttributes.colour(for: token.kind), for: range)
         }
+        // Being no part of the text is why this has to be said out loud. TextKit
+        // paints each paragraph into a view of its own inside the text view,
+        // and a painted one keeps its pixels until that view is marked dirty.
+        // An edit does that; a rendering attribute does not, nor does the text
+        // view's own `needsDisplay`, which AppKit does not pass down, nor
+        // invalidating layout, which reuses the views. Left alone, the colour
+        // appeared when the caret next blinked, a second later, which read as
+        // a slow highlighter.
+        //
+        // Only what is on screen has a view, so this is a few dozen at most;
+        // the rest is painted with its colour as it scrolls in.
+        textView.map(markForDisplay)
+    }
+
+    private func markForDisplay(_ view: NSView) {
+        view.needsDisplay = true
+        view.subviews.forEach(markForDisplay)
     }
 
     // MARK: - The view
