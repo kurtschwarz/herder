@@ -43,7 +43,7 @@ struct CodeTextView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeNSView(context: Context) -> NSScrollView {
+    func makeNSView(context: Context) -> CodePane {
         let textView = NSTextView(usingTextLayoutManager: true)
         textView.isEditable = false
         textView.isSelectable = true
@@ -65,13 +65,14 @@ struct CodeTextView: NSViewRepresentable {
         scrollView.documentView = textView
         scrollView.contentView.postsBoundsChangedNotifications = true
 
-        scrollView.verticalRulerView = LineNumberRuler(scrollView: scrollView, textView: textView)
-        scrollView.hasVerticalRuler = true
-        scrollView.rulersVisible = true
-        return scrollView
+        return CodePane(
+            scrollView: scrollView,
+            gutter: LineNumberGutter(scrollView: scrollView, textView: textView)
+        )
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    func updateNSView(_ pane: CodePane, context: Context) {
+        let scrollView = pane.scrollView
         guard
             let textView = scrollView.documentView as? NSTextView,
             let storage = textView.textStorage
@@ -107,13 +108,13 @@ struct CodeTextView: NSViewRepresentable {
         clip.scroll(to: clip.constrainBoundsRect(NSRect(origin: target, size: clip.bounds.size)).origin)
         scrollView.reflectScrolledClipView(clip)
 
-        (scrollView.verticalRulerView as? LineNumberRuler)?.textDidChange(to: source.text)
+        pane.gutter.textDidChange(to: source.text)
     }
 
     /// A tab switch blanks the pane while the next file is read, which takes
     /// this view with it. Without this the offset of the tab being left would
     /// never be recorded.
-    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
-        coordinator.onLeave?(scrollView.contentView.bounds.origin)
+    static func dismantleNSView(_ pane: CodePane, coordinator: Coordinator) {
+        coordinator.onLeave?(pane.scrollView.contentView.bounds.origin)
     }
 }

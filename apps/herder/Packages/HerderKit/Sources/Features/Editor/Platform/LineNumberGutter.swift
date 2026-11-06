@@ -6,7 +6,12 @@ import DesignSystem
 /// Draws only the fragments in view. A line's number is found by searching the
 /// offsets at which lines start, which are worked out once per text rather than
 /// on every scroll.
-final class LineNumberRuler: NSRulerView {
+///
+/// A sibling of the scroll view rather than an `NSRulerView`: AppKit lays a
+/// ruler over the clip view instead of beside it, so a line long enough to
+/// scroll sideways was drawn under the numbers. Side by side, the scroll view's
+/// own edge is where the text stops.
+final class LineNumberGutter: NSView {
     private weak var textView: NSTextView?
 
     /// UTF-16 offset of the start of each line, the unit `NSTextContentManager`
@@ -21,9 +26,7 @@ final class LineNumberRuler: NSRulerView {
 
     init(scrollView: NSScrollView, textView: NSTextView) {
         self.textView = textView
-        super.init(scrollView: scrollView, orientation: .verticalRuler)
-        clientView = textView
-        ruleThickness = Theme.Size.gutter
+        super.init(frame: .zero)
         // Views stopped clipping to their bounds by default in macOS 14, and a
         // number for a line scrolled half out of view would be drawn over the
         // breadcrumb above.
@@ -62,13 +65,7 @@ final class LineNumberRuler: NSRulerView {
         DispatchQueue.main.async { [weak self] in self?.needsDisplay = true }
     }
 
-    /// Skips `super`, which fills a background and rules a line down the edge
-    /// before the numbers are drawn. The gutter is just the numbers.
     override func draw(_ dirtyRect: NSRect) {
-        drawHashMarksAndLabels(in: dirtyRect)
-    }
-
-    override func drawHashMarksAndLabels(in rect: NSRect) {
         guard
             let textView,
             let layout = textView.textLayoutManager,
@@ -81,7 +78,7 @@ final class LineNumberRuler: NSRulerView {
         layout.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
             // Converted rather than subtracted from the scroll offset: with a
             // bar over the top, the scroll view has a content inset and the
-            // ruler's own origin is not the clip view's.
+            // gutter's own origin is not the clip view's.
             let top = convert(NSPoint(x: 0, y: fragment.layoutFragmentFrame.minY + originY), from: textView).y
             if top > bounds.height { return false }
             guard let line = fragment.textLineFragments.first else { return true }
