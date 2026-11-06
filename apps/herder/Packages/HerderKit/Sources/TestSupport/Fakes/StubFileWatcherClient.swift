@@ -30,10 +30,6 @@ public final class StubFileWatcherClient: FileWatcherClient {
         state.withLock { $0.positions }
     }
 
-    public var isWatching: Bool {
-        state.withLock { !$0.continuations.isEmpty }
-    }
-
     public func watch(_ roots: [URL], from position: FileWatcherPosition?) -> AsyncStream<FileChangeBatch> {
         AsyncStream { continuation in
             state.withLock {

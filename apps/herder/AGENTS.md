@@ -5,11 +5,16 @@ owns the layering, the dependency rules, the state model, the concurrency rules
 and the conventions. This file holds only the lookup table for where a new file
 goes, and it does not repeat what is in there.
 
-The codebase is mid-realignment: `docs/REALIGNMENT.md` describes the move from the
-structure that is to the structure that should be, `docs/realignment/survey.md`
-maps what was found, and the Decisions section of the plan records the calls that
-have been made. If this file and `ARCHITECTURE.md` disagree, `ARCHITECTURE.md`
-wins and this file is stale — say so.
+The structure described there is the structure the code has. It was reached by a
+realignment that ran from the old shape to this one; the plan, the survey it was
+based on and the notes taken along the way were deleted when it finished, because
+a superseded plan left in the tree reads like live guidance. They are in git
+history if you ever need the reasoning behind a shape rather than the shape
+itself — look for the `realign(p<N>):` commits. Anything learned that is still
+load-bearing was folded into `ARCHITECTURE.md` instead.
+
+If this file and `ARCHITECTURE.md` disagree, `ARCHITECTURE.md` wins and this file
+is stale — say so.
 
 A near-empty app target plus a local Swift package holding every line of real
 code, organised by feature rather than by type. `../../README.md` carries the

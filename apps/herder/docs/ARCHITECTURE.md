@@ -47,7 +47,7 @@ AppFeature            composition root: windows, menus, builds real services
 3. **Services** may import `Core` and `RustBridge`.
 4. **Core** imports only `Foundation` and `Observation`. Never SwiftUI, AppKit, SwiftData, or RustBridge.
 5. **Only `AppFeature`** knows concrete service types. It constructs them in `AppEnvironment`.
-6. **SwiftData is not imported at all.** It is gone, as of Phase 7; state is JSON files behind `StateStore`. Reaching for a `@Model` is reintroducing a dependency the app deliberately dropped.
+6. **SwiftData is not imported at all.** It is gone; state is JSON files behind `StateStore`. Reaching for a `@Model` is reintroducing a dependency the app deliberately dropped.
 7. **RustBridge types never leave Services.** Services translate FFI types to Core types at the boundary.
 
 Rules 1, 2, 3 and 5 are enforced by target dependencies in `Package.swift`. Rules 4 and 6 (and the no-singletons rule below) are enforced by `scripts/check-boundaries.sh`, which must pass before any merge. Rule 7 is enforced in review.
@@ -84,8 +84,9 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   ├── Core/
 │   │   │   │   │   ├── Models/          # Sendable value types
 │   │   │   │   │   ├── Services/        # service protocols
-│   │   │   │   │   ├── Workspace/       # WorkspaceRegistry, Workspace, stores, snapshots
-│   │   │   │   │   └── Persistence/     # StateStore protocol, snapshot types
+│   │   │   │   │   ├── Workspace/       # WorkspaceRegistry, Workspace, snapshots, UI state
+│   │   │   │   │   ├── Repositories/    # RepositoryStore, RepositoryAccess
+│   │   │   │   │   └── Persistence/     # StateStore protocol
 │   │   │   │   ├── Services/
 │   │   │   │   │   ├── FileSystem/
 │   │   │   │   │   ├── Git/
@@ -119,8 +120,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   ├── justfile
 │   │   ├── AGENTS.md                    # points here; holds only what is not in this file
 │   │   └── docs/
-│   │       ├── ARCHITECTURE.md          # this file
-│   │       └── REALIGNMENT.md
+│   │       └── ARCHITECTURE.md          # this file
 │   └── ...                              # other apps: not Herder's business
 │
 └── packages/
@@ -177,8 +177,8 @@ let package = Package(
         .package(url: "https://github.com/phosphor-icons/swift", from: "2.1.0"),
     ],
     targets: [
-        // Models, service protocols and workspace state. Nonisolated by default;
-        // the stores in Sources/Core/Workspace are marked @MainActor explicitly.
+        // Models, service protocols and app state. Nonisolated by default; the
+        // stores under Sources/Core are marked @MainActor explicitly.
         .target(name: "Core", swiftSettings: core),
 
         // Protocol implementations. The only module that touches the FFI.
@@ -189,7 +189,10 @@ let package = Package(
         // `just bootstrap` before this package will resolve.
         .binaryTarget(name: "HerderSyntaxFFI", path: "Vendor/HerderSyntaxFFI.xcframework"),
 
-        .target(name: "DesignSystem", dependencies: [icons], swiftSettings: ui),
+        // `Core` for the environment keys carrying Core's action types across
+        // the App/feature boundary, which Core cannot declare itself because it
+        // may not import SwiftUI. No design token knows about a workspace.
+        .target(name: "DesignSystem", dependencies: ["Core", icons], swiftSettings: ui),
         .target(name: "TestSupport", dependencies: ["Core"], swiftSettings: core),
         .target(name: "TerminalUI", dependencies: ["Core", "DesignSystem"],
                 path: "Sources/Components/TerminalUI", swiftSettings: ui),
@@ -354,12 +357,16 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 - The repository list is the exception: it saves immediately on every change, because each addition mints a security-scoped bookmark that cannot be remade.
 - Which workspace a window shows is stored with `@SceneStorage`.
 - Agent transcripts are not stored by Herder. Store an `AgentSessionRef` (the Claude Code session ID plus any Herder label) so sessions can be resumed.
-- **Secrets go in the Keychain, never a file. A capability is not a secret.** A credential that grants access to something otherwise out of reach — an API token — is a secret. A security-scoped bookmark is a handle to a folder the user themselves picked, sitting in a file in their own home directory, and anything running as them can already read that folder without it. So the bookmark lives in `state.json` as base64, where it stays in one atomic write with the record it belongs to (D13 in `REALIGNMENT.md`). Splitting it out would put one repository in two stores and double the window in which a crash leaves a record with no bookmark.
+- **Secrets go in the Keychain, never a file. A capability is not a secret.** A credential that grants access to something otherwise out of reach — an API token — is a secret. A security-scoped bookmark is a handle to a folder the user themselves picked, sitting in a file in their own home directory, and anything running as them can already read that folder without it. So the bookmark lives in `state.json` as base64, where it stays in one atomic write with the record it belongs to. Splitting it out would put one repository in two stores and double the window in which a crash leaves a record with no bookmark.
 - Searchable indexes and history, when needed, use SQLite on the Rust side.
 
 ### A name that reaches disk cannot be renamed by a rename
 
-There is no SwiftData left, so the specific rule this section held — never rename a `@Model` class, because the class name *is* the stored entity name — no longer has anything to apply to. It is kept because the lesson outlived the technology, and it cost a day: see the 4a incident in `realignment/notes.md`.
+There is no SwiftData left, so the specific rule this section held — never rename a `@Model` class — no longer has anything to apply to. It is kept because the lesson outlived the technology, and because of how it was learned.
+
+**What happened.** A task billed as a pure rename with no behaviour change renamed the `@Model` class `Workspace` to `Repository`. But a `@Model` class name *is* the stored entity name: SwiftData derives the SQLite table from it and records the schema the store was written against. The store on disk had a `ZWORKSPACE` table recorded against a schema saying `Workspace`; after the rename the schema described an entity called `Repository`, so the store matched no version in the migration plan and SwiftData refused to open it at all — `Cannot use staged migration with an unknown model version`, on launch, with every adopted folder and every security-scoped bookmark behind it unreachable. The fix was to keep the persisted class called `Workspace` with a `typealias Repository` over it: the vocabulary the code wanted, over the name the store had recorded.
+
+**Why nothing caught it**, which is the part worth keeping. Every storage test used an in-memory container, and an in-memory container is created at the current version every time, so it can never disagree with the code. The first test written for the bug was no better: it built its "old" store from today's schema, so both sides moved together and it passed under the bug. The test that caught it was a real store, written by an earlier build, committed as a fixture and generated by nothing.
 
 The general form: **an identifier that is also a key on disk is data, and renaming it is a migration.** What is left in the codebase that this still binds:
 
@@ -373,7 +380,7 @@ And the test rule, which also outlived SwiftData: **storage changes are tested a
 
 `Repository` holds a **security-scoped bookmark**, plus a user-chosen name and sidebar order. None of that is recoverable from disk or git: the bookmark cannot be regenerated without the user re-picking the folder in an `NSOpenPanel`. So the repository list is the one piece of Herder's state where losing the store costs the user real work. It saves immediately on every change, it is written in one atomic write with the bookmark inside it, and `RepositoryStore.save()` reads the key before writing it so that nothing sharing the key can drop it.
 
-The bookmark's storage was the open question here. It is settled: base64 in `state.json` (D13).
+The bookmark's storage was an open question for a long time. It is settled: base64 in `state.json`, for the reason in the list above.
 
 ### Implementation
 
@@ -413,7 +420,7 @@ public struct WorkspaceSnapshot: Codable, Sendable {
 
 - The syntax highlighter lives in `packages/syntax-highlighter` and stays there. Don't move it, rename it, or restructure its crates as part of other work.
 - It owns its build and binding generation. HerderKit consumes its output; HerderKit doesn't reach into its internals or duplicate its build steps. `just syntax` builds the XCFramework and copies it into `Packages/HerderKit/Vendor/`, so the `.binaryTarget` path stays inside the package and SwiftPM never depends on Cargo's output directory.
-- **The bindings are hand-written**, not generated: a C header and a modulemap in `packages/syntax-highlighter/include/`, declaring module `HerderSyntaxFFI`. The header is the API. It is edited by hand, in step with `src/lib.rs`, and the two must not drift — `SyntaxTests` asserts the kind count matches.
+- **The bindings are hand-written**, not generated: a C header and a modulemap in `packages/syntax-highlighter/include/`, declaring module `HerderSyntaxFFI`. The header is the API. It is edited by hand, in step with `src/lib.rs`, and the two must not drift — `TreeSitterHighlighterTests` asserts the kind count matches.
 - Changes to its public API (what Swift sees) are deliberate and get their own task.
 - Swift touches it in exactly one place: the highlighting service in `Services/Highlighting/` (for example `RustHighlightService`), which converts its types to Core types.
 - Keep the FFI API coarse: send edits, not whole documents; request highlights for the visible range; batch where possible.

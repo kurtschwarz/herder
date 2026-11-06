@@ -251,17 +251,16 @@ import Testing
         #expect(model.nameOfRepository(holding: URL(filePath: "/code/api")) == repository.name)
     }
 
-    /// A worktree the list has never seen belongs to nothing it can name. This
-    /// is what tells a window its worktree has been removed in a terminal.
-    @Test func aWorktreeNoRepositoryClaimsIsNotKnown() async throws {
+    /// A worktree the list has never seen belongs to nothing it can name, so a
+    /// pane showing it has no repository name to put in its header.
+    @Test func aWorktreeNoRepositoryClaimsHasNoName() async throws {
         let repository = try await addRepository("/code/api")
         await model.refresh(repository)
 
-        #expect(!model.isKnown(URL(filePath: "/code/api-gone")))
         #expect(model.nameOfRepository(holding: URL(filePath: "/code/api-gone")) == nil)
     }
 
-    @Test func aWorktreeThatIsStillThereStaysKnown() async throws {
+    @Test func aWorktreeThatIsStillThereKeepsItsName() async throws {
         let repository = try await addRepository("/code/api")
         git.seed(worktrees: [
             GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
@@ -270,7 +269,7 @@ import Testing
         await model.refresh(repository)
         await model.refresh(repository)
 
-        #expect(model.isKnown(URL(filePath: "/code/api")))
+        #expect(model.nameOfRepository(holding: URL(filePath: "/code/api")) == "api")
     }
 
     @Test func removingARepositoryForgetsItsWorktrees() async throws {
@@ -282,7 +281,7 @@ import Testing
 
         await model.remove(repository)
 
-        #expect(!model.isKnown(URL(filePath: "/code/api")))
+        #expect(model.nameOfRepository(holding: URL(filePath: "/code/api")) == nil)
     }
 
     /// A rename has to show in the pane header, which reads this.

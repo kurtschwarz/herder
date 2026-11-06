@@ -44,19 +44,37 @@ import Testing
         return url
     }
 
+    /// Who commits, and that they do not sign.
+    ///
+    /// The developer's own git config may sign commits, and a signing agent
+    /// asked for dozens of signatures by a parallel test run starts refusing —
+    /// which showed up as six tests failing with "1Password: agent returned an
+    /// error" and nothing wrong with the code. Nothing here tests signatures.
+    ///
+    /// One helper rather than three lines repeated at each site, because the
+    /// site that forgets the third line is the site that fails on someone
+    /// else's machine. That is how this was missed the first time: the working
+    /// copies opted out and the six bare-repository seeds did not.
+    func configureIdentity(in url: URL) throws {
+        try git("config", "user.email", "test@example.com", in: url)
+        try git("config", "user.name", "Test", in: url)
+        try git("config", "commit.gpgsign", "false", in: url)
+    }
+
+    /// Writes a file and commits it, so a repository has something to branch
+    /// from. `git worktree add` needs a commit to exist.
+    func commitSomething(in url: URL) throws {
+        try Data("x".utf8).write(to: url.appending(path: "README.md"))
+        try git("add", ".", in: url)
+        try git("commit", "-m", "first", in: url)
+    }
+
     /// A repository with one commit, so `git worktree add` has something to branch.
     func makeRepository(_ name: String) throws -> URL {
         let url = try makeDirectory(name)
         try git("init", "--initial-branch=main", in: url)
-        try git("config", "user.email", "test@example.com", in: url)
-        try git("config", "user.name", "Test", in: url)
-        // The developer's own git config may sign commits, and a signing agent
-        // asked for dozens of signatures by a parallel test run starts
-        // refusing. Nothing here is testing signatures.
-        try git("config", "commit.gpgsign", "false", in: url)
-        try Data("x".utf8).write(to: url.appending(path: "README.md"))
-        try git("add", ".", in: url)
-        try git("commit", "-m", "first", in: url)
+        try configureIdentity(in: url)
+        try commitSomething(in: url)
         return url
     }
 
@@ -204,11 +222,8 @@ import Testing
         // A bare repo has no commits yet, so seed one through a temporary clone.
         let seed = try makeDirectory("seed")
         try git("clone", bare.path(percentEncoded: false), seed.path(percentEncoded: false), in: directory)
-        try git("config", "user.email", "test@example.com", in: seed)
-        try git("config", "user.name", "Test", in: seed)
-        try Data("x".utf8).write(to: seed.appending(path: "README.md"))
-        try git("add", ".", in: seed)
-        try git("commit", "-m", "first", in: seed)
+        try configureIdentity(in: seed)
+        try commitSomething(in: seed)
         try git("push", "origin", "main", in: seed)
 
         let worktree = directory.appending(path: "bare-feature")
@@ -230,11 +245,8 @@ import Testing
 
         let seed = try makeDirectory("seed-\(name)")
         try git("clone", dotGit.path(percentEncoded: false), seed.path(percentEncoded: false), in: directory)
-        try git("config", "user.email", "test@example.com", in: seed)
-        try git("config", "user.name", "Test", in: seed)
-        try Data("x".utf8).write(to: seed.appending(path: "README.md"))
-        try git("add", ".", in: seed)
-        try git("commit", "-m", "first", in: seed)
+        try configureIdentity(in: seed)
+        try commitSomething(in: seed)
         try git("push", "origin", "main", in: seed)
 
         try git("worktree", "add", "main", "main", in: project)
@@ -294,11 +306,8 @@ import Testing
 
         let seed = try makeDirectory("seed-\(name)")
         try git("clone", bare.path(percentEncoded: false), seed.path(percentEncoded: false), in: directory)
-        try git("config", "user.email", "test@example.com", in: seed)
-        try git("config", "user.name", "Test", in: seed)
-        try Data("x".utf8).write(to: seed.appending(path: "README.md"))
-        try git("add", ".", in: seed)
-        try git("commit", "-m", "first", in: seed)
+        try configureIdentity(in: seed)
+        try commitSomething(in: seed)
         try git("push", "origin", "main", in: seed)
 
         try git("worktree", "add", "main", "main", in: project)
@@ -393,11 +402,8 @@ import Testing
         try git("init", "--bare", "--initial-branch=main", in: bare)
         let seed = try makeDirectory("seed")
         try git("clone", bare.path(percentEncoded: false), seed.path(percentEncoded: false), in: directory)
-        try git("config", "user.email", "test@example.com", in: seed)
-        try git("config", "user.name", "Test", in: seed)
-        try Data("x".utf8).write(to: seed.appending(path: "README.md"))
-        try git("add", ".", in: seed)
-        try git("commit", "-m", "first", in: seed)
+        try configureIdentity(in: seed)
+        try commitSomething(in: seed)
         try git("push", "origin", "main", in: seed)
 
         #expect(try await client.branches(at: bare) == ["main"])
@@ -468,11 +474,8 @@ import Testing
         try git("init", "--bare", "--initial-branch=main", in: bare)
         let seed = try makeDirectory("seed")
         try git("clone", bare.path(percentEncoded: false), seed.path(percentEncoded: false), in: directory)
-        try git("config", "user.email", "test@example.com", in: seed)
-        try git("config", "user.name", "Test", in: seed)
-        try Data("x".utf8).write(to: seed.appending(path: "README.md"))
-        try git("add", ".", in: seed)
-        try git("commit", "-m", "first", in: seed)
+        try configureIdentity(in: seed)
+        try commitSomething(in: seed)
         try git("push", "origin", "main", in: seed)
 
         let path = GitWorktreeLocation.path(forBranch: "feature", inRepository: bare, kind: .bare)!
@@ -529,11 +532,8 @@ import Testing
         try git("init", "--bare", "--initial-branch=main", in: bare)
         let seed = try makeDirectory("seed")
         try git("clone", bare.path(percentEncoded: false), seed.path(percentEncoded: false), in: directory)
-        try git("config", "user.email", "test@example.com", in: seed)
-        try git("config", "user.name", "Test", in: seed)
-        try Data("x".utf8).write(to: seed.appending(path: "README.md"))
-        try git("add", ".", in: seed)
-        try git("commit", "-m", "first", in: seed)
+        try configureIdentity(in: seed)
+        try commitSomething(in: seed)
         try git("push", "origin", "main", in: seed)
 
         let worktree = directory.appending(path: "bare-main")

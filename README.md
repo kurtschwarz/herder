@@ -9,15 +9,18 @@ herder/
 ├── justfile                  # forwards every task to an app or service
 ├── apps/
 │   └── herder/               # the macOS app
-│       ├── AGENTS.md         # structure and conventions, for agents
+│       ├── AGENTS.md         # where a new file goes; points at docs/ARCHITECTURE.md
+│       ├── docs/
+│       │   └── ARCHITECTURE.md   # the rulebook: layers, state, concurrency
 │       ├── justfile          # how to build, test and run this app
 │       ├── project.yml       # source of truth for Herder.xcodeproj
-│       ├── Herder/           # thin app target: entry point and glue only
+│       ├── scripts/          # check-boundaries.sh, the import rules a compiler can't see
+│       ├── Herder/           # thin app target: entry point and resources only
 │       ├── Packages/
 │       │   └── HerderKit/    # all the code, split into modules
 │       └── UITests/          # XCTest, since Swift Testing has no UI automation
 └── packages/
-    └── syntax/               # Rust: tree-sitter grammars behind a C ABI
+    └── syntax-highlighter/   # Rust: tree-sitter grammars behind a C ABI
 ```
 
 New apps go in `apps/<name>/`. Services go in `services/<name>/`. A package under
@@ -25,6 +28,11 @@ New apps go in `apps/<name>/`. Services go in `services/<name>/`. A package unde
 than one of them uses it, or because it is not written in the app's language.
 `packages/syntax-highlighter` is the second kind — Rust, consumed by the macOS app as an
 XCFramework.
+
+**`apps/herder/docs/ARCHITECTURE.md` is the rulebook** for the app, and it wins
+over this file. What is here is the monorepo and a tour; what is there is the
+layering, the dependency rules, the state model and the conventions, in enough
+detail to settle an argument.
 
 ## Getting started
 
@@ -52,7 +60,7 @@ repo as it grows:
 | Command | Does |
 | --- | --- |
 | `just build <dir>` | Build it |
-| `just test <dir>` | Run its tests. Extra arguments pass through: `just test apps/herder -only-testing:ClientsTests` |
+| `just test <dir>` | Run its tests. Extra arguments pass through: `just test apps/herder -only-testing:CoreTests` |
 | `just dev <dir>` | Build and run it, with its output in your terminal |
 | `just bootstrap <dir>` | Set it up in a fresh clone |
 | `just clean <dir>` | Remove its build artifacts |
@@ -74,54 +82,92 @@ propagate — a failing test exits 1.
 ## How the app is put together
 
 The Xcode target is deliberately almost empty. It owns the `@main` entry point,
-`Info.plist`, entitlements, signing and assets, and nothing else. Everything real
-lives in the local Swift package `apps/herder/Packages/HerderKit`, split into
-modules:
+`Info.plist`, entitlements, signing and assets, and links exactly one product.
+Everything real lives in the local Swift package `apps/herder/Packages/HerderKit`,
+split into modules:
 
 | Module | Job | Default isolation |
 | --- | --- | --- |
-| `Models` | Plain `Sendable` value types. No SwiftUI. | `nonisolated` |
-| `Clients` | Side effects behind protocols: disk, network, processes, clocks. | `nonisolated` |
-| `ClientsTestSupport` | Fakes for those protocols. Never linked into the app. | `nonisolated` |
-| `Storage` | SwiftData `@Model` classes, their schema versions and the container. The one module that owns reference types. | `MainActor` |
-| `Worktrees` | The authoritative file and git state of a worktree, kept fresh by a file watcher. | `MainActor` |
-| `Syntax` | Token kinds and the highlighter protocol, over the Rust crate. No colours. | `nonisolated` |
+| `Core` | Value types, service protocols, and the app's live state. Imports only `Foundation` and `Observation` — never SwiftUI, AppKit or the Rust module. | `nonisolated` |
+| `Services` | The implementations of Core's protocols: disk, git, the file watcher, the sandbox, the clock, persistence, the syntax engine. The only module that links the FFI. | `nonisolated` |
+| `TestSupport` | A fake for every protocol, `#if DEBUG` so a release build links an empty module. Features depend on it for their previews. | `nonisolated` |
 | `DesignSystem` | Shared views, styles, tokens. | `MainActor` |
-| `AppFeature` | Root view, navigation, composes features. | `MainActor` |
+| `<Name>Feature` | One per feature, under `Sources/Features/<Name>/`. UI and feature state. | `MainActor` |
+| `AppFeature` | The composition root. Not a feature. | `MainActor` |
 
-`Worktrees` is the one module that is neither a feature nor a client. It exists
-because two features want the same answer — the explorer draws a worktree's
-files, and the sidebar wants to say which worktrees have uncommitted work — and
-features never import each other. State that more than one feature reads, and
-that has to be kept fresh rather than fetched on demand, goes in a module of its
-own below them rather than in whichever feature happened to need it first.
+The rule that holds the rest up: **a feature may import `Core`, `DesignSystem`
+and `TestSupport`, and nothing else.** It never sees a concrete service and never
+sees another feature. Four of those edges are enforced by target dependencies in
+`Package.swift`; the ones a dependency graph cannot express — Core staying free
+of SwiftUI, the Rust module staying inside `Services`, no singletons anywhere —
+are enforced by `apps/herder/scripts/check-boundaries.sh` — `just check` from
+`apps/herder`, or `just in apps/herder check` from here.
+
+**`AppFeature` is the composition root, despite the name, and it is a module
+rather than the Xcode target.** The project file is generated, so every file
+added under `Herder/` costs a `just project` run, while files under `HerderKit`
+are picked up by SwiftPM on their own — and composition code changes often. So
+`AppEnvironment` lives there, it is the only place in the codebase that names a
+concrete service type, and it is the one module allowed to import `Services`.
+
+Two features that want the same answer go through `Core`, not through each other
+and not through `AppFeature`. The file tree draws a worktree's files and the
+sidebar says which worktrees have uncommitted work, so that state is a
+`Workspace` in `Core/Workspace/` — below both of them, rather than inside
+whichever feature happened to need it first.
 
 This buys four things: the tests run in seconds with no app host, module
 boundaries are enforced by the compiler instead of convention, previews work, and
 the project file stops being a merge battleground.
 
 Run the module tests with `just test`. It takes arguments, so
-`just test -only-testing:ClientsTests` works too. Tests run through `xcodebuild`, not
+`just test -only-testing:CoreTests` works too. Tests run through `xcodebuild`, not
 `swift test`, because PhosphorSwift's icons are an asset catalog that only Xcode's
 build system bundles.
 
+### State
+
+Two levels, because the app has two:
+
+- A **`Repository`** is a folder the user adopted and named. It is persisted, it
+  has a sidebar position, and it holds a security-scoped bookmark — the one piece
+  of state in the app that cannot be rebuilt from disk, because regenerating it
+  means asking the user to find the folder again in an open panel. `RepositoryStore`
+  owns the list.
+- A **`Workspace`** is one checkout: a repository's worktree, or a plain folder.
+  It holds that checkout's listings, its git state and each feature's UI state.
+  `WorkspaceRegistry` holds however many are open.
+
+A feature takes `@Environment(Workspace.self)` and gets whichever one its window
+resolved, so nothing ever asks "which is active?" — which is what keeps two
+windows from disagreeing. Which workspace a window is showing belongs to the
+window, in `WindowModel`.
+
+Opening a workspace is idempotent and closing is explicit, so switching away from
+a worktree keeps it: its listings, its git state, and later its terminals and
+agent sessions. What makes that affordable is that holding is cheap and
+refreshing is not — a background workspace costs a file watcher, while a refresh
+costs a `git status` for the whole repository — so **a workspace refreshes only
+while a frontmost window is showing it**, and the rest accumulate their watcher's
+events and act on them in one go when they come forward.
+
 ### Adding a feature
 
-One module per feature, under `Sources/Features/`:
+One module per feature, under `Sources/Features/`. The folder does not repeat the
+suffix:
 
 ```
-Features/EditorFeature/
-├── EditorView.swift
-├── EditorModel.swift      # @Observable, owns state and logic
-├── Components/            # subviews only this feature uses
-├── Platform/              # AppKit bridging, if it needs any
-└── Previews/              # #if DEBUG doubles
+Features/Editor/              # module EditorFeature
+├── EditorView.swift          # the entry point, and usually the only public view
+├── EditorModel.swift         # @Observable, owns state and logic
+├── Components/               # subviews only this feature uses
+└── Platform/                 # AppKit bridging, if it needs any
 ```
 
 Organise by feature, not by type. No top-level `Views/` or `ViewModels/` folders —
 those become junk drawers. Within a module, group by role: `DesignSystem` splits
-into `Views/`, `Modifiers/` and `Shapes/`, and each client in `Clients` keeps its
-protocol and live implementation together in `Clients/<Subject>/`.
+into `Views/`, `Modifiers/` and `Shapes/`, service protocols sit in
+`Core/Services/` and their implementations in `Services/<Area>/`.
 
 Register it in `Package.swift` with the `ui` settings, add a matching test target,
 and depend on it from `AppFeature`:
@@ -129,24 +175,30 @@ and depend on it from `AppFeature`:
 ```swift
 .target(
     name: "EditorFeature",
-    dependencies: ["Models", "Clients", "DesignSystem"],
-    path: "Sources/Features/EditorFeature",
+    dependencies: ["Core", "DesignSystem", "TestSupport"],
+    path: "Sources/Features/Editor",
     swiftSettings: ui
 ),
 .testTarget(
     name: "EditorFeatureTests",
-    dependencies: ["EditorFeature", "ClientsTestSupport"],
+    dependencies: ["EditorFeature", "Core", "TestSupport"],
     path: "Tests/Features/EditorFeatureTests",
     swiftSettings: ui
 ),
 ```
 
-The `path` is what buys the `Features/` folder: SwiftPM maps a target name straight
-onto `Sources/<name>` unless told otherwise.
+Both `path`s are load-bearing: SwiftPM maps a target name straight onto
+`Sources/<name>` unless told otherwise, so without them the build cannot find the
+files at all.
 
-The dependency graph only points downward. Features depend on `Clients`, `Models`,
-`Storage`, `Worktrees` and `DesignSystem`, never on each other. If two features
-need to talk, that goes through `AppFeature` or a shared model.
+Keep the public surface small — usually one view and one model, with the model
+exposing only what the composition root calls. Everything the feature drives
+itself with stays `internal`, because its own view and its own tests are in the
+same module.
+
+Previews live at the bottom of the view file behind `#if DEBUG`, over fakes from
+`TestSupport`. A preview that needs a service it cannot import is telling you the
+preview should show the pane rather than the integration.
 
 ### Syntax highlighting
 
@@ -160,12 +212,13 @@ JavaScript inside HTML and the inline half of markdown work without layer logic
 of ours. The Swift packages for the same grammars have neither, and would need
 both hand-written.
 
-Three modules share the work, and none of them knows all of it:
+Three places share the work, and none of them knows all of it:
 
 - `packages/syntax-highlighter` owns the grammars, the queries and the table matching a file
   to a language. It emits spans with a semantic kind and no opinion about colour.
-- `Syntax` is the Swift face of that: `SyntaxTokenKind`, `SyntaxToken`,
-  `SourceText` and the `SyntaxHighlighter` protocol.
+- `Core` is the Swift face of that: `SyntaxTokenKind`, `SyntaxToken`, `SourceText`
+  and the `SyntaxHighlighter` protocol. `Services/Highlighting/` is the one Swift
+  file that imports the FFI, and it converts the C types to those at the boundary.
 - `EditorFeature` pairs a kind with a colour from `DesignSystem`.
 
 So adding a language touches one file in Rust and nothing in Swift, and retheming
@@ -175,16 +228,18 @@ procedure for both.
 The boundary speaks UTF-8 going in and UTF-16 offsets coming out, so neither side
 converts: tree-sitter counts bytes and `NSTextStorage` indexes UTF-16, and a
 conversion left to the caller is one that gets forgotten until a file with an
-emoji in it paints its colours two characters to the left.
+emoji in it paints its colours two characters to the left. **The crate converts
+before handing a token over**, and there must not be a second conversion in
+Swift.
 
 The timing is the part that needed measuring rather than guessing. Highlighting a
 file is a few hundred microseconds; compiling one language's queries is up to a
 quarter of a second, because the work scales with the size of the *grammar* and
 Swift's `parser.c` is 23 MB. So all of the perceived cost is that one-off
-compile, and two things keep it off the reader's path: `AppModel.start` warms
-every grammar on a detached task at launch, and the editor publishes a file's
-text as soon as it is read and lets colour follow. The second is what makes a
-cold grammar survivable at all; the first means it rarely happens.
+compile, and two things keep it off the reader's path: `AppEnvironment.start`
+warms every grammar on a detached task at launch, and the editor publishes a
+file's text as soon as it is read and lets colour follow. The second is what makes
+a cold grammar survivable at all; the first means it rarely happens.
 
 Colour arriving separately is only safe because tokens are offsets into a
 particular string, and `EditorModel` checks that string is still the one on
@@ -203,15 +258,27 @@ toolchain also has to be present to build the app at all.
 ### Concurrency
 
 Swift 6.2's per-target default isolation does the heavy lifting. UI modules default
-to `@MainActor`, so views and `@Observable` models need no annotation. `Models` and
-`Clients` stay `nonisolated` so they can do real background work.
+to `@MainActor`, so views and `@Observable` models need no annotation. `Core` and
+`Services` stay `nonisolated` so they can do real background work, and the stores
+in `Core` are marked `@MainActor` one by one instead.
+
+`NonisolatedNonsendingByDefault` is on everywhere, which is what gives
+`@concurrent` its meaning: without it a plain `nonisolated async` function runs on
+whichever actor called it, so the highlighter would parse a megabyte on the main
+actor and stop the editor redrawing.
+
+The bar is zero warnings. An escape hatch — `@unchecked Sendable`,
+`nonisolated(unsafe)`, a `DispatchQueue` — carries a `// CONCURRENCY:` comment
+saying why it is safe and what it could not be. There are three in the shipping
+code, all at a C or AppKit boundary with no `async` equivalent.
 
 ### Dependencies and testability
 
-Anything with side effects lives behind a protocol in `Clients`. Live
-implementations are injected from the app target in `Herder/HerderApp.swift`; tests
-pass fakes from `ClientsTestSupport`. Pass them via `init` into `@Observable`
-models, or through `@Environment` for views. No DI framework until it hurts.
+Anything with side effects lives behind a protocol in `Core/Services/`. Live
+implementations are constructed in `AppEnvironment` and nowhere else; tests pass
+fakes from `TestSupport`. Pass them via `init` into `@Observable` models, or
+through `@Environment` for views. No DI framework and no singletons — the
+boundary script fails a build over `static let shared`.
 
 ### Sandbox
 
@@ -219,44 +286,73 @@ The app is not sandboxed. It creates git worktrees and will launch agents and
 shells in the user's folders, and a child process in a sandbox cannot reach the
 folders the app was granted. That rules out the Mac App Store; the entitlements
 file is empty on purpose. Reads of a repository still go straight to disk rather
-than through `git` (see `LiveGitClient`), and workspaces still keep a bookmark of
-their folder, which costs nothing and would be needed again if the sandbox came
+than through `git` (see `LiveGitClient`), and repositories still keep a bookmark
+of their folder, which costs nothing and would be needed again if the sandbox came
 back.
 
 ### Persistence
 
-`Storage` holds the SwiftData layer. Its schema is versioned from the first
-release (`WorkspaceSchemaV1`) with a `SchemaMigrationPlan` beside it, so the first
-migration is written against a schema that has a name.
+The source of truth for code is the disk and git. Herder persists only its own
+state, as JSON under `~/Library/Application Support/Herder/`:
 
-`WorkspaceContainer` is the only place that knows the schema, the migration plan
-and where the store lives. The app calls `.live()`, tests and previews call
-`.inMemory()`, and neither repeats the setup. CloudKit is off: a workspace carries
-a security-scoped bookmark, which only resolves on the Mac and account that made
-it.
+```
+state.json                       # the repository list, and which workspaces were open
+workspaces/<name>-<hash>.json    # one per workspace: its features' UI state
+```
 
-Reads go through `@Query` against the container the app target injects with
-`.modelContainer(_:)`. Writes go through `WorkspaceStore`, so the rules about
-which folders qualify, what they are called and how they are ordered live in one
-place. Tests build a real in-memory container rather than faking the store, which
-means they exercise the shipping schema, constraints and sort descriptors; only
-the two OS-touching clients, `BookmarkClient` and `GitClient`, are faked.
+Everything goes through one protocol, `StateStore` in `Core`, which loads and
+saves `Codable` values by key and knows nothing about what it is holding.
+`FileStateStore` in `Services/Persistence/` is the implementation, an `actor`
+writing atomically. `PersistenceStack` is the seam in front of it, so nothing
+above `Services` names a storage type — which is how SwiftData, which this
+replaced, could be deleted rather than unpicked.
+
+Live `@Observable` state converts to and from snapshot structs. Never make an
+`@Observable` class `Codable` directly: the macro's underscored backing storage
+leaks into the encoded keys. Snapshots carry a `version`, and a new field is
+added with `decodeIfPresent` and a default — that is the whole migration story,
+and it is why there is no schema.
+
+Two things that are not obvious:
+
+- **Nothing is saved on termination.** `willTerminate` is a synchronous callback
+  and writing is not, so a task started there races the process exiting. Saves
+  are debounced a few hundred milliseconds instead, by their callers rather than
+  by the store — because the one exception is the repository list, which writes
+  immediately on every change. It holds the bookmarks, and a bookmark cannot be
+  remade.
+- **A key that reaches disk is data.** Renaming one is a migration, not a rename:
+  the file tree's UI state is still stored under `explorer.expanded` after the
+  feature was renamed, because changing the key would leave every saved blob
+  unreachable and close every folder the user had open.
+
+Which workspace each window is showing is `@SceneStorage`, so macOS restores it
+per window — and only on a clean quit, which means killing the process never
+exercises it.
 
 ## Testing
 
-Test targets mirror source modules one to one. Unit tests are Swift Testing; UI and
-performance tests stay in XCTest, in `UITests/`.
+Test targets mirror source modules: `CoreTests`, `ServicesTests`,
+`AppFeatureTests`, and `Tests/Features/<Name>FeatureTests` for each feature. Unit
+tests are Swift Testing; UI and performance tests stay in XCTest, in `UITests/`.
 
 Conventions that pay off:
 
 - **Use structs for suites.** Each test gets a fresh instance, so state can't leak
   and there's no `setUp`/`tearDown` to maintain.
-- **Tests run in parallel by default.** Anything process-global — `UserDefaults`,
-  temp directories — needs a unique path per test. See `LiveFileClientTests` for
-  the pattern.
+- **Tests run in parallel by default.** Anything process-global — a temp
+  directory, a state store, a git repository on disk — needs a unique path per
+  test. See `LiveFileClientTests` for the pattern.
 - **`#require` to unwrap or fail early, `#expect` for everything else.**
 - **`confirmation { }`** for "this callback fired N times" style async checks.
 - **Tags** (`.tags(.slow)`) for filtering in the test navigator.
+- **Fake the OS, not your own code.** Feature models are tested against
+  `TestSupport`'s fakes; `Core`'s stores are tested directly. The editor's tests
+  use the *real* tree-sitter engine, because what colour a span gets is part of
+  what the pane promises and a fake highlighter cannot check it.
+- **Storage changes are tested against bytes this build did not write.** A
+  fixture encoded by the current types proves nothing, because both sides move
+  together.
 
 ## The project file
 

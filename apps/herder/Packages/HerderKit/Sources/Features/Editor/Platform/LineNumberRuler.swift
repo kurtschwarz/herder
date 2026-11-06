@@ -55,6 +55,10 @@ final class LineNumberRuler: NSRulerView {
         needsDisplay = true
         // Layout is lazy and has not happened yet, so what is in view is not
         // known until after this pass.
+        //
+        // CONCURRENCY: a deferral to the next turn of the run loop, which is
+        // what AppKit wants here and what `Task { @MainActor }` does not
+        // promise — a task may run before the layout pass this is waiting out.
         DispatchQueue.main.async { [weak self] in self?.needsDisplay = true }
     }
 

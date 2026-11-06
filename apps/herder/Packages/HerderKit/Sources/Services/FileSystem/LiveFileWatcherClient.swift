@@ -40,12 +40,19 @@ public struct LiveFileWatcherClient: FileWatcherClient {
 
 /// One FSEvents stream and the continuation it feeds.
 ///
-/// `@unchecked Sendable` under one rule: every mutable property is touched only
-/// on `queue`, which is also the queue FSEvents calls back on.
+/// CONCURRENCY: `@unchecked Sendable` under one rule — every mutable property is
+/// touched only on `queue`, which is also the queue FSEvents calls back on. An
+/// actor cannot take its place: the callback is a C function pointer with no way
+/// to await, so the isolation has to be something the callback itself already
+/// runs on.
 private final class WatchSession: @unchecked Sendable {
     private let roots: [String]
     private let since: FSEventStreamEventId
     private let continuation: AsyncStream<FileChangeBatch>.Continuation
+
+    // CONCURRENCY: FSEvents delivers on a dispatch queue and has no `async`
+    // equivalent, so this is the C API's requirement rather than a choice. It is
+    // also what makes the `@unchecked Sendable` above sound.
     private let queue = DispatchQueue(label: "ar.schw.herder.file-watcher")
 
     private var stream: FSEventStreamRef?

@@ -19,7 +19,7 @@ import Testing
 
     /// Batches as they arrive, so a test can wait for a condition rather than
     /// race a single `next()` against whichever batch the system sends first.
-    final class Batches: @unchecked Sendable {
+    final class Batches: Sendable {
         private let received = Mutex<[FileChangeBatch]>([])
 
         func append(_ batch: FileChangeBatch) {

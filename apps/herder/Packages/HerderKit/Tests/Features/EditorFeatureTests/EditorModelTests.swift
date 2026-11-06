@@ -9,7 +9,8 @@ import Testing
 /// A highlighter that does not answer until told to, so a test can look at the
 /// pane while the parser is still working.
 ///
-/// `@unchecked Sendable` and plainly mutable: these tests are single-threaded,
+/// CONCURRENCY: `@unchecked Sendable` and plainly mutable. These tests are
+/// single-threaded — the highlighter is only ever driven from the test body —
 /// and the alternative is a lock whose only job is to satisfy the compiler.
 final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
     private var byText: [String: [SyntaxToken]] = [:]

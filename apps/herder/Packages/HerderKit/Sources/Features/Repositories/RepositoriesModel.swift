@@ -80,12 +80,6 @@ public final class RepositoriesModel {
         return nil
     }
 
-    /// Whether the worktree at `path` is one this list is showing. Used to stop
-    /// a window holding on to a worktree that has been removed in a terminal.
-    func isKnown(_ path: URL) -> Bool {
-        nameOfRepository(holding: path) != nil
-    }
-
     public func beginAdding() {
         guard !isModalPresented else { return }
         adding = AddRepositoryModel(store: store, picker: picker)

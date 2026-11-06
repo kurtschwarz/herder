@@ -80,10 +80,8 @@ extension AppEnvironment {
         )
 
         Task {
-            for (index, name) in ["agent-editor", "herder"].enumerated() {
-                let path = "/preview/\(name)"
-                _ = try? await environment.repositories.add(url: URL(filePath: path), name: name)
-                _ = index
+            for name in ["agent-editor", "herder"] {
+                _ = try? await environment.repositories.add(url: URL(filePath: "/preview/\(name)"), name: name)
             }
         }
         return environment
