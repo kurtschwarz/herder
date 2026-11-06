@@ -21,8 +21,20 @@ public final class InMemoryFileClient: FileClient {
 
     private let storage = Mutex<[String: String]>([:])
     private let folders = Mutex(Folders())
+    private let fileReads = Mutex<[String]>([])
 
     public init() {}
+
+    /// Every path `read` has been handed, in order. The editor reads only the
+    /// tab it is showing, and this is how a test sees the others left alone.
+    public var reads: [String] {
+        fileReads.withLock { $0 }
+    }
+
+    /// Forgets what has been read, so a test can assert about one phase of it.
+    public func clearReads() {
+        fileReads.withLock { $0 = [] }
+    }
 
     /// Pre-populates a path without going through `write`.
     public func seed(_ path: String, _ contents: String) {
@@ -35,6 +47,7 @@ public final class InMemoryFileClient: FileClient {
     }
 
     public func read(_ path: String) async throws -> String {
+        fileReads.withLock { $0.append(path) }
         guard let contents = storage.withLock({ $0[path] }) else {
             throw FileClientError.notFound(path: path)
         }

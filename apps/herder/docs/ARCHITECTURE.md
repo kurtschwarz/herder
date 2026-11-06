@@ -241,7 +241,8 @@ RepositoryStore            app-wide state, not a service: the pool of folders th
 
 WorkspaceRegistry          app-wide, one per process (Core)
  └── Workspace             one checkout: a repository's worktree, or a plain folder
-      ├── DocumentStore        open documents, tabs, dirty state
+      ├── DocumentStore        documents being edited, and their dirty state.
+      │                        Not the tab list: see below.
       ├── AgentSessionStore    agent sessions running in this worktree
       ├── git state            branch, status
       └── UI state bag         per-feature UI state (see below)
@@ -369,7 +370,7 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 - **A window with nothing in it is not saved.** It would be the most recently used and so the one a relaunch adopted.
 - **Every write to `AppSnapshot` goes through `AppSnapshotStore`.** The repository list and the window index share that key and each change reads the whole snapshot, edits its part and writes it back; two at once would lose a field, and the field could be the bookmarks. `AppSnapshotStore` queues them.
 - **Taking a repository out of a window is not forgetting it.** `WindowRepositories.remove(_:)` changes the window's membership only; the record, its bookmark and its folder access stay in the pool. Adding a folder the pool already has joins the existing record rather than minting a second bookmark. The cost is that a repository no window lists can only be got back by picking its folder again, which works but is clumsy; a list of what was adopted before belongs in the add modal and is not built.
-- Which file a workspace had open is `EditorUIState`, under `"editor.openFile"`, in that workspace's snapshot. It is the workspace's, not the window's, so switching away and back restores it too. A file that has gone from disk stays remembered and is shown struck through; only opening another file forgets it.
+- Which files a workspace had open is `EditorUIState`, under `"editor.openFile"`, in that workspace's snapshot. It is the workspace's, not the window's, so switching away and back restores it too. A file that has gone from disk stays remembered and is shown struck through; only closing its tab forgets it. The key still says `openFile` because it is a file name on the user's disk: the tab list arrived as fields inside the stored object, which is the shape it was given for exactly this, and a build that wrote one `file` still decodes as a single tab.
 - Agent transcripts are not stored by Herder. Store an `AgentSessionRef` (the Claude Code session ID plus any Herder label) so sessions can be resumed.
 - **Secrets go in the Keychain, never a file. A capability is not a secret.** A credential that grants access to something otherwise out of reach — an API token — is a secret. A security-scoped bookmark is a handle to a folder the user themselves picked, sitting in a file in their own home directory, and anything running as them can already read that folder without it. So the bookmark lives in `state.json` as base64, where it stays in one atomic write with the record it belongs to. Splitting it out would put one repository in two stores and double the window in which a crash leaves a record with no bookmark.
 - Searchable indexes and history, when needed, use SQLite on the Rust side.
@@ -384,7 +385,7 @@ There is no SwiftData left, so the specific rule this section held — never ren
 
 The general form: **an identifier that is also a key on disk is data, and renaming it is a migration.** What is left in the codebase that this still binds:
 
-- `PersistedWorkspaceUIState.persistenceKey`. The file tree's is still `"explorer.expanded"` after the feature was renamed to `FileTreeFeature`, because changing it would leave every saved blob unreachable and close every folder the user had open. The editor's is `"editor.openFile"`, an object with one field rather than a bare path, so more files can arrive as a second field rather than a second key.
+- `PersistedWorkspaceUIState.persistenceKey`. The file tree's is still `"explorer.expanded"` after the feature was renamed to `FileTreeFeature`, because changing it would leave every saved blob unreachable and close every folder the user had open. The editor's is `"editor.openFile"`, an object with one field rather than a bare path — and that is what let tabs arrive as `files` and `active` beside the original `file`, which is still read and no longer written. The key kept the singular name it was born with, which is the rule working rather than the rule chafing.
 - `AppSnapshot.persistenceKey` and the file names derived from `WorkspaceSnapshot.persistenceKey(for:)`.
 - `Codable` `CodingKeys` on any snapshot. Renaming a property renames the JSON field; add a new one with `decodeIfPresent` instead.
 
@@ -415,12 +416,30 @@ This is the shape it grows into, not the shape it has. Fields arrive with the fe
 public struct WorkspaceSnapshot: Codable, Sendable {
     public var version = 1
     public var id: WorkspaceID
-    public var openTabs: [URL]                 // with the editor's tabs
-    public var activeTab: URL?                 // with the editor's tabs
     public var agentSessions: [AgentSessionRef] // with AgentSessionsFeature
     public var uiState: [String: Data]   // keyed by PersistedWorkspaceUIState.persistenceKey
 }
 ```
+
+### The editor's tabs are the editor's UI state, not Core's
+
+This snapshot held `openTabs` and `activeTab` as fields of its own before the
+tab bar was built. They went in `EditorUIState` instead, under
+`"editor.openFile"`, and the rule that decides it is the one already written
+down: **live state two features both read goes in Core**. Only the editor reads
+its tab list. A `DocumentStore` in Core becomes the right home the day a
+document can be dirty, because then the sidebar, the close prompt and the
+command palette all need to know — and dirtiness is the thing that forces it,
+not tabness.
+
+The split that stands is the one the single open file already had. The *live*
+set belongs to `EditorModel`, which is per window, so two windows on one
+checkout keep independent bars and a click in one is not visible in the other.
+The *remembered* set belongs to the workspace, so switching away and back
+restores it and so does a relaunch. Only the tab showing is ever read from
+disk; a background tab is a name until it is clicked, including one whose file
+has gone, which is the same argument as a workspace not draining until a window
+shows it.
 
 ## Concurrency
 

@@ -132,10 +132,22 @@ final class WindowEnvironment {
     }
 
     /// Selection only ever opens. A file that goes from disk loses its
-    /// selection but not its pane: the editor keeps it, struck through.
+    /// selection but not its tab: the editor keeps it, struck through.
     func openSelectedFile() async {
         guard let file = fileTree.selected else { return }
         await editor.open(file)
+    }
+
+    /// Keeps the tree's highlight on the tab showing, so clicking a tab,
+    /// closing one or cycling moves it too.
+    ///
+    /// The other direction is ``openSelectedFile()``, so this is a loop — but
+    /// a terminating one: selection only ever opens, and opening the file
+    /// already showing does nothing, so it stops after one hop. A highlight
+    /// pointing at a file you are not looking at is a small lie the pane would
+    /// otherwise tell constantly.
+    func followShownFile() {
+        fileTree.select(editor.file)
     }
 
     /// Opens the add-repository modal. Here rather than on the sidebar because a

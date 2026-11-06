@@ -111,6 +111,20 @@ public enum Theme {
         /// merge conflict.
         public static let danger = Color(red: 247 / 255, green: 118 / 255, blue: 142 / 255)
 
+        /// The glyph colour for a file with this extension, lowercased.
+        ///
+        /// Here rather than in either feature because the file tree and the
+        /// editor's tab bar both draw the same file and must agree on it, and
+        /// a colour is a token however it is chosen.
+        public static func fileIcon(forExtension ext: String) -> Color {
+            switch ext {
+            case "swift": warning
+            case "md", "json", "yml", "yaml", "toml": accent
+            case "png", "jpg", "jpeg", "gif", "svg", "pdf": violet
+            default: tertiaryText
+            }
+        }
+
         /// Code colours, one per `SyntaxTokenKind`.
         ///
         /// Named for what the token is, not for the colour, so the mapping in

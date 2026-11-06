@@ -101,6 +101,7 @@ private struct WindowView: View {
             Task { await window.forget(id) }
         }
         .task(id: window.fileTree.selected) { await window.openSelectedFile() }
+        .onChange(of: window.editor.file) { _, _ in window.followShownFile() }
         // The modal's scrim swallows clicks; this stops the keyboard reaching
         // what it covers.
         .disabled(window.repositoryList.isModalPresented)
@@ -115,6 +116,21 @@ private struct WindowView: View {
         .overlay { NewSessionOverlay(model: window.repositoryList) }
         // Where ⇧⌘N finds the window it should open the modal in.
         .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
+        // `nil` rather than a disabled-looking closure: an item with no action
+        // is the one AppKit skips, which is what lets ⌘W reach the window's
+        // own Close when there are no tabs. See ``AppCommands``.
+        .focusedSceneValue(
+            \.closeEditorTab,
+            window.editor.tabs.isEmpty ? nil : { Task { await window.editor.closeActiveTab() } }
+        )
+        .focusedSceneValue(
+            \.selectPreviousEditorTab,
+            window.editor.tabs.count > 1 ? { Task { await window.editor.selectPreviousTab() } } : nil
+        )
+        .focusedSceneValue(
+            \.selectNextEditorTab,
+            window.editor.tabs.count > 1 ? { Task { await window.editor.selectNextTab() } } : nil
+        )
     }
 
     /// What the panes call the checkout they are showing: the workspace's name,

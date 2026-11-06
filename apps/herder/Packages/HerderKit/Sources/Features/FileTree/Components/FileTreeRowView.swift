@@ -169,12 +169,7 @@ private struct EntryLine: View {
     private var iconColor: Color {
         if entry.isDirectory { return Theme.Palette.violet }
         if isSelected { return Theme.Palette.onViolet }
-        switch entry.url.pathExtension.lowercased() {
-        case "swift": return Theme.Palette.warning
-        case "md", "json", "yml", "yaml", "toml": return Theme.Palette.accent
-        case "png", "jpg", "jpeg", "gif", "svg", "pdf": return Theme.Palette.violet
-        default: return Theme.Palette.tertiaryText
-        }
+        return Theme.Palette.fileIcon(forExtension: entry.url.pathExtension.lowercased())
     }
 }
 

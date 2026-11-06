@@ -166,7 +166,9 @@ public final class FileTreeModel {
         }
     }
 
-    public func select(_ file: URL) {
+    /// `nil` clears the highlight, which is what the editor showing nothing
+    /// means.
+    public func select(_ file: URL?) {
         selected = file
     }
 

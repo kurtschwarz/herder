@@ -28,6 +28,16 @@ public struct EditorView: View {
     public var body: some View {
         if model.file != nil {
             VStack(spacing: 0) {
+                // The window's header strip, kept clear for the same reason
+                // the file tree keeps it clear — but here it is load-bearing
+                // rather than cosmetic. `WindowChrome` grows the title bar so
+                // the traffic lights can sit low, and AppKit backs the taller
+                // bar with a full-width view that swallows clicks. A tab drawn
+                // in that band is drawn but dead, which read as a tab you had
+                // to click three times.
+                Color.clear.frame(height: Theme.Size.titleBar)
+
+                EditorTabBar(model: model)
                 Breadcrumb(components: breadcrumb, isDeleted: model.isDeleted)
                 Rectangle().fill(Theme.Palette.hairline).frame(height: 1)
                 body(of: model.content)
@@ -45,8 +55,18 @@ public struct EditorView: View {
     private func body(of content: EditorModel.Content?) -> some View {
         switch content {
         case .text(let source):
-            CodeTextView(source: source, session: model.session)
+            // There is content only because a tab is showing, so the `if let`
+            // never fails; it is how the tab reaches the scroll position it
+            // was left at.
+            if let tab = model.activeTab {
+                CodeTextView(
+                    source: source,
+                    session: model.session,
+                    restoring: model.offset(of: tab),
+                    onLeave: { model.rememberOffset($0, of: tab) }
+                )
                 .opacity(model.isDeleted ? Theme.Opacity.ignored : 1)
+            }
         case .unavailable(let reason):
             Text(message(for: reason))
                 .font(.callout)
@@ -117,7 +137,7 @@ private struct Breadcrumb: View {
         // has the tests for the pairing.
         .task {
             let root = URL(filePath: "/preview/herder")
-            let file = root.appending(path: "Herder.swift")
+            let file = root.appending(path: "Workspace.swift")
             files.seed(file.path(percentEncoded: false), """
                 struct Workspace {
                     let root: PathKey
@@ -128,9 +148,18 @@ private struct Breadcrumb: View {
                     }
                 }
                 """)
-            files.seed(children: [DirectoryEntry(url: file, isDirectory: false)], of: root)
+            // A second and a third, so the bar has something to draw.
+            let others = ["EditorModel.swift", "README.md"].map { root.appending(path: $0) }
+            for other in others {
+                files.seed(other.path(percentEncoded: false), "// \(other.lastPathComponent)\n")
+            }
+            files.seed(
+                children: ([file] + others).map { DirectoryEntry(url: $0, isDirectory: false) },
+                of: root
+            )
             guard let workspace = await registry.open(WorkspaceID(root)) else { return }
             await workspace.refresh()
+            for other in others.reversed() { await model.open(other) }
             await model.open(file)
         }
 }

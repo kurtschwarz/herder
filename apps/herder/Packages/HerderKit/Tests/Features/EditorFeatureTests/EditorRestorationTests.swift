@@ -18,11 +18,11 @@ import Testing
 
     init() {
         for folder in [root, other] {
-            for name in ["a.txt", "b.txt"] {
+            for name in ["a.txt", "b.txt", "c.txt"] {
                 files.seed(folder.appending(path: name).path(percentEncoded: false), "\(folder.lastPathComponent) \(name)")
             }
             files.seed(
-                children: ["a.txt", "b.txt"].map { DirectoryEntry(url: folder.appending(path: $0), isDirectory: false) },
+                children: ["a.txt", "b.txt", "c.txt"].map { DirectoryEntry(url: folder.appending(path: $0), isDirectory: false) },
                 of: folder
             )
         }
@@ -77,7 +77,9 @@ import Testing
 
         await model.open(root.appending(path: "a.txt"))
 
-        #expect(workspace.uiState(EditorUIState.self).file == PathKey(root.appending(path: "a.txt")))
+        let state = workspace.uiState(EditorUIState.self)
+        #expect(state.files == [PathKey(root.appending(path: "a.txt"))])
+        #expect(state.active == PathKey(root.appending(path: "a.txt")))
     }
 
     /// Switching away and back lands on the file left open, which the pane
@@ -126,20 +128,50 @@ import Testing
         #expect(fresh.file == root.appending(path: "b.txt"))
         #expect(fresh.isDeleted)
         #expect(fresh.content == nil)
-        #expect(workspace.uiState(EditorUIState.self).file == PathKey(root.appending(path: "b.txt")))
+        #expect(workspace.uiState(EditorUIState.self).active == PathKey(root.appending(path: "b.txt")))
     }
 
-    /// Only opening a different file forgets it.
-    @Test func aStatePersistsOnlyTheOneFile() async throws {
+    /// Opening a second file leaves the first open, which is the whole point
+    /// of the bar — and both are written down.
+    @Test func everyTabIsRemembered() async throws {
         let registry = makeRegistry()
         let model = makeModel(registry)
         let workspace = try #require(await registry.open(WorkspaceID(root)))
         await model.open(root.appending(path: "a.txt"))
         await model.open(root.appending(path: "b.txt"))
 
-        let data = try workspace.uiState(EditorUIState.self).encode()
-        let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: String])
+        let state = workspace.uiState(EditorUIState.self)
+        #expect(state.files == ["a.txt", "b.txt"].map { PathKey(root.appending(path: $0)) })
+        #expect(state.active == PathKey(root.appending(path: "b.txt")))
+    }
 
-        #expect(json == ["file": root.appending(path: "b.txt").path(percentEncoded: false)])
+    /// Everything comes back, but only the tab that was showing is read: the
+    /// rest are names until they are clicked.
+    @Test func aRelaunchReopensEveryTabAndReadsOnlyTheOneShowing() async throws {
+        let registry = makeRegistry()
+        let model = makeModel(registry)
+        _ = await registry.open(WorkspaceID(root))
+        for name in ["a.txt", "b.txt", "c.txt"] {
+            await model.open(root.appending(path: name))
+        }
+        await model.open(root.appending(path: "b.txt"))
+        await registry.close(WorkspaceID(root))
+
+        let reads = InMemoryFileClient()
+        for name in ["a.txt", "b.txt", "c.txt"] {
+            reads.seed(root.appending(path: name).path(percentEncoded: false), "api \(name)")
+        }
+        reads.seed(
+            children: ["a.txt", "b.txt", "c.txt"].map { DirectoryEntry(url: root.appending(path: $0), isDirectory: false) },
+            of: root
+        )
+        let relaunched = makeRegistry(files: reads)
+        let fresh = makeModel(relaunched, files: reads)
+        reads.clearReads()
+        await fresh.restore(in: await relaunched.open(WorkspaceID(root)))
+
+        #expect(fresh.tabs == ["a.txt", "b.txt", "c.txt"].map { PathKey(root.appending(path: $0)) })
+        #expect(fresh.file == root.appending(path: "b.txt"))
+        #expect(reads.reads == [root.appending(path: "b.txt").path(percentEncoded: false)])
     }
 }
