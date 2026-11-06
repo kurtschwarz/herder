@@ -68,7 +68,7 @@ private struct TerminalTabView: View {
                 .foregroundStyle(isActive ? Theme.Palette.accent : Theme.Palette.tertiaryText)
 
             Text(tab.title)
-                .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                .font(.system(size: 13))
                 .foregroundStyle(isActive ? Theme.Palette.text : Theme.Palette.secondaryText)
                 .lineLimit(1)
 
