@@ -21,7 +21,7 @@ public final class StubPTYSession: PTYSession {
 
     public let spec: PTYSpec
 
-    init(spec: PTYSpec) {
+    public init(spec: PTYSpec) {
         self.spec = spec
         (output, continuation) = AsyncStream<Data>.makeStream()
         state = Mutex(State(

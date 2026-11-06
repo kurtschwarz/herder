@@ -638,13 +638,15 @@ enum MouseAction {
 }
 
 enum MouseButton {
-    case left, right, middle
+    case left, right, middle, wheelUp, wheelDown
 
     var ghostty: GhosttyMouseButton {
         switch self {
         case .left: GHOSTTY_MOUSE_BUTTON_LEFT
         case .right: GHOSTTY_MOUSE_BUTTON_RIGHT
         case .middle: GHOSTTY_MOUSE_BUTTON_MIDDLE
+        case .wheelUp: GHOSTTY_MOUSE_BUTTON_FOUR
+        case .wheelDown: GHOSTTY_MOUSE_BUTTON_FIVE
         }
     }
 }

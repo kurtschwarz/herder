@@ -1,0 +1,145 @@
+import AppKit
+import Core
+import Foundation
+import Observation
+
+/// One terminal on screen: a process on a pseudo-terminal, the emulator that
+/// makes sense of what it writes, and the view that draws it.
+///
+/// What a tab owns. It holds no idea of tabs, workspaces or windows, so a
+/// terminal for an agent session is the same object.
+@Observable
+public final class TerminalScreen {
+    /// Scrollback kept, in lines.
+    public static let scrollbackLines = 10_000
+
+    /// Counts bells. A tab that watches it can flash when it changes.
+    public private(set) var bellCount = 0
+
+    /// Where the shell last said it was (OSC 7), if it ever has.
+    public private(set) var reportedDirectory: URL?
+
+    /// The process ended and its output has all been drawn.
+    public private(set) var hasEnded = false
+
+    @ObservationIgnored let emulator: TerminalEmulator
+    @ObservationIgnored private let session: any PTYSession
+    @ObservationIgnored weak var view: TerminalNSView?
+
+    @ObservationIgnored private let input: AsyncStream<Data>.Continuation
+    @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+    @ObservationIgnored private var refreshPending = false
+    @ObservationIgnored private var size: PTYSize
+
+    public init(session: any PTYSession, size: PTYSize) {
+        self.session = session
+        self.size = size
+        emulator = TerminalEmulator(
+            columns: Int(size.columns), rows: Int(size.rows), scrollbackLines: Self.scrollbackLines
+        )
+
+        let (stream, continuation) = AsyncStream<Data>.makeStream()
+        input = continuation
+
+        emulator.onReply = { [input] data in input.yield(data) }
+        emulator.onBell = { [weak self] in self?.bellCount += 1 }
+        emulator.onWorkingDirectory = { [weak self] in self?.reportedDirectory = $0 }
+        emulator.onClipboardWrite = { text in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+
+        // One consumer, so what is typed, pasted and answered goes to the
+        // process in the order it happened. A task per write would not.
+        tasks.append(Task { [session] in
+            for await data in stream { await session.write(data) }
+        })
+        tasks.append(Task { [weak self, session] in
+            for await chunk in session.output {
+                guard let self else { return }
+                emulator.write(chunk)
+                scheduleRefresh()
+            }
+            self?.finish()
+        })
+    }
+
+    deinit {
+        input.finish()
+        for task in tasks { task.cancel() }
+    }
+
+    // MARK: Output
+
+    /// Draws what changed, once, however many chunks arrived since the last
+    /// time: a command that prints a megabyte makes thousands.
+    private func scheduleRefresh() {
+        guard !refreshPending else { return }
+        refreshPending = true
+        tasks.append(Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(8))
+            self?.refresh()
+        })
+    }
+
+    func refresh() {
+        refreshPending = false
+        let changed = emulator.update()
+        view?.invalidate(rows: changed)
+    }
+
+    private func finish() {
+        refresh()
+        hasEnded = true
+    }
+
+    /// Prints a line of Herder's own after what the process wrote. Not sent to
+    /// the process: it is the terminal telling the person something.
+    public func announce(_ text: String) {
+        emulator.write(Data("\r\n\(text)\r\n".utf8))
+        refresh()
+    }
+
+    // MARK: Input
+
+    func send(_ data: Data) {
+        guard !data.isEmpty else { return }
+        // Typing goes to the bottom of the scrollback, as in every terminal.
+        if !emulator.scroll.isAtBottom {
+            emulator.scrollToBottom()
+            refresh()
+        }
+        input.yield(data)
+    }
+
+    public func send(text: String) {
+        send(Data(text.utf8))
+    }
+
+    /// Pastes `text`, bracketed if the program asked for that.
+    public func paste(_ text: String) {
+        send(emulator.encodePaste(text))
+    }
+
+    /// What is selected, for the clipboard.
+    public var selectedText: String? { emulator.selectedText }
+
+    // MARK: Size
+
+    /// The grid the view has room for. Tells the process, which is what makes
+    /// `vim` redraw and a shell wrap at the right column.
+    func resize(columns: Int, rows: Int, cellWidth: Int, cellHeight: Int) {
+        guard columns != emulator.columns || rows != emulator.rows else { return }
+        emulator.resize(columns: columns, rows: rows, cellWidth: cellWidth, cellHeight: cellHeight)
+        size = PTYSize(columns: UInt16(columns), rows: UInt16(rows))
+        let size = size
+        tasks.append(Task { [session] in await session.resize(size) })
+        refresh()
+    }
+
+    /// Moves focus to this terminal's view.
+    public func focus() {
+        guard let view, let window = view.window else { return }
+        window.makeFirstResponder(view)
+    }
+}
