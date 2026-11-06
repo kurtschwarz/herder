@@ -94,6 +94,10 @@ public final class FileTreeModel {
 
     private(set) var creating: Creation?
 
+    /// The item waiting on an answer to "delete it for good?". Moving to the
+    /// Trash can be undone and never waits.
+    private(set) var pendingDelete: DirectoryEntry?
+
     /// What git says about the whole worktree, however much of it is open.
     var status: WorktreeStatus { worktree?.status ?? .empty }
 
@@ -132,6 +136,7 @@ public final class FileTreeModel {
         selected = nil
         renaming = nil
         creating = nil
+        pendingDelete = nil
 
         // Opening is idempotent, and it no longer closes anything: the
         // worktree being left stays open and keeps its listings, so coming back
@@ -247,6 +252,45 @@ public final class FileTreeModel {
             expanded = openBefore
             selected = selectedBefore
         }
+    }
+
+    /// Moves `entry` to the Trash at once, or, to delete it for good, asks first
+    /// by holding it in ``pendingDelete``.
+    func requestDelete(_ entry: DirectoryEntry, permanently: Bool) async {
+        if permanently {
+            pendingDelete = entry
+        } else {
+            await delete(entry, permanently: false)
+        }
+    }
+
+    /// Deletes what ``pendingDelete`` asked about. Takes the entry rather than
+    /// reading it, because the alert dismissing clears the request.
+    func confirmDelete(_ entry: DirectoryEntry) async {
+        pendingDelete = nil
+        await delete(entry, permanently: true)
+    }
+
+    func cancelDelete() {
+        pendingDelete = nil
+    }
+
+    /// A refusal from the disk leaves everything as it was, and the refresh
+    /// shows the item still there.
+    private func delete(_ entry: DirectoryEntry, permanently: Bool) async {
+        guard let worktree else { return }
+        let gone = Self.key(entry.url)
+        if let renaming, Self.key(renaming).isInside(gone) { self.renaming = nil }
+
+        do {
+            try await worktree.delete(entry.url, permanently: permanently)
+        } catch {
+            return
+        }
+        // The selection is left to ``dropWhatHasGone()``, which clears the
+        // highlight with the row. Nothing else is selected in its place, and the
+        // editor keeps the tab, struck through.
+        expanded = expanded.filter { !$0.isInside(gone) }
     }
 
     /// Closes every folder below the root.

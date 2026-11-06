@@ -70,6 +70,21 @@ public struct FileTreeView: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
+        .alert(
+            model.pendingDelete.map { "Delete \u{201C}\($0.name)\u{201D}?" } ?? "",
+            isPresented: Binding(
+                get: { model.pendingDelete != nil },
+                set: { if !$0 { model.cancelDelete() } }
+            ),
+            presenting: model.pendingDelete
+        ) { entry in
+            Button("Delete", role: .destructive) { Task { await model.confirmDelete(entry) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { entry in
+            Text(entry.isDirectory
+                ? "This folder and all items inside it will be deleted immediately. You can\u{2019}t undo this action."
+                : "This item will be deleted immediately. You can\u{2019}t undo this action.")
+        }
         // A watcher keeps the tree honest while the window is in front. Behind,
         // changes still accumulate but are not acted on: the worst storms
         // happen while the user is in a terminal running the build causing
@@ -195,5 +210,6 @@ private struct PreviewFiles: FileClient {
     func children(of url: URL) async throws -> [DirectoryEntry] { [] }
     func move(_ source: URL, to destination: URL) async throws {}
     func create(_ url: URL, isDirectory: Bool) async throws {}
+    func delete(_ url: URL, permanently: Bool) async throws {}
 }
 #endif

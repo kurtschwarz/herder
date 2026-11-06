@@ -27,4 +27,9 @@ public protocol FileClient: Sendable {
     /// Makes an empty file, or a folder, at `url`. Throws `alreadyExists`
     /// rather than replacing what is there.
     func create(_ url: URL, isDirectory: Bool) async throws
+
+    /// Removes the file or folder at `url`, and everything inside a folder. With
+    /// `permanently` false it goes to the Trash and can be put back; otherwise
+    /// it is gone.
+    func delete(_ url: URL, permanently: Bool) async throws
 }

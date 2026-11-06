@@ -110,4 +110,15 @@ public struct LiveFileClient: FileClient {
             }
         }
     }
+
+    @concurrent
+    public func delete(_ url: URL, permanently: Bool) async throws {
+        if permanently {
+            try FileManager.default.removeItem(at: url)
+        } else {
+            // Where it ended up in the Trash is not wanted: the tree only needs
+            // to know it is gone from here.
+            _ = try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        }
+    }
 }

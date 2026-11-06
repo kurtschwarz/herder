@@ -336,6 +336,20 @@ public final class Workspace {
         await refresh()
     }
 
+    /// Deletes a file or folder, to the Trash or for good, and shows the result.
+    ///
+    /// Not a move even when it goes to the Trash: listeners find it gone on the
+    /// refresh, and an open tab is left showing a deleted file rather than
+    /// following it into the Trash. What was read under a deleted folder is
+    /// forgotten first, or the refresh would read the folder that is no longer
+    /// there and mark it unreadable.
+    public func delete(_ url: URL, permanently: Bool) async throws {
+        try await files.delete(url, permanently: permanently)
+        let gone = PathKey(canonical: url.path(percentEncoded: false))
+        listings = listings.filter { !$0.key.isInside(gone) }
+        await refresh()
+    }
+
     /// `path` rebased onto `new` if it is `old` or lies inside it.
     public static func moved(_ path: PathKey, from old: PathKey, to new: PathKey) -> PathKey {
         guard path.isInside(old) else { return path }

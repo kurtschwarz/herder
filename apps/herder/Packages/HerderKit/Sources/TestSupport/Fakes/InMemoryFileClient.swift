@@ -17,6 +17,7 @@ public final class InMemoryFileClient: FileClient {
         var reads: [URL] = []
         var moves: [Move] = []
         var creations: [DirectoryEntry] = []
+        var deletions: [Deletion] = []
     }
 
     private let storage = Mutex<[String: String]>([:])
@@ -156,6 +157,40 @@ public final class InMemoryFileClient: FileClient {
     /// Every file and folder made, in order.
     public var creations: [DirectoryEntry] {
         folders.withLock { $0.creations }
+    }
+
+    public func delete(_ url: URL, permanently: Bool) async throws {
+        let key = PathKey(url)
+        guard let parent = key.parent else {
+            throw FileClientError.notFound(path: url.path(percentEncoded: false))
+        }
+        try folders.withLock { state in
+            var siblings = state.children[parent] ?? []
+            guard siblings.contains(where: { PathKey($0.url) == key }) else {
+                throw FileClientError.notFound(path: url.path(percentEncoded: false))
+            }
+            siblings.removeAll { PathKey($0.url) == key }
+            state.children[parent] = siblings
+            for folder in state.children.keys where folder.isInside(key) {
+                state.children[folder] = nil
+            }
+            state.deletions.append(Deletion(url: url, permanently: permanently))
+        }
+    }
+
+    /// Every deletion made, in order.
+    public var deletions: [Deletion] {
+        folders.withLock { $0.deletions }
+    }
+
+    public struct Deletion: Equatable, Sendable {
+        public var url: URL
+        public var permanently: Bool
+
+        public init(url: URL, permanently: Bool) {
+            self.url = url
+            self.permanently = permanently
+        }
     }
 }
 #endif

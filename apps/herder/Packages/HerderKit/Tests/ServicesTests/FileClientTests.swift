@@ -20,6 +20,24 @@ import Testing
         directory.appending(path: name).path(percentEncoded: false)
     }
 
+    @Test func deletingForGoodRemovesAFileAndAFolderWithItsContents() async throws {
+        try await client.write("x", to: path("a.txt"))
+        try await client.write("y", to: path("dir/inner/b.txt"))
+
+        try await client.delete(directory.appending(path: "a.txt"), permanently: true)
+        try await client.delete(directory.appending(path: "dir"), permanently: true)
+
+        #expect(!(await client.exists(path("a.txt"))))
+        #expect(!(await client.exists(path("dir/inner/b.txt"))))
+        #expect(!FileManager.default.fileExists(atPath: path("dir")))
+    }
+
+    @Test func deletingForGoodSomethingMissingThrows() async {
+        await #expect(throws: (any Error).self) {
+            try await client.delete(directory.appending(path: "missing"), permanently: true)
+        }
+    }
+
     @Test func writesThenReadsBack() async throws {
         try await client.write("hello", to: path("a.txt"))
         #expect(try await client.read(path("a.txt")) == "hello")

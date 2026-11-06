@@ -12,6 +12,7 @@ struct PreviewFileClient: FileClient {
     func exists(_ path: String) async -> Bool { true }
     func move(_ source: URL, to destination: URL) async throws {}
     func create(_ url: URL, isDirectory: Bool) async throws {}
+    func delete(_ url: URL, permanently: Bool) async throws {}
     func children(of url: URL) async throws -> [DirectoryEntry] {
         [
             DirectoryEntry(url: url.appending(path: "Sources"), isDirectory: true),

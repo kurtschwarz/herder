@@ -134,6 +134,102 @@ import Testing
         #expect(names(model) == ["Sources"])
     }
 
+    @Test func movingToTheTrashRemovesTheRowAtOnce() async {
+        let a = file("a.txt")
+        files.seed(children: [a, file("b.txt")], of: root)
+        await model.setRoot(root)
+
+        await model.requestDelete(a, permanently: false)
+
+        #expect(names(model) == ["b.txt"])
+        #expect(files.deletions == [.init(url: a.url, permanently: false)])
+        #expect(model.pendingDelete == nil)
+    }
+
+    @Test func deletingForGoodAsksFirstAndTouchesNothingUntilConfirmed() async {
+        let a = file("a.txt")
+        files.seed(children: [a], of: root)
+        await model.setRoot(root)
+
+        await model.requestDelete(a, permanently: true)
+
+        #expect(model.pendingDelete == a)
+        #expect(files.deletions.isEmpty)
+        #expect(names(model) == ["a.txt"])
+
+        await model.confirmDelete(a)
+
+        #expect(model.pendingDelete == nil)
+        #expect(files.deletions == [.init(url: a.url, permanently: true)])
+        #expect(names(model).isEmpty)
+    }
+
+    @Test func cancellingTheQuestionDeletesNothing() async {
+        let a = file("a.txt")
+        files.seed(children: [a], of: root)
+        await model.setRoot(root)
+        await model.requestDelete(a, permanently: true)
+
+        model.cancelDelete()
+
+        #expect(model.pendingDelete == nil)
+        #expect(files.deletions.isEmpty)
+    }
+
+    @Test func deletingTheSelectedFileDoesNotSelectAnotherInItsPlace() async {
+        let b = file("b.txt")
+        files.seed(children: [file("a.txt"), b, file("c.txt")], of: root)
+        await model.setRoot(root)
+        model.select(b.url)
+
+        await model.requestDelete(b, permanently: false)
+
+        #expect(model.selected == nil)
+    }
+
+    @Test func deletingAnotherFileKeepsTheSelection() async {
+        let a = file("a.txt")
+        files.seed(children: [a, file("b.txt")], of: root)
+        await model.setRoot(root)
+        model.select(a.url)
+
+        await model.requestDelete(file("b.txt"), permanently: false)
+
+        #expect(model.selected == a.url)
+    }
+
+    @Test func deletingAFolderForgetsWhatWasOpenInsideIt() async {
+        let sources = dir("Sources")
+        let nested = dir("Nested", in: sources.url)
+        let inside = file("App.swift", in: nested.url)
+        files.seed(children: [sources, file("a.txt")], of: root)
+        files.seed(children: [nested], of: sources.url)
+        files.seed(children: [inside], of: nested.url)
+        await model.setRoot(root)
+        await model.toggle(sources.url)
+        await model.toggle(nested.url)
+        model.select(inside.url)
+
+        await model.requestDelete(sources, permanently: false)
+
+        #expect(names(model) == ["a.txt"])
+        #expect(!model.isExpanded(sources.url))
+        #expect(!model.isExpanded(nested.url))
+        #expect(!model.canCollapse)
+        #expect(model.selected == inside.url)
+    }
+
+    @Test func aRefusalFromTheDiskLeavesTheTreeAsItWas() async {
+        let ghost = file("ghost.txt")
+        files.seed(children: [file("a.txt")], of: root)
+        await model.setRoot(root)
+
+        await model.requestDelete(ghost, permanently: false)
+
+        #expect(names(model) == ["a.txt"])
+        #expect(files.deletions.isEmpty)
+    }
+
     @Test func aNewRootDropsWhatWasOpenAndSelected() async {
         let sources = dir("Sources")
         let other = URL(filePath: "/code/other")

@@ -131,6 +131,15 @@ private struct EntryLine: View {
             Divider()
             Button("Rename") { model.beginRenaming(entry.url) }
             RevealInFinder(url: entry.url)
+            Divider()
+            Button("Move to Trash", role: .destructive) {
+                Task { await model.requestDelete(entry, permanently: false) }
+            }
+            .keyboardShortcut(.delete, modifiers: .command)
+            Button("Delete Immediately…", role: .destructive) {
+                Task { await model.requestDelete(entry, permanently: true) }
+            }
+            .keyboardShortcut(.delete, modifiers: [.command, .option])
         }
     }
 
