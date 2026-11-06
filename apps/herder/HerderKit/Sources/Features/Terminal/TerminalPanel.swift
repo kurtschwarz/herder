@@ -15,8 +15,10 @@ public struct TerminalPanel: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            TerminalHeader(model: model)
+            // Divides the panel from the editor above it. Nothing between the
+            // header and the screen: they read as one.
             Rectangle().fill(Theme.Palette.hairline).frame(height: 1)
+            TerminalHeader(model: model)
 
             if let tab = model.activeTab {
                 TerminalView(screen: tab.screen, focusRequest: model.focusRequest)
