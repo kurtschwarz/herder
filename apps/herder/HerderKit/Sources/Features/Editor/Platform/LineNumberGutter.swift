@@ -18,6 +18,11 @@ final class LineNumberGutter: NSView {
     /// measures in.
     private var lineStarts = [0]
 
+    /// Whether the text ends after a newline, or is empty, so the last line has
+    /// nothing in it. TextKit makes no layout fragment for that line, though
+    /// the caret can sit on it, so it has to be numbered without one.
+    private var endsInEmptyLine = true
+
     private let font = NSFont.monospacedDigitSystemFont(ofSize: Theme.Size.code, weight: .regular)
 
     private var attributes: [NSAttributedString.Key: Any] {
@@ -55,6 +60,7 @@ final class LineNumberGutter: NSView {
             starts.append(offset + 1)
         }
         lineStarts = starts
+        endsInEmptyLine = starts.last == text.utf16.count
         needsDisplay = true
         // Layout is lazy and has not happened yet, so what is in view is not
         // known until after this pass.
@@ -75,13 +81,30 @@ final class LineNumberGutter: NSView {
         let originY = textView.textContainerOrigin.y
         let start = layout.textViewportLayoutController.viewportRange?.location ?? layout.documentRange.location
 
+        // Where the empty line after the last fragment has its baseline.
+        var emptyLineBaseline: CGFloat?
+        var reachedEnd = true
+
         layout.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
             // Converted rather than subtracted from the scroll offset: with a
             // bar over the top, the scroll view has a content inset and the
             // gutter's own origin is not the clip view's.
             let top = convert(NSPoint(x: 0, y: fragment.layoutFragmentFrame.minY + originY), from: textView).y
-            if top > bounds.height { return false }
+            if top > bounds.height {
+                reachedEnd = false
+                return false
+            }
             guard let line = fragment.textLineFragments.first else { return true }
+            // A paragraph ending in a newline carries the empty line after
+            // it as a second line fragment of its own, which is where the
+            // caret goes. Only the first is numbered above, as a wrapped
+            // line's others are not.
+            if let tail = fragment.textLineFragments.last, fragment.textLineFragments.count > 1 {
+                emptyLineBaseline = top + tail.typographicBounds.minY + tail.glyphOrigin.y
+            } else {
+                emptyLineBaseline = top + fragment.layoutFragmentFrame.height
+                    + line.typographicBounds.minY + line.glyphOrigin.y
+            }
 
             let offset = content.offset(from: layout.documentRange.location, to: fragment.rangeInElement.location)
             let label = NSAttributedString(string: "\(number(at: offset))", attributes: attributes)
@@ -95,6 +118,14 @@ final class LineNumberGutter: NSView {
             ))
             return true
         }
+
+        guard reachedEnd, endsInEmptyLine else { return }
+        let baseline = emptyLineBaseline ?? convert(NSPoint(x: 0, y: originY), from: textView).y + font.ascender
+        let label = NSAttributedString(string: "\(lineStarts.count)", attributes: attributes)
+        label.draw(at: NSPoint(
+            x: bounds.width - label.size().width - Theme.Spacing.normal,
+            y: baseline - font.ascender
+        ))
     }
 
     /// The 1-based line holding the character at `offset`.
