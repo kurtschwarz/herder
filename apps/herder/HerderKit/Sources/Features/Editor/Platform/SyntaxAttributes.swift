@@ -3,55 +3,52 @@ import Core
 import DesignSystem
 import SwiftUI
 
-/// Turns token kinds into text attributes.
+/// Turns token kinds into colours.
 ///
 /// The one place that knows both what a token means and what it should look
 /// like. `Core` emits kinds and no colours; `DesignSystem` holds colours and
 /// no kinds. Keeping the pairing here means a grammar can be added without
 /// touching either.
 ///
-/// Built once. Making an `NSFont` and an `NSColor` is not free, and a thousand
-/// tokens a file is ordinary.
+/// Colour only, because it is applied as a layout manager rendering attribute,
+/// which TextKit keeps out of the text storage and so out of the undo stack. A
+/// rendering attribute cannot change a font.
+///
+/// Built once. Making an `NSColor` is not free, and a thousand tokens a file is
+/// ordinary.
 enum SyntaxAttributes {
-    /// What every character starts as, before any token is applied.
+    /// What every character starts as, before any token is applied. Lives in
+    /// the text storage, as the font and the typing attributes of the view.
     static let base: [NSAttributedString.Key: Any] = [
-        .font: regular,
-        .foregroundColor: NSColor(Theme.Palette.text),
+        .font: NSFont.monospacedSystemFont(ofSize: Theme.Size.code, weight: .regular),
+        .foregroundColor: baseColour,
     ]
 
-    /// The attributes for a kind.
-    static func attributes(for kind: SyntaxTokenKind) -> [NSAttributedString.Key: Any] {
-        byKind[kind] ?? base
+    /// The colour for a kind.
+    static func colour(for kind: SyntaxTokenKind) -> NSColor {
+        byKind[kind] ?? baseColour
     }
 
-    private static let regular = NSFont.monospacedSystemFont(ofSize: Theme.Size.code, weight: .regular)
+    private static let baseColour = NSColor(Theme.Palette.text)
 
-    /// Comments are the one thing that reads better slanted: it marks them as
-    /// not being code at a glance, before the colour registers.
-    private static let italic = NSFontManager.shared.convert(regular, toHaveTrait: .italicFontMask)
-
-    private static let byKind: [SyntaxTokenKind: [NSAttributedString.Key: Any]] = [
-        .comment: [.font: italic, .foregroundColor: NSColor(Theme.Palette.Syntax.comment)],
-        .keyword: colour(Theme.Palette.Syntax.keyword),
-        .operator: colour(Theme.Palette.Syntax.operator),
-        .punctuation: colour(Theme.Palette.Syntax.punctuation),
-        .string: colour(Theme.Palette.Syntax.string),
-        .escape: colour(Theme.Palette.Syntax.escape),
-        .number: colour(Theme.Palette.Syntax.number),
-        .constant: colour(Theme.Palette.Syntax.constant),
-        .function: colour(Theme.Palette.Syntax.function),
-        .type: colour(Theme.Palette.Syntax.type),
-        .constructor: colour(Theme.Palette.Syntax.constructor),
-        .variable: colour(Theme.Palette.Syntax.variable),
-        .property: colour(Theme.Palette.Syntax.property),
-        .parameter: colour(Theme.Palette.Syntax.parameter),
-        .attribute: colour(Theme.Palette.Syntax.attribute),
-        .tag: colour(Theme.Palette.Syntax.tag),
-        .namespace: colour(Theme.Palette.Syntax.namespace),
-        .label: colour(Theme.Palette.Syntax.label),
+    private static let byKind: [SyntaxTokenKind: NSColor] = [
+        .comment: NSColor(Theme.Palette.Syntax.comment),
+        .keyword: NSColor(Theme.Palette.Syntax.keyword),
+        .operator: NSColor(Theme.Palette.Syntax.operator),
+        .punctuation: NSColor(Theme.Palette.Syntax.punctuation),
+        .string: NSColor(Theme.Palette.Syntax.string),
+        .escape: NSColor(Theme.Palette.Syntax.escape),
+        .number: NSColor(Theme.Palette.Syntax.number),
+        .constant: NSColor(Theme.Palette.Syntax.constant),
+        .function: NSColor(Theme.Palette.Syntax.function),
+        .type: NSColor(Theme.Palette.Syntax.type),
+        .constructor: NSColor(Theme.Palette.Syntax.constructor),
+        .variable: NSColor(Theme.Palette.Syntax.variable),
+        .property: NSColor(Theme.Palette.Syntax.property),
+        .parameter: NSColor(Theme.Palette.Syntax.parameter),
+        .attribute: NSColor(Theme.Palette.Syntax.attribute),
+        .tag: NSColor(Theme.Palette.Syntax.tag),
+        .namespace: NSColor(Theme.Palette.Syntax.namespace),
+        .label: NSColor(Theme.Palette.Syntax.label),
     ]
-
-    private static func colour(_ colour: Color) -> [NSAttributedString.Key: Any] {
-        [.font: regular, .foregroundColor: NSColor(colour)]
-    }
 }

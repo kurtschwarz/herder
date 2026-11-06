@@ -87,15 +87,8 @@ struct CodeTextView: NSViewRepresentable {
         guard isNewFile || context.coordinator.source != source else { return }
         context.coordinator.source = source
 
-        // One editing transaction: the base pass rewrites every character and
-        // each token then overwrites part of it, and laying out between them
-        // would be laying out work that is about to be replaced.
-        storage.beginEditing()
         storage.setAttributedString(NSAttributedString(string: source.text, attributes: SyntaxAttributes.base))
-        for token in source.tokens where NSMaxRange(token.range) <= storage.length {
-            storage.addAttributes(SyntaxAttributes.attributes(for: token.kind), range: token.range)
-        }
-        storage.endEditing()
+        applyColours(of: source.tokens, to: textView, length: storage.length)
         // The selection does not survive: a character range means nothing once
         // the text under it has been rewritten.
         textView.setSelectedRange(NSRange(location: 0, length: 0))
@@ -109,6 +102,26 @@ struct CodeTextView: NSViewRepresentable {
         scrollView.reflectScrolledClipView(clip)
 
         pane.gutter.textDidChange(to: source.text)
+    }
+
+    /// Colours the text as rendering attributes on the layout manager, not as
+    /// attributes of the storage: they are not part of the text, so they are
+    /// never an edit and never reach the undo stack.
+    private func applyColours(of tokens: [SyntaxToken], to textView: NSTextView, length: Int) {
+        guard
+            let layout = textView.textLayoutManager,
+            let content = layout.textContentManager
+        else { return }
+
+        layout.removeRenderingAttribute(.foregroundColor, for: content.documentRange)
+        for token in tokens where NSMaxRange(token.range) <= length {
+            guard
+                let start = content.location(content.documentRange.location, offsetBy: token.range.location),
+                let end = content.location(start, offsetBy: token.range.length),
+                let range = NSTextRange(location: start, end: end)
+            else { continue }
+            layout.addRenderingAttribute(.foregroundColor, value: SyntaxAttributes.colour(for: token.kind), for: range)
+        }
     }
 
     /// A tab switch blanks the pane while the next file is read, which takes
