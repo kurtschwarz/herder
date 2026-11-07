@@ -4,7 +4,7 @@ import Observation
 import TerminalUI
 
 /// The agent panel of one window: the sessions it has running for each
-/// workspace, and whether the panel is showing.
+/// workspace. The panel is always on screen; only what is in it changes.
 ///
 /// A session is an agent's own terminal UI — Claude Code, Codex, opencode, Pi,
 /// or one the user added — in a terminal of its own, started in the
@@ -16,9 +16,9 @@ import TerminalUI
 /// run their own. Switching workspaces changes which are shown and nothing
 /// else; the others keep running.
 ///
-/// What persists is on the workspace (``AgentPanelUIState``) and is only
-/// whether the panel was open. The processes are not: a relaunch with the panel
-/// open starts one.
+/// Nothing persists. A process cannot be brought back, and starting one for
+/// every worktree shown would cost a process each: a worktree with no sessions
+/// shows a button per agent instead.
 @Observable
 public final class AgentPanelModel {
     private let pty: any PTYClient
@@ -37,9 +37,6 @@ public final class AgentPanelModel {
     /// agent asked for, or `nil` for the one used last. See
     /// ``requestSession(in:agent:)``.
     private var pending: (workspace: WorkspaceID, agent: Agent?)?
-
-    /// The panel is showing for the workspace being shown.
-    public private(set) var isOpen = false
 
     /// Changes when the panel should take the keyboard.
     public private(set) var focusRequest = 0
@@ -67,9 +64,9 @@ public final class AgentPanelModel {
 
     /// A terminal UI has the keyboard. Read by the commands that mean a tab of
     /// this panel when it does.
-    public var hasFocus: Bool { isOpen && activeTab?.screen?.isFocused == true }
+    public var hasFocus: Bool { activeTab?.screen?.isFocused == true }
 
-    public var canSelectOtherTab: Bool { isOpen && tabs.count > 1 }
+    public var canSelectOtherTab: Bool { tabs.count > 1 }
 
     /// The agent's name, and which of its sessions this is once there is more
     /// than one.
@@ -79,15 +76,11 @@ public final class AgentPanelModel {
 
     // MARK: Showing a workspace
 
-    /// Points the panel at `workspace`: whether it was open, and, if it was, a
-    /// session to type in. A session asked for on the way is started instead.
+    /// Points the panel at `workspace`'s sessions, and starts the one asked
+    /// for on the way there, if any.
     public func show(_ workspace: Workspace?) async {
         self.workspace = workspace
-        guard let workspace else {
-            isOpen = false
-            return
-        }
-        isOpen = workspace.uiState(AgentPanelUIState.self).isOpen
+        guard let workspace else { return }
 
         // Asked for before this workspace was showing, and answered now, or not
         // at all: a request for a workspace that never came must not start a
@@ -96,35 +89,7 @@ public final class AgentPanelModel {
         pending = nil
         if let requested, requested.workspace == workspace.id {
             await startSession(requested.agent)
-        } else if isOpen, tabs.isEmpty {
-            await startSession()
         }
-    }
-
-    // MARK: The panel
-
-    public func toggle() async {
-        guard workspace != nil else { return }
-        if isOpen {
-            setOpen(false)
-        } else {
-            setOpen(true)
-            if tabs.isEmpty { await startSession() }
-            focusRequest += 1
-        }
-    }
-
-    public func hide() {
-        setOpen(false)
-    }
-
-    private func setOpen(_ open: Bool) {
-        guard let workspace else { return }
-        isOpen = open
-        let state = workspace.uiState(AgentPanelUIState.self)
-        guard state.isOpen != open else { return }
-        state.isOpen = open
-        workspace.scheduleSnapshotSave()
     }
 
     // MARK: Sessions
@@ -157,7 +122,6 @@ public final class AgentPanelModel {
         watch(tab, in: id)
         tabsByWorkspace[id, default: []].append(tab)
         activeByWorkspace[id] = tab.id
-        setOpen(true)
         focusRequest += 1
         await attach(tab, in: workspace)
         // Told again once there is a screen for the keyboard to go to.
@@ -185,8 +149,7 @@ public final class AgentPanelModel {
         if let tab = activeTab { close(tab) }
     }
 
-    /// Ends a session's terminal UI and takes its tab away. The panel stays,
-    /// so the next session is one click away.
+    /// Ends a session's terminal UI and takes its tab away.
     func close(_ tab: AgentTab) {
         guard let id = tabsByWorkspace.first(where: { $0.value.contains { $0.id == tab.id } })?.key else { return }
         tab.terminate()
@@ -247,7 +210,6 @@ public final class AgentPanelModel {
         tabsByWorkspace[id] = nil
         activeByWorkspace[id] = nil
         openedByWorkspace[id] = nil
-        if workspace?.id == id { isOpen = false }
     }
 
     /// Ends every session: the window is closing.

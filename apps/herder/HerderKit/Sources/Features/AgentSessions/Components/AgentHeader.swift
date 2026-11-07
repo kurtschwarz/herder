@@ -3,8 +3,8 @@ import DesignSystem
 import PhosphorSwift
 import SwiftUI
 
-/// The strip over the screen: a tab for each open session, a button for
-/// another, and one to hide the panel.
+/// The strip over the screen: a tab for each open session, and a button for
+/// another.
 struct AgentHeader: View {
     let model: AgentPanelModel
 
@@ -33,10 +33,6 @@ struct AgentHeader: View {
             .disabled(model.workspace == nil)
 
             Spacer(minLength: 0)
-
-            HoverIconButton(icon: Ph.caretLeft.regular, help: "Hide Agents") {
-                model.hide()
-            }
         }
         .padding(.horizontal, Theme.Spacing.normal)
         .padding(.vertical, Theme.Spacing.tight)

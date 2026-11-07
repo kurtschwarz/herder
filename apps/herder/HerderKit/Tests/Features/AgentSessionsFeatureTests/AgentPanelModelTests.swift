@@ -61,7 +61,6 @@ import Testing
         #expect(spec.executable == "/bin/sh")
         #expect(spec.arguments == ["/bin/sh", "-l", "-i", "-c", "exec claude"])
         #expect(spec.workingDirectory == root)
-        #expect(model.isOpen)
         #expect(model.activeTab?.phase == .running)
     }
 
@@ -133,14 +132,13 @@ import Testing
 
     // MARK: Closing
 
-    @Test func closingATabEndsItsProcessAndLeavesThePanelUp() async throws {
+    @Test func closingATabEndsItsProcess() async throws {
         let (model, _, _) = try await shown(sessions: 1)
 
         model.close(try #require(model.activeTab))
 
         #expect(pty.sessions[0].wasTerminated)
         #expect(model.tabs.isEmpty)
-        #expect(model.isOpen)
     }
 
     @Test func closingTheTabShowingBringsItsNeighbourForward() async throws {
@@ -196,7 +194,6 @@ import Testing
         await model.show(web)
 
         #expect(model.tabs.count == 1)
-        #expect(model.isOpen)
         #expect(pty.specs.last?.workingDirectory == other)
     }
 
@@ -229,64 +226,18 @@ import Testing
         #expect(model.tabs.isEmpty)
     }
 
-    // MARK: Remembering
+    // MARK: Showing
 
-    @Test func anOpenPanelComesBackWithOneFreshSession() async throws {
-        let registry = makeRegistry()
-        let first = makeModel()
-        let workspace = try await workspace(root, in: registry)
-        await first.show(workspace)
-        await first.startSession()
-        await first.startSession()
-        await workspace.saveSnapshot()
+    @Test func showingAWorktreeStartsNothingByItself() async throws {
+        let (model, _, registry) = try await shown()
 
-        // A relaunch: the same state on disk, a new workspace and a new model.
-        let model = makeModel()
-        let before = pty.specs.count
-        await model.show(try await self.workspace(root, in: makeRegistry()))
+        await model.show(try await workspace(other, in: registry))
 
-        #expect(model.isOpen)
-        #expect(model.tabs.count == 1)
-        #expect(pty.specs.count == before + 1)
+        #expect(model.tabs.isEmpty)
+        #expect(pty.specs.isEmpty)
     }
 
-    @Test func aHiddenPanelStartsNothingWhenItsWorkspaceIsShown() async throws {
-        let registry = makeRegistry()
-        let first = makeModel()
-        let workspace = try await workspace(root, in: registry)
-        await first.show(workspace)
-        await first.startSession()
-        first.hide()
-        await workspace.saveSnapshot()
-
-        let model = makeModel()
-        let before = pty.specs.count
-        await model.show(try await self.workspace(root, in: makeRegistry()))
-
-        #expect(!model.isOpen)
-        #expect(pty.specs.count == before)
-    }
-
-    // MARK: Toggling and cycling
-
-    @Test func openingAnEmptyPanelStartsASession() async throws {
-        let (model, _, _) = try await shown()
-
-        await model.toggle()
-
-        #expect(model.isOpen)
-        #expect(model.tabs.count == 1)
-    }
-
-    @Test func hidingKeepsTheSessionsAndShowingDoesNotStartAnother() async throws {
-        let (model, _, _) = try await shown(sessions: 1)
-
-        model.hide()
-        await model.toggle()
-
-        #expect(model.tabs.count == 1)
-        #expect(pty.specs.count == 1)
-    }
+    // MARK: Cycling
 
     @Test func tabsCycleInBothDirections() async throws {
         let (model, _, _) = try await shown(sessions: 2)

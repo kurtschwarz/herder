@@ -30,9 +30,6 @@ extension FocusedValues {
     /// Start a shell in the workspace showing.
     @Entry var newTerminalTab: (() -> Void)?
 
-    /// Show or hide the agent panel, and move into it when it opens.
-    @Entry var toggleAgentPanel: (() -> Void)?
-
     /// Start an agent session in the workspace showing.
     @Entry var newAgentSession: (() -> Void)?
 }
@@ -52,7 +49,6 @@ public struct AppCommands: Commands {
     @FocusedValue(\.moveEditorTabRight) private var moveEditorTabRight
     @FocusedValue(\.toggleTerminal) private var toggleTerminal
     @FocusedValue(\.newTerminalTab) private var newTerminalTab
-    @FocusedValue(\.toggleAgentPanel) private var toggleAgentPanel
     @FocusedValue(\.newAgentSession) private var newAgentSession
     @Environment(\.openWindow) private var openWindow
 
@@ -98,10 +94,6 @@ public struct AppCommands: Commands {
             Button("Toggle Terminal") { toggleTerminal?() }
                 .keyboardShortcut("`", modifiers: .control)
                 .disabled(toggleTerminal == nil)
-
-            Button("Toggle Agents") { toggleAgentPanel?() }
-                .keyboardShortcut("a", modifiers: [.command, .option])
-                .disabled(toggleAgentPanel == nil)
         }
 
         CommandGroup(replacing: .saveItem) {

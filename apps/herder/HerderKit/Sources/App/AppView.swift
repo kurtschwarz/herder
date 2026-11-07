@@ -30,12 +30,6 @@ public struct AppView: View {
         _environment = State(initialValue: environment)
     }
 
-    /// What the window needs beyond its usual minimum while the agent panel is
-    /// open: the panel at its narrowest, and the handle beside it.
-    private var agentPanelAllowance: CGFloat {
-        window?.agentPanel.isOpen == true ? Theme.Size.minSidebarWidth + Theme.Spacing.paneGap : 0
-    }
-
     public var body: some View {
         Group {
             if let window {
@@ -45,7 +39,7 @@ public struct AppView: View {
         // Above what the panes need (two minimum panes, the editor's floor, the
         // padding and the gaps): this is the smallest window worth showing, not
         // the smallest the layout survives.
-        .frame(minWidth: 960 + agentPanelAllowance, minHeight: 460)
+        .frame(minWidth: 960 + Theme.Size.minSidebarWidth + Theme.Spacing.paneGap, minHeight: 460)
         .background { WindowGlass() }
         .background(
             WindowChrome(
@@ -96,16 +90,14 @@ private struct WindowView: View {
     )
 
     /// The agent panel's own share, which comes off the top: it is laid out
-    /// first, and the sidebar and the file tree divide what it leaves. Zero
-    /// while it is hidden.
+    /// first, and the sidebar and the file tree divide what it leaves.
     private var agentWidth: CGFloat {
-        guard window.agentPanel.isOpen else { return 0 }
-        return window.paneWidths.resolvedAgent(in: availableWidth - Theme.Spacing.paneGap, limits: limits)
+        window.paneWidths.resolvedAgent(in: availableWidth - Theme.Spacing.paneGap, limits: limits)
     }
 
     /// What the sidebar, the editor and the file tree share.
     private var outerWidth: CGFloat {
-        window.agentPanel.isOpen ? availableWidth - Theme.Spacing.paneGap - agentWidth : availableWidth
+        availableWidth - Theme.Spacing.paneGap - agentWidth
     }
 
     var body: some View {
@@ -125,23 +117,21 @@ private struct WindowView: View {
                 onReset: { reset(.leading) }
             )
 
-            if window.agentPanel.isOpen {
-                AgentPanel(model: window.agentPanel)
-                    .frame(width: agentWidth)
-                    .glassPaneBackground()
+            AgentPanel(model: window.agentPanel)
+                .frame(width: agentWidth)
+                .glassPaneBackground()
 
-                ResizeHandle(
-                    widens: .trailing,
-                    width: agentWidth,
-                    onResize: {
-                        window.paneWidths = window.paneWidths.settingAgent(
-                            to: $0, in: availableWidth - Theme.Spacing.paneGap, limits: limits
-                        )
-                    },
-                    onCommit: { window.commitPaneWidths() },
-                    onReset: { resetAgent() }
-                )
-            }
+            ResizeHandle(
+                widens: .trailing,
+                width: agentWidth,
+                onResize: {
+                    window.paneWidths = window.paneWidths.settingAgent(
+                        to: $0, in: availableWidth - Theme.Spacing.paneGap, limits: limits
+                    )
+                },
+                onCommit: { window.commitPaneWidths() },
+                onReset: { resetAgent() }
+            )
 
             VStack(spacing: 0) {
                 VStack(spacing: 0) {
@@ -289,10 +279,6 @@ private struct AgentCommandValues: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .focusedSceneValue(
-                \.toggleAgentPanel,
-                agents.workspace == nil ? nil : { Task { await agents.toggle() } }
-            )
             .focusedSceneValue(
                 \.newAgentSession,
                 agents.workspace == nil ? nil : { Task { await agents.startSession() } }
