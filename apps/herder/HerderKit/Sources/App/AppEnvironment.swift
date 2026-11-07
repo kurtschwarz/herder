@@ -67,6 +67,7 @@ public final class AppEnvironment {
     private let folderPicker: any FolderPickerClient
     private let highlighter: any SyntaxHighlighter
     private let pty: any PTYClient
+    private let commands: any CommandClient
     private let clock: any ClockClient
 
     /// The live app: every service is the real one.
@@ -129,7 +130,8 @@ public final class AppEnvironment {
         clock: any ClockClient,
         persistence: PersistenceStack,
         highlighter: any SyntaxHighlighter = TreeSitterHighlighter(),
-        pty: any PTYClient = LivePTYClient()
+        pty: any PTYClient = LivePTYClient(),
+        commands: any CommandClient = LiveCommandClient()
     ) {
         self.persistence = persistence
         self.state = persistence.state
@@ -148,6 +150,7 @@ public final class AppEnvironment {
         self.folderPicker = folderPicker
         self.highlighter = highlighter
         self.pty = pty
+        self.commands = commands
         self.clock = clock
     }
 
@@ -165,7 +168,9 @@ public final class AppEnvironment {
             fileTree: FileTreeModel(store: worktrees),
             editor: EditorModel(store: worktrees, files: files, highlighter: highlighter),
             terminal: TerminalModel(pty: pty, clock: clock),
-            agentPanel: AgentPanelModel(pty: pty, clock: clock, catalog: agents, openSessions: OpenAgentSessions()),
+            agentPanel: AgentPanelModel(
+                pty: pty, commands: commands, clock: clock, catalog: agents, openSessions: OpenAgentSessions()
+            ),
             worktrees: worktrees,
             windows: windows,
             restoring: snapshot

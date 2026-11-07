@@ -65,17 +65,21 @@ import Testing
     }
 
     @Test func aSessionsIdGoesWhereTheCommandAsksForIt() throws {
-        let id = try #require(UUID(uuidString: "6F9619FF-8B86-D011-B42D-00CF4FC964FF"))
         let claude = try #require(Agent.presets.first { $0.id == "claude-code" })
+        let opencode = try #require(Agent.presets.first { $0.id == "opencode" })
 
-        #expect(claude.commandLine(for: id, resuming: false) == "claude --session-id 6f9619ff-8b86-d011-b42d-00cf4fc964ff")
-        #expect(claude.commandLine(for: id, resuming: true) == "claude --resume 6f9619ff-8b86-d011-b42d-00cf4fc964ff")
+        #expect(claude.commandLine(session: "6f9619ff", resuming: false) == "claude --session-id 6f9619ff")
+        #expect(claude.commandLine(session: "6f9619ff", resuming: true) == "claude --resume 6f9619ff")
+        #expect(opencode.commandLine(session: "ses_abc", resuming: false) == "opencode")
+        #expect(opencode.commandLine(session: "ses_abc", resuming: true) == "opencode -s ses_abc")
+        #expect(opencode.looksUpSessions)
+        #expect(!claude.looksUpSessions)
     }
 
     @Test func anAgentWithNoResumeCommandStartsAfresh() {
         let agent = Agent(id: "x", name: "Aider", command: "aider", resumeCommand: "")
 
-        #expect(agent.commandLine(for: UUID(), resuming: true) == "aider")
+        #expect(agent.commandLine(session: "x", resuming: true) == "aider")
     }
 
     @Test func anAgentSavedBeforeResumingExistedStillReads() throws {

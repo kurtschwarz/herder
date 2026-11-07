@@ -38,6 +38,24 @@ final class AgentTab: Identifiable {
     /// from then on, starting it again means resuming it.
     private(set) var hasStarted: Bool
 
+    /// When its agent was first started, which is how a looked-up session is
+    /// told apart from older ones.
+    private(set) var startedAt: Date?
+
+    /// The id the agent gave the session, for an agent that names its own.
+    /// `nil` until a lookup finds it. See ``Agent/sessionLookup``.
+    private(set) var sessionID: String?
+
+    /// What the session is called in a command: the agent's own id once it is
+    /// known, and otherwise the one Herder minted.
+    var sessionName: String { sessionID ?? id.uuidString.lowercased() }
+
+    /// Whether resuming needs the agent's own id and it is not known: such a
+    /// session can only be started afresh.
+    var isMissingSessionID: Bool { agent.looksUpSessions && sessionID == nil }
+
+    func setSessionID(_ id: String) { sessionID = id }
+
     /// What the terminal UI draws on. Replaced by each attach, so a view keyed
     /// on ``generation`` starts over with it.
     private(set) var screen: TerminalScreen?
@@ -66,10 +84,19 @@ final class AgentTab: Identifiable {
 
     /// A tab for a new session, or, with `restored`, one remembered from
     /// before, which waits to be shown before it resumes.
-    init(id: UUID = UUID(), agent: Agent, number: Int, restored: Bool = false) {
+    init(
+        id: UUID = UUID(),
+        agent: Agent,
+        number: Int,
+        restored: Bool = false,
+        sessionID: String? = nil,
+        startedAt: Date? = nil
+    ) {
         self.id = id
         self.agent = agent
         self.number = number
+        self.sessionID = sessionID
+        self.startedAt = startedAt
         self.hasStarted = restored
         self.phase = restored ? .waiting : .starting
     }
@@ -88,6 +115,7 @@ final class AgentTab: Identifiable {
             process = session
             screen = TerminalScreen(session: session, size: spec.size)
             hasStarted = true
+            if startedAt == nil { startedAt = Date() }
             seenOutput = 0
             seenInput = 0
             seenBells = 0
@@ -114,8 +142,12 @@ final class AgentTab: Identifiable {
 
     /// Looks at what the terminal did since the last look. Run about once a
     /// second: output in that time is work, unless it was the echo of typing.
-    func sample(now: Date) {
-        guard let screen else { return }
+    /// Says whether it just went quiet after working, which is when a turn
+    /// has most likely ended.
+    @discardableResult
+    func sample(now: Date) -> Bool {
+        guard let screen else { return false }
+        let wasWorking = isWorking
         let output = screen.outputCount
         let input = screen.inputCount
         let wrote = output != seenOutput
@@ -129,6 +161,7 @@ final class AgentTab: Identifiable {
         }
         let working = screen.isReportingProgress || (wrote && !typed)
         if isWorking != working { isWorking = working }
+        return wasWorking && !working
     }
 
     /// A bell or a notification that nothing has been typed since.

@@ -24,30 +24,50 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// May name the session with ``sessionToken``.
     public var resumeCommand: String?
 
-    /// Stands for the session's id in a command. Herder mints the id, a UUID,
-    /// so an agent that can be told its id up front is resumed exactly; one
-    /// that cannot is resumed however its own resume command says.
+    /// For an agent that names its own sessions: a command line that lists
+    /// them, which Herder reads to learn the id of the one a tab started. See
+    /// ``AgentSessionLookup`` for what it may print.
+    public var sessionLookup: String?
+
+    /// Stands for the session's id in a command. For most agents Herder mints
+    /// the id, a UUID, and tells the agent; for one with a ``sessionLookup``,
+    /// it is the id the agent chose, once the lookup has found it.
     public static let sessionToken = "{session}"
 
-    public init(id: ID, name: String, command: String, resumeCommand: String? = nil) {
+    public init(
+        id: ID,
+        name: String,
+        command: String,
+        resumeCommand: String? = nil,
+        sessionLookup: String? = nil
+    ) {
         self.id = id
         self.name = name
         self.command = command
         self.resumeCommand = resumeCommand
+        self.sessionLookup = sessionLookup
     }
 
-    /// The command line to run for `session`: a new one, or picking one up.
-    public func commandLine(for session: UUID, resuming: Bool) -> String {
+    /// Whether the agent mints its own session ids, so Herder has to look
+    /// them up before it can resume one.
+    public var looksUpSessions: Bool {
+        !(sessionLookup ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// The command line to run for the session called `session`: a new one,
+    /// or picking one up. Resuming with no resume command starts afresh.
+    public func commandLine(session: String, resuming: Bool) -> String {
         let template = resuming ? (resumeCommand.flatMap { $0.isEmpty ? nil : $0 } ?? command) : command
-        return template.replacing(Self.sessionToken, with: session.uuidString.lowercased())
+        return template.replacing(Self.sessionToken, with: session)
     }
 
     /// The agents Herder knows how to start without being told. Never
     /// change an id: it is what a saved "last used" names.
     ///
     /// Claude Code and Pi can be given a session's id up front, so they resume
-    /// exactly. Codex and opencode cannot: they resume the last session in the
-    /// worktree, which is the right one unless several were open at once.
+    /// exactly. opencode names its own, so its sessions are looked up and then
+    /// resumed exactly. Codex can do neither here: it resumes the last session
+    /// in the worktree, which is the right one unless several were open.
     public static let presets: [Agent] = [
         Agent(
             id: "claude-code",
@@ -56,7 +76,13 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
             resumeCommand: "claude --resume \(sessionToken)"
         ),
         Agent(id: "codex", name: "Codex", command: "codex", resumeCommand: "codex resume --last"),
-        Agent(id: "opencode", name: "opencode", command: "opencode", resumeCommand: "opencode --continue"),
+        Agent(
+            id: "opencode",
+            name: "opencode",
+            command: "opencode",
+            resumeCommand: "opencode -s \(sessionToken)",
+            sessionLookup: "opencode session list --format json -n 20"
+        ),
         Agent(
             id: "pi",
             name: "Pi",

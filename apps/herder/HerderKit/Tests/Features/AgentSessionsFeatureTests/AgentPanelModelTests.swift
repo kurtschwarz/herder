@@ -16,6 +16,8 @@ import Testing
     let pty = StubPTYClient()
     let catalog: AgentCatalog
     let open = OpenAgentSessions()
+    let commands = StubCommandClient()
+    static let lookup = "opencode session list --format json -n 20"
     let root = URL(filePath: "/code/api")
     let other = URL(filePath: "/code/web")
 
@@ -30,6 +32,7 @@ import Testing
     func makeModel() -> AgentPanelModel {
         AgentPanelModel(
             pty: pty,
+            commands: commands,
             clock: SleepingClock(),
             catalog: catalog,
             openSessions: open,
@@ -411,6 +414,97 @@ import Testing
         await model.startSession(try #require(catalog.agent("codex")))
 
         #expect(model.tabs.map { model.title(of: $0) } == ["Codex", "Codex 2", "Codex 3"])
+    }
+
+    // MARK: Agents that name their own sessions
+
+    /// What opencode's lookup prints for sessions in `root`, made now.
+    func answerLookup(with ids: [String], in url: URL? = nil) {
+        let now = Date().timeIntervalSince1970 * 1000
+        let entries = ids.enumerated().map { index, id in
+            #"{"id": "\#(id)", "created": \#(now + Double(index)), "directory": "\#((url ?? root).path)"}"#
+        }
+        commands.answer(Self.lookup, with: "[" + entries.joined(separator: ",") + "]")
+    }
+
+    @Test func anOpencodeSessionIsLookedUpAndResumedByItsOwnId() async throws {
+        _ = try await closedWindow(starting: ["opencode"], selecting: 0)
+        answerLookup(with: ["ses_abc"])
+
+        let model = makeModel()
+        await model.show(try await workspace(root, in: makeRegistry()))
+
+        #expect(commands.calls.map(\.line) == [Self.lookup])
+        #expect(commands.calls.first?.directory == root)
+        #expect(pty.specs.last?.arguments.last == "exec opencode -s ses_abc")
+        #expect(model.activeTab?.sessionID == "ses_abc")
+    }
+
+    @Test func theIdFoundIsRememberedSoTheNextReopenNeedsNoLookup() async throws {
+        _ = try await closedWindow(starting: ["opencode"], selecting: 0)
+        answerLookup(with: ["ses_abc"])
+        let registry = makeRegistry()
+        let first = makeModel()
+        let workspace = try await workspace(root, in: registry)
+        await first.show(workspace)
+        first.terminateAll()
+        await workspace.saveSnapshot()
+        commands.answer(Self.lookup, with: "[]")
+
+        let model = makeModel()
+        await model.show(try await self.workspace(root, in: makeRegistry()))
+
+        #expect(pty.specs.last?.arguments.last == "exec opencode -s ses_abc")
+    }
+
+    @Test func anOpencodeSessionThatCannotBeFoundStartsAfresh() async throws {
+        _ = try await closedWindow(starting: ["opencode"], selecting: 0)
+
+        let model = makeModel()
+        await model.show(try await workspace(root, in: makeRegistry()))
+
+        #expect(pty.specs.last?.arguments.last == "exec opencode")
+    }
+
+    @Test func twoOpencodeTabsInOneWorktreeEachKeepTheirOwnSession() async throws {
+        _ = try await closedWindow(starting: ["opencode", "opencode"], selecting: 0)
+        answerLookup(with: ["ses_first", "ses_second"])
+
+        let model = makeModel()
+        await model.show(try await workspace(root, in: makeRegistry()))
+        model.select(model.tabs[1])
+
+        try await eventually("the second resumes") { pty.specs.last?.arguments.last == "exec opencode -s ses_second" }
+        #expect(model.tabs.map(\.sessionID) == ["ses_first", "ses_second"])
+    }
+
+    @Test func aSessionInAnotherWorktreeIsNotTaken() async throws {
+        _ = try await closedWindow(starting: ["opencode"], selecting: 0)
+        answerLookup(with: ["ses_web"], in: other)
+
+        let model = makeModel()
+        await model.show(try await workspace(root, in: makeRegistry()))
+
+        #expect(pty.specs.last?.arguments.last == "exec opencode")
+    }
+
+    @Test func theSessionIsLookedUpWhenItsFirstTurnEnds() async throws {
+        let (model, _, _) = try await shown()
+        await model.startSession(try #require(catalog.agent("opencode")))
+        answerLookup(with: ["ses_live"])
+
+        // Working, then quiet.
+        pty.sessions[0].emit("thinking…")
+        try await eventually("it is looked up") { model.activeTab?.sessionID == "ses_live" }
+    }
+
+    @Test func agentsThatTakeAnIdUpFrontAreNeverLookedUp() async throws {
+        _ = try await closedWindow(starting: ["claude-code"], selecting: 0)
+
+        let model = makeModel()
+        await model.show(try await workspace(root, in: makeRegistry()))
+
+        #expect(commands.calls.isEmpty)
     }
 }
 

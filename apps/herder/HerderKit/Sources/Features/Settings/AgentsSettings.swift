@@ -10,7 +10,7 @@ struct AgentsSettings: View {
 
     var body: some View {
         SettingsPaneContent(pane: .agents) {
-            Text("Each agent is a command run in your login shell, in the root of the worktree a session starts in. The resume command picks a session up again after its window was closed; without one, it starts afresh. \(Agent.sessionToken) in either stands for the session\u{2019}s id.")
+            Text("Each agent is a command run in your login shell, in the root of the worktree a session starts in. The resume command picks a session up again after its window was closed; without one, it starts afresh. \(Agent.sessionToken) in either stands for the session\u{2019}s id: one Herder makes up, or, for an agent that names its own sessions, the one its session lookup finds.")
                 .font(.callout)
                 .foregroundStyle(Theme.Palette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -25,6 +25,9 @@ struct AgentsSettings: View {
                             Text(agent.command)
                             if let resume = agent.resumeCommand {
                                 Text(resume).foregroundStyle(Theme.Palette.tertiaryText)
+                            }
+                            if let lookup = agent.sessionLookup {
+                                Text(lookup).foregroundStyle(Theme.Palette.tertiaryText)
                             }
                         }
                         .font(.system(size: 12, design: .monospaced))
@@ -83,7 +86,8 @@ private struct CustomAgentRow: View {
 
             VStack(spacing: Theme.Spacing.tight) {
                 commandField("Command, e.g. aider --model sonnet", text: binding(\.command))
-                commandField("Resume command (optional), e.g. aider --restore-chat-history", text: resumeBinding)
+                commandField("Resume command (optional), e.g. aider --restore-chat-history", text: optionalBinding(\.resumeCommand))
+                commandField("Session lookup (optional), lists the agent\u{2019}s sessions", text: optionalBinding(\.sessionLookup))
             }
 
             HoverIconButton(icon: Ph.trash.regular, help: "Remove \(agent.displayName)") {
@@ -103,13 +107,13 @@ private struct CustomAgentRow: View {
             .fieldSurface()
     }
 
-    /// Blank means none: the agent starts afresh instead.
-    private var resumeBinding: Binding<String> {
+    /// Blank means none.
+    private func optionalBinding(_ field: WritableKeyPath<Agent, String?>) -> Binding<String> {
         Binding(
-            get: { catalog.agent(agent.id)?.resumeCommand ?? "" },
+            get: { catalog.agent(agent.id)?[keyPath: field] ?? "" },
             set: { value in
                 guard var current = catalog.agent(agent.id) else { return }
-                current.resumeCommand = value.trimmingCharacters(in: .whitespaces).isEmpty ? nil : value
+                current[keyPath: field] = value.trimmingCharacters(in: .whitespaces).isEmpty ? nil : value
                 catalog.update(current)
             }
         )

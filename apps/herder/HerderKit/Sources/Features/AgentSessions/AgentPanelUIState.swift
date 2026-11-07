@@ -19,6 +19,9 @@ final class AgentPanelUIState: PersistedWorkspaceUIState {
         var id: UUID
         var agent: Agent
         var number: Int
+        /// The agent's own id for the session, once looked up.
+        var session: String?
+        var started: Date?
     }
 
     var tabs: [Tab] = []

@@ -24,6 +24,7 @@ import TerminalUI
 @Observable
 public final class AgentPanelModel {
     private let pty: any PTYClient
+    private let commands: any CommandClient
     private let clock: any ClockClient
     private let environment: [String: String]
 
@@ -35,6 +36,9 @@ public final class AgentPanelModel {
     public let openSessions: OpenAgentSessions
 
     @ObservationIgnored private var sampling: Task<Void, Never>?
+
+    /// Tabs whose session is being looked up, so one lookup runs at a time.
+    @ObservationIgnored private var lookingUp: Set<UUID> = []
 
     /// A session to bring forward once its workspace is showing. See
     /// ``reveal(_:in:)``.
@@ -67,6 +71,7 @@ public final class AgentPanelModel {
 
     public init(
         pty: any PTYClient,
+        commands: any CommandClient,
         clock: any ClockClient,
         catalog: AgentCatalog,
         openSessions: OpenAgentSessions,
@@ -74,6 +79,7 @@ public final class AgentPanelModel {
         sampleInterval: Duration = .seconds(1)
     ) {
         self.pty = pty
+        self.commands = commands
         self.clock = clock
         self.sampleInterval = sampleInterval
         self.catalog = catalog
@@ -144,7 +150,12 @@ public final class AgentPanelModel {
         guard tabsByWorkspace[id] == nil else { return }
         let state = workspace.uiState(AgentPanelUIState.self)
         guard !state.tabs.isEmpty else { return }
-        let tabs = state.tabs.map { AgentTab(id: $0.id, agent: $0.agent, number: $0.number, restored: true) }
+        let tabs = state.tabs.map {
+            AgentTab(
+                id: $0.id, agent: $0.agent, number: $0.number,
+                restored: true, sessionID: $0.session, startedAt: $0.started
+            )
+        }
         for tab in tabs {
             watch(tab, in: id)
             openedByWorkspace[id, default: [:]][tab.agent.id] = max(
@@ -214,6 +225,8 @@ public final class AgentPanelModel {
         remember(id)
         publish()
         await attach(tab, in: workspace)
+        // Again, now that it has a start time to remember.
+        remember(id)
         publish()
         // Told again once there is a screen for the keyboard to go to.
         if self.workspace?.id == id { focusRequest += 1 }
@@ -277,7 +290,11 @@ public final class AgentPanelModel {
     /// where their terminal would find it. The command is the user's own, typed
     /// in Settings or one of the presets, and is run as they wrote it.
     private func attach(_ tab: AgentTab, in workspace: Workspace) async {
-        let line = tab.agent.commandLine(for: tab.id, resuming: tab.hasStarted)
+        if tab.hasStarted, tab.isMissingSessionID { await lookUpSession(of: tab, in: workspace.id) }
+        // An agent that names its own sessions cannot be pointed at one
+        // nobody found, so that one starts afresh.
+        let resuming = tab.hasStarted && !tab.isMissingSessionID
+        let line = tab.agent.commandLine(session: tab.sessionName, resuming: resuming)
         let spec = ShellLaunch.command(
             "exec \(line)",
             environment: environment,
@@ -302,6 +319,35 @@ public final class AgentPanelModel {
         }
     }
 
+    // MARK: Looking up sessions
+
+    /// Asks an agent that names its own sessions which one this tab started,
+    /// and keeps the answer. Run when a turn has ended, by which time the
+    /// session exists, and again before resuming if that found nothing.
+    private func lookUpSession(of tab: AgentTab, in id: WorkspaceID) async {
+        guard let lookup = tab.agent.sessionLookup, tab.isMissingSessionID, let started = tab.startedAt,
+              !lookingUp.contains(tab.id)
+        else { return }
+        lookingUp.insert(tab.id)
+        defer { lookingUp.remove(tab.id) }
+
+        guard let output = await commands.output(of: lookup, in: id.url) else { return }
+        let claimed = Set(tabsByWorkspace.values.joined().compactMap(\.sessionID))
+        guard
+            tab.isMissingSessionID,
+            let session = AgentSessionLookup.match(
+                AgentSessionLookup.candidates(in: output),
+                directory: id.root,
+                started: started,
+                claimed: claimed
+            ),
+            // It goes into a command line.
+            AgentSessionLookup.isSafe(session)
+        else { return }
+        tab.setSessionID(session)
+        remember(id)
+    }
+
     // MARK: Remembering
 
     /// Writes down the sessions open in `id`, and which is in front, on that
@@ -310,7 +356,9 @@ public final class AgentPanelModel {
     private func remember(_ id: WorkspaceID) {
         guard let workspace = workspaceObjects[id]?.workspace else { return }
         let state = workspace.uiState(AgentPanelUIState.self)
-        let tabs = (tabsByWorkspace[id] ?? []).map { AgentPanelUIState.Tab(id: $0.id, agent: $0.agent, number: $0.number) }
+        let tabs = (tabsByWorkspace[id] ?? []).map {
+            AgentPanelUIState.Tab(id: $0.id, agent: $0.agent, number: $0.number, session: $0.sessionID, started: $0.startedAt)
+        }
         let active = activeByWorkspace[id]
         guard state.tabs != tabs || state.active != active else { return }
         state.tabs = tabs
@@ -354,7 +402,11 @@ public final class AgentPanelModel {
                 do { try await clock.sleep(for: sampleInterval) } catch { return }
                 guard let self else { return }
                 let now = Date()
-                for tab in tabsByWorkspace.values.joined() { tab.sample(now: now) }
+                for (id, tabs) in tabsByWorkspace {
+                    for tab in tabs where tab.sample(now: now) && tab.isMissingSessionID {
+                        Task { await lookUpSession(of: tab, in: id) }
+                    }
+                }
                 publish()
             }
         }
