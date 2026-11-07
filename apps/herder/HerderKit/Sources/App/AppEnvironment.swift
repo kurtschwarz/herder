@@ -165,7 +165,7 @@ public final class AppEnvironment {
             fileTree: FileTreeModel(store: worktrees),
             editor: EditorModel(store: worktrees, files: files, highlighter: highlighter),
             terminal: TerminalModel(pty: pty, clock: clock),
-            agentPanel: AgentPanelModel(pty: pty, catalog: agents),
+            agentPanel: AgentPanelModel(pty: pty, clock: clock, catalog: agents, openSessions: OpenAgentSessions()),
             worktrees: worktrees,
             windows: windows,
             restoring: snapshot

@@ -49,6 +49,16 @@ final class TerminalEmulator {
     /// A shell said where it is (OSC 7), or `nil` when it said nothing usable.
     var onWorkingDirectory: ((URL?) -> Void)?
 
+    /// The program named itself (OSC 0 or 2). Empty when it cleared the name.
+    var onTitle: ((String) -> Void)?
+
+    /// The program asked for a desktop notification (OSC 9 or 777), with its
+    /// title, which may be empty, and its body.
+    var onNotification: ((String, String) -> Void)?
+
+    /// The program started or stopped reporting progress (OSC 9;4).
+    var onProgress: ((Bool) -> Void)?
+
     // CONCURRENCY: C handles, which are not `Sendable`. They are made in `init`
     // and used only on the main actor; `nonisolated(unsafe)` is for `deinit`,
     // which is not isolated and is the last thing to touch them.
@@ -157,6 +167,38 @@ final class TerminalEmulator {
             }
         }
         ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, unsafeBitCast(pwd, to: UnsafeRawPointer.self))
+
+        let title: GhosttyTerminalTitleChangedFn = { _, userdata in
+            guard let userdata else { return }
+            MainActor.assumeIsolated {
+                let emulator = Unmanaged<TerminalEmulator>.fromOpaque(userdata).takeUnretainedValue()
+                emulator.onTitle?(emulator.reportedTitle())
+            }
+        }
+        ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, unsafeBitCast(title, to: UnsafeRawPointer.self))
+
+        let notification: GhosttyTerminalDesktopNotificationFn = { _, userdata, notification in
+            guard let userdata, let notification else { return }
+            let title = TerminalEmulator.text(notification.pointee.title)
+            let body = TerminalEmulator.text(notification.pointee.body)
+            MainActor.assumeIsolated {
+                Unmanaged<TerminalEmulator>.fromOpaque(userdata).takeUnretainedValue().onNotification?(title, body)
+            }
+        }
+        ghostty_terminal_set(
+            terminal, GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, unsafeBitCast(notification, to: UnsafeRawPointer.self)
+        )
+
+        let progress: GhosttyTerminalProgressReportFn = { _, userdata, report in
+            guard let userdata, let report else { return }
+            let isActive = report.pointee.state != GHOSTTY_TERMINAL_PROGRESS_STATE_REMOVE
+            MainActor.assumeIsolated {
+                Unmanaged<TerminalEmulator>.fromOpaque(userdata).takeUnretainedValue().onProgress?(isActive)
+            }
+        }
+        ghostty_terminal_set(
+            terminal, GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT, unsafeBitCast(progress, to: UnsafeRawPointer.self)
+        )
 
         let clipboard: GhosttyTerminalClipboardWriteFn = { _, userdata, write in
             guard let userdata, let write else { return }
@@ -355,6 +397,18 @@ final class TerminalEmulator {
         default: .block
         }
         return Cursor(column: Int(cursor.viewport_x), row: Int(cursor.viewport_y), style: style)
+    }
+
+    private func reportedTitle() -> String {
+        var string = GhosttyString()
+        guard ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_TITLE, &string) == GHOSTTY_SUCCESS else { return "" }
+        return Self.text(string)
+    }
+
+    /// A borrowed string, copied out before the library can change it.
+    private nonisolated static func text(_ string: GhosttyString) -> String {
+        guard string.len > 0, let pointer = string.ptr else { return "" }
+        return String(decoding: UnsafeBufferPointer(start: pointer, count: string.len), as: UTF8.self)
     }
 
     private func reportedWorkingDirectory() -> URL? {

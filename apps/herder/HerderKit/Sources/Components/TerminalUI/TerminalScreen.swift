@@ -19,6 +19,23 @@ public final class TerminalScreen {
     /// Where the shell last said it was (OSC 7), if it ever has.
     public private(set) var reportedDirectory: URL?
 
+    /// What the program last called itself (OSC 0 or 2), if it ever has.
+    public private(set) var title: String?
+
+    /// The last desktop notification the program asked for (OSC 9 or 777), and
+    /// how much had been typed when it did: a notification is news until the
+    /// person types something after it.
+    public private(set) var notification: (text: String, inputCount: Int)?
+
+    /// The program is reporting progress (OSC 9;4).
+    public private(set) var isReportingProgress = false
+
+    /// How many times the person has typed or pasted, and how many chunks of
+    /// output have arrived. Counts rather than times, so a watcher can tell
+    /// "something happened since I last looked" against whatever clock it has.
+    @ObservationIgnored public private(set) var inputCount = 0
+    @ObservationIgnored public private(set) var outputCount = 0
+
     /// The process ended and its output has all been drawn.
     public private(set) var hasEnded = false
 
@@ -52,6 +69,13 @@ public final class TerminalScreen {
         emulator.onReply = { [input] data in input.yield(data) }
         emulator.onBell = { [weak self] in self?.bellCount += 1 }
         emulator.onWorkingDirectory = { [weak self] in self?.reportedDirectory = $0 }
+        emulator.onTitle = { [weak self] in self?.title = $0.isEmpty ? nil : $0 }
+        emulator.onNotification = { [weak self] title, body in
+            guard let self else { return }
+            let text = body.isEmpty ? title : body
+            notification = (text, inputCount)
+        }
+        emulator.onProgress = { [weak self] in self?.isReportingProgress = $0 }
         emulator.onClipboardWrite = { text in
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
@@ -65,6 +89,7 @@ public final class TerminalScreen {
         tasks.append(Task { [weak self, session] in
             for await chunk in session.output {
                 guard let self else { return }
+                outputCount += 1
                 emulator.write(chunk)
                 scheduleRefresh()
                 // A flood arrives as fast as it is asked for, so without this
@@ -116,6 +141,7 @@ public final class TerminalScreen {
 
     func send(_ data: Data) {
         guard !data.isEmpty else { return }
+        inputCount += 1
         // Typing goes to the bottom of the scrollback, as in every terminal.
         if !emulator.scroll.isAtBottom {
             emulator.scrollToBottom()

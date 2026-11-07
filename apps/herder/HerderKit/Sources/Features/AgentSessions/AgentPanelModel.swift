@@ -22,7 +22,21 @@ import TerminalUI
 @Observable
 public final class AgentPanelModel {
     private let pty: any PTYClient
+    private let clock: any ClockClient
     private let environment: [String: String]
+
+    /// How often each session is looked at. Output within one of these is
+    /// work; a whole one without any is quiet.
+    private let sampleInterval: Duration
+
+    /// What this window's sidebar lists. Written here, read there.
+    public let openSessions: OpenAgentSessions
+
+    @ObservationIgnored private var sampling: Task<Void, Never>?
+
+    /// A session to bring forward once its workspace is showing. See
+    /// ``reveal(_:in:)``.
+    private var pendingFocus = false
 
     /// The agents a session can be started with.
     public let catalog: AgentCatalog
@@ -43,12 +57,22 @@ public final class AgentPanelModel {
 
     public init(
         pty: any PTYClient,
+        clock: any ClockClient,
         catalog: AgentCatalog,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        openSessions: OpenAgentSessions,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        sampleInterval: Duration = .seconds(1)
     ) {
         self.pty = pty
+        self.clock = clock
+        self.sampleInterval = sampleInterval
         self.catalog = catalog
+        self.openSessions = openSessions
         self.environment = environment
+    }
+
+    deinit {
+        sampling?.cancel()
     }
 
     // MARK: What is showing
@@ -80,7 +104,12 @@ public final class AgentPanelModel {
     /// for on the way there, if any.
     public func show(_ workspace: Workspace?) async {
         self.workspace = workspace
+        defer { publish() }
         guard let workspace else { return }
+        if pendingFocus {
+            pendingFocus = false
+            focusRequest += 1
+        }
 
         // Asked for before this workspace was showing, and answered now, or not
         // at all: a request for a workspace that never came must not start a
@@ -93,6 +122,20 @@ public final class AgentPanelModel {
     }
 
     // MARK: Sessions
+
+    /// Brings a session forward in `workspace`, which the window is showing or
+    /// on its way to: the tab goes in front now, and takes the keyboard once
+    /// it is on screen.
+    public func reveal(_ id: UUID, in workspace: WorkspaceID) {
+        guard tabsByWorkspace[workspace]?.contains(where: { $0.id == id }) == true else { return }
+        activeByWorkspace[workspace] = id
+        if self.workspace?.id == workspace {
+            focusRequest += 1
+        } else {
+            pendingFocus = true
+        }
+        publish()
+    }
 
     /// Asks for a new session in `id`, with `agent` or the one used last. If
     /// that is the workspace showing, it starts now; otherwise when the window
@@ -123,7 +166,10 @@ public final class AgentPanelModel {
         tabsByWorkspace[id, default: []].append(tab)
         activeByWorkspace[id] = tab.id
         focusRequest += 1
+        startSampling()
+        publish()
         await attach(tab, in: workspace)
+        publish()
         // Told again once there is a screen for the keyboard to go to.
         if self.workspace?.id == id { focusRequest += 1 }
     }
@@ -132,6 +178,7 @@ public final class AgentPanelModel {
         guard let workspace, tabs.contains(where: { $0.id == tab.id }) else { return }
         activeByWorkspace[workspace.id] = tab.id
         focusRequest += 1
+        publish()
     }
 
     public func selectNextTab() { cycle(by: 1) }
@@ -164,6 +211,7 @@ public final class AgentPanelModel {
             activeByWorkspace[id] = tabs.isEmpty ? nil : tabs[min(index, tabs.count - 1)].id
         }
         if workspace?.id == id { focusRequest += 1 }
+        publish()
     }
 
     /// Starts the agent again in a tab that stopped.
@@ -171,6 +219,7 @@ public final class AgentPanelModel {
         guard let workspace else { return }
         await attach(tab, in: workspace)
         focusRequest += 1
+        publish()
     }
 
     // MARK: Terminal UIs
@@ -198,6 +247,7 @@ public final class AgentPanelModel {
                 remove(tab, from: id)
             } else {
                 tab.screen?.announce("[Process exited with code \(code)]")
+                publish()
             }
         }
     }
@@ -210,6 +260,7 @@ public final class AgentPanelModel {
         tabsByWorkspace[id] = nil
         activeByWorkspace[id] = nil
         openedByWorkspace[id] = nil
+        publish()
     }
 
     /// Ends every session: the window is closing.
@@ -219,5 +270,46 @@ public final class AgentPanelModel {
         }
         tabsByWorkspace = [:]
         activeByWorkspace = [:]
+        sampling?.cancel()
+        sampling = nil
+        publish()
+    }
+
+    // MARK: Telling the sidebar
+
+    /// Looks at every session once a ``sampleInterval`` for as long as any is
+    /// open, which
+    /// is how a quiet one turns idle without anything happening to say so.
+    private func startSampling() {
+        guard sampling == nil else { return }
+        sampling = Task { [weak self, clock, sampleInterval] in
+            while !Task.isCancelled {
+                do { try await clock.sleep(for: sampleInterval) } catch { return }
+                guard let self else { return }
+                let now = Date()
+                for tab in tabsByWorkspace.values.joined() { tab.sample(now: now) }
+                publish()
+            }
+        }
+    }
+
+    /// Writes what is open into ``openSessions``, every workspace's, in the
+    /// order each was opened.
+    private func publish() {
+        let summaries = tabsByWorkspace
+            .sorted { $0.key.root < $1.key.root }
+            .flatMap { workspace, tabs in
+                tabs.map { tab in
+                    AgentSessionSummary(
+                        id: tab.id,
+                        workspace: workspace,
+                        title: tab.programTitle ?? title(of: tab),
+                        agentName: tab.agent.displayName,
+                        state: tab.state,
+                        lastActivity: tab.lastActivity
+                    )
+                }
+            }
+        openSessions.update(summaries, focused: activeTab?.id)
     }
 }

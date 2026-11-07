@@ -20,4 +20,8 @@ extension EnvironmentValues {
     /// How a feature asks this window to start an agent session in a worktree.
     /// See ``StartAgentSessionAction``; carried here for the reason above.
     @Entry public var startAgentSession: StartAgentSessionAction = .inert
+
+    /// How a feature asks this window to bring an open agent session forward.
+    /// See ``ShowAgentSessionAction``; carried here for the reason above.
+    @Entry public var showAgentSession: ShowAgentSessionAction = .inert
 }

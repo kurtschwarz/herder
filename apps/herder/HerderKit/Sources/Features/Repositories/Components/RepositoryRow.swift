@@ -8,6 +8,10 @@ struct RepositoryRow: View {
     let repository: Repository
     let model: RepositoriesModel
 
+    /// Agent sessions open in its worktrees. Shown as a badge when there are
+    /// any.
+    var sessionCount = 0
+
     @State private var isHovering = false
 
     private var isAvailable: Bool { repository.isAvailable }
@@ -62,6 +66,16 @@ struct RepositoryRow: View {
             .pointerStyle(isAvailable ? .link : nil)
             .disabled(!isAvailable)
             .help("New session")
+
+            if sessionCount > 0 {
+                Text("\(sessionCount)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Palette.secondaryText)
+                    .frame(minWidth: 20, minHeight: 20)
+                    .background(Circle().fill(Theme.Palette.control))
+                    .help("\(sessionCount) agent session\(sessionCount == 1 ? "" : "s") open")
+            }
         }
         .padding(.horizontal, Theme.Spacing.normal)
         .padding(.vertical, Theme.Spacing.tight)

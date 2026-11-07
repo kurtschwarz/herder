@@ -157,6 +157,13 @@ final class WindowEnvironment {
     /// The panel is told before the switch, and holds the request until the
     /// switch gets there: the worktree opens asynchronously, and the panel
     /// can only start a session in the workspace it is showing.
+    /// Brings an open session forward from the sidebar: its worktree shown,
+    /// its tab in front. The panel is told first, for the same reason as below.
+    func showAgentSession(_ session: AgentSessionSummary) {
+        agentPanel.reveal(session.id, in: session.workspace)
+        activate(session.workspace)
+    }
+
     func startAgentSession(in id: WorkspaceID, agent: Agent?) {
         agentPanel.requestSession(in: id, agent: agent)
         activate(id)

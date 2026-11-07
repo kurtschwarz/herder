@@ -15,9 +15,11 @@ struct RepositorySection: View {
     /// is what lets the previews below render.
     @Environment(\.openWorkspace) private var openWorkspace
 
+    @Environment(OpenAgentSessions.self) private var openSessions: OpenAgentSessions?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            RepositoryRow(repository: repository, model: model)
+            RepositoryRow(repository: repository, model: model, sessionCount: sessionCount)
 
             if model.isExpanded(repository) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -28,6 +30,8 @@ struct RepositorySection: View {
                                 worktree: worktree,
                                 isSelected: active?.root == PathKey(worktree.path)
                             ) { openWorkspace(WorkspaceID(worktree.path)) }
+
+                            WorktreeAgentSessions(workspace: WorkspaceID(worktree.path))
                         }
                     case .unreadable:
                         Text("Couldn't read worktrees")
@@ -44,5 +48,13 @@ struct RepositorySection: View {
         }
         .animation(.easeOut(duration: 0.15), value: model.isExpanded(repository))
         .clipped()
+    }
+
+    /// How many agent sessions this window has open in the repository's
+    /// worktrees, for the badge on its row.
+    private var sessionCount: Int {
+        guard let openSessions, case .loaded(let worktrees)? = model.listings[repository.id] else { return 0 }
+        let ids = Set(worktrees.map { WorkspaceID($0.path) })
+        return openSessions.sessions.filter { ids.contains($0.workspace) }.count
     }
 }

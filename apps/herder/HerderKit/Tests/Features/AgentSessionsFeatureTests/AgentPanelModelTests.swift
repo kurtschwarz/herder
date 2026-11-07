@@ -15,6 +15,7 @@ import Testing
     let state = InMemoryStateStore()
     let pty = StubPTYClient()
     let catalog: AgentCatalog
+    let open = OpenAgentSessions()
     let root = URL(filePath: "/code/api")
     let other = URL(filePath: "/code/web")
 
@@ -27,7 +28,14 @@ import Testing
     }
 
     func makeModel() -> AgentPanelModel {
-        AgentPanelModel(pty: pty, catalog: catalog, environment: ["SHELL": "/bin/sh"])
+        AgentPanelModel(
+            pty: pty,
+            clock: SleepingClock(),
+            catalog: catalog,
+            openSessions: open,
+            environment: ["SHELL": "/bin/sh"],
+            sampleInterval: .milliseconds(10)
+        )
     }
 
     func workspace(_ url: URL, in registry: WorkspaceRegistry) async throws -> Workspace {
@@ -247,5 +255,87 @@ import Testing
         #expect(model.activeTab?.number == 1)
         model.selectPreviousTab()
         #expect(model.activeTab?.number == 2)
+    }
+
+    // MARK: Telling the sidebar
+
+    @Test func openSessionsAreListedForTheirWorktree() async throws {
+        let (model, workspace, registry) = try await shown(sessions: 2)
+        await model.show(try await self.workspace(other, in: registry))
+        await model.startSession(try #require(catalog.agent("pi")))
+
+        #expect(open.sessions(in: workspace.id).map(\.title) == ["Claude Code", "Claude Code 2"])
+        #expect(open.sessions(in: WorkspaceID(other)).map(\.agentName) == ["Pi"])
+        #expect(open.focused == model.activeTab?.id)
+    }
+
+    @Test func closingASessionTakesItOffTheList() async throws {
+        let (model, workspace, _) = try await shown(sessions: 1)
+
+        model.closeActiveTab()
+
+        #expect(open.sessions(in: workspace.id).isEmpty)
+    }
+
+    @Test func theTitleTheProgramGivesItselfNamesItWithoutItsSpinner() async throws {
+        // Held to the end: the model is what samples the screen and hears the
+        // exit, and nothing else keeps it alive.
+        let (model, workspace, _) = try await shown(sessions: 1)
+
+        pty.sessions[0].emit("\u{1b}]0;\u{2733} Fix the build\u{07}")
+
+        try await eventually("the title arrives") { open.sessions(in: workspace.id).first?.title == "Fix the build" }
+        withExtendedLifetime(model) {}
+    }
+
+    @Test func aNotificationNeedsInputUntilSomethingIsTyped() async throws {
+        let (model, workspace, _) = try await shown(sessions: 1)
+
+        pty.sessions[0].emit("\u{1b}]9;Claude needs your permission\u{07}")
+        try await eventually("it asks") {
+            open.sessions(in: workspace.id).first?.state == .needsInput("Claude needs your permission")
+        }
+
+        model.activeTab?.screen?.send(text: "y")
+        try await eventually("the answer clears it") {
+            open.sessions(in: workspace.id).first?.state != .needsInput("Claude needs your permission")
+        }
+    }
+
+    @Test func aCrashIsListedWithItsStatus() async throws {
+        // Held to the end: the model is what samples the screen and hears the
+        // exit, and nothing else keeps it alive.
+        let (model, workspace, _) = try await shown(sessions: 1)
+
+        pty.sessions[0].exit(with: 2)
+
+        try await eventually("it is marked") { open.sessions(in: workspace.id).first?.state == .exited(2) }
+        withExtendedLifetime(model) {}
+    }
+
+    @Test func revealingASessionInAnotherWorkspaceBringsItForwardThere() async throws {
+        let (model, first, registry) = try await shown(sessions: 2)
+        let wanted = try #require(model.tabs.first)
+        let web = try await workspace(other, in: registry)
+        await model.show(web)
+
+        model.reveal(wanted.id, in: first.id)
+        let before = model.focusRequest
+        await model.show(first)
+
+        #expect(model.activeTab?.id == wanted.id)
+        #expect(model.focusRequest > before)
+        #expect(open.focused == wanted.id)
+    }
+}
+
+/// A clock that really waits. The sampler loops for as long as a session is
+/// open, and against ``VirtualClockClient``, whose sleeps return at once, every
+/// model alive in the suite would spin on the main actor and starve the rest.
+private struct SleepingClock: ClockClient {
+    var now: ContinuousClock.Instant { .now }
+
+    func sleep(for duration: Duration) async throws {
+        try await Task.sleep(for: duration)
     }
 }

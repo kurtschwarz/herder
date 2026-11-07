@@ -191,6 +191,9 @@ public enum Theme {
         /// merge conflict.
         public static let danger = Color(red: 247 / 255, green: 118 / 255, blue: 142 / 255)
 
+        /// Something working as it should, such as an agent that is busy.
+        public static let success = Color(red: 158 / 255, green: 206 / 255, blue: 106 / 255)
+
         /// The glyph colour for a file with this extension, lowercased.
         ///
         /// Here rather than in either feature because the file tree and the
