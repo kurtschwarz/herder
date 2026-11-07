@@ -36,7 +36,7 @@ private struct AgentTabContent: View {
 
     var body: some View {
         switch tab.phase {
-        case .starting:
+        case .waiting, .starting:
             ProgressView()
                 .controlSize(.small)
         case .running:

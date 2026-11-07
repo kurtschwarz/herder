@@ -10,20 +10,26 @@ struct AgentsSettings: View {
 
     var body: some View {
         SettingsPaneContent(pane: .agents) {
-            Text("Each agent is a command run in your login shell, in the root of the worktree a session starts in.")
+            Text("Each agent is a command run in your login shell, in the root of the worktree a session starts in. The resume command picks a session up again after its window was closed; without one, it starts afresh. \(Agent.sessionToken) in either stands for the session\u{2019}s id.")
                 .font(.callout)
                 .foregroundStyle(Theme.Palette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             section("Built in") {
                 ForEach(Agent.presets) { agent in
-                    HStack(spacing: Theme.Spacing.loose) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.loose) {
                         Text(agent.name)
                             .foregroundStyle(Theme.Palette.text)
                         Spacer(minLength: 0)
-                        Text(agent.command)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(Theme.Palette.secondaryText)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(agent.command)
+                            if let resume = agent.resumeCommand {
+                                Text(resume).foregroundStyle(Theme.Palette.tertiaryText)
+                            }
+                        }
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                        .textSelection(.enabled)
                     }
                     .padding(.vertical, Theme.Spacing.tight)
                 }
@@ -67,7 +73,7 @@ private struct CustomAgentRow: View {
     let catalog: AgentCatalog
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.normal) {
+        HStack(alignment: .top, spacing: Theme.Spacing.normal) {
             TextField("Name", text: binding(\.name))
                 .textFieldStyle(.plain)
                 .foregroundStyle(Theme.Palette.text)
@@ -75,19 +81,38 @@ private struct CustomAgentRow: View {
                 .frame(width: 160, height: Theme.Size.control)
                 .fieldSurface()
 
-            TextField("Command, e.g. aider --model sonnet", text: binding(\.command))
-                .textFieldStyle(.plain)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(Theme.Palette.text)
-                .padding(.horizontal, Theme.Spacing.normal)
-                .frame(height: Theme.Size.control)
-                .fieldSurface()
+            VStack(spacing: Theme.Spacing.tight) {
+                commandField("Command, e.g. aider --model sonnet", text: binding(\.command))
+                commandField("Resume command (optional), e.g. aider --restore-chat-history", text: resumeBinding)
+            }
 
             HoverIconButton(icon: Ph.trash.regular, help: "Remove \(agent.displayName)") {
                 catalog.remove(agent.id)
             }
         }
         .padding(.vertical, Theme.Spacing.tight)
+    }
+
+    private func commandField(_ prompt: String, text: Binding<String>) -> some View {
+        TextField(prompt, text: text)
+            .textFieldStyle(.plain)
+            .font(.system(size: 12, design: .monospaced))
+            .foregroundStyle(Theme.Palette.text)
+            .padding(.horizontal, Theme.Spacing.normal)
+            .frame(height: Theme.Size.control)
+            .fieldSurface()
+    }
+
+    /// Blank means none: the agent starts afresh instead.
+    private var resumeBinding: Binding<String> {
+        Binding(
+            get: { catalog.agent(agent.id)?.resumeCommand ?? "" },
+            set: { value in
+                guard var current = catalog.agent(agent.id) else { return }
+                current.resumeCommand = value.trimmingCharacters(in: .whitespaces).isEmpty ? nil : value
+                catalog.update(current)
+            }
+        )
     }
 
     private func binding(_ field: WritableKeyPath<Agent, String>) -> Binding<String> {

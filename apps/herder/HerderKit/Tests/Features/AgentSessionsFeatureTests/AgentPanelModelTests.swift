@@ -67,7 +67,8 @@ import Testing
 
         let spec = try #require(pty.specs.last)
         #expect(spec.executable == "/bin/sh")
-        #expect(spec.arguments == ["/bin/sh", "-l", "-i", "-c", "exec claude"])
+        let id = try #require(model.activeTab?.id).uuidString.lowercased()
+        #expect(spec.arguments == ["/bin/sh", "-l", "-i", "-c", "exec claude --session-id \(id)"])
         #expect(spec.workingDirectory == root)
         #expect(model.activeTab?.phase == .running)
     }
@@ -102,7 +103,8 @@ import Testing
         await model.startSession(pi)
         await model.startSession(codex)
 
-        #expect(pty.specs.map { $0.arguments.last } == ["exec codex", "exec pi", "exec codex"])
+        let commands = pty.specs.compactMap { $0.arguments.last?.split(separator: " ").prefix(2).joined(separator: " ") }
+        #expect(commands == ["exec codex", "exec pi", "exec codex"])
         #expect(model.tabs.map { model.title(of: $0) } == ["Codex", "Pi", "Codex 2"])
     }
 
@@ -173,9 +175,12 @@ import Testing
         try await eventually("the tab notices") { model.activeTab?.phase == .exited(1) }
         #expect(model.tabs.count == 1)
 
-        await model.reattach(try #require(model.activeTab))
+        let tab = try #require(model.activeTab)
+        await model.reattach(tab)
 
         #expect(pty.specs.count == 2)
+        // It has a conversation now, so starting it again picks that up.
+        #expect(pty.specs.last?.arguments.last == "exec claude --resume \(tab.id.uuidString.lowercased())")
         #expect(model.activeTab?.phase == .running)
     }
 
@@ -212,7 +217,7 @@ import Testing
         model.requestSession(in: web.id, agent: try #require(catalog.agent("pi")))
         await model.show(web)
 
-        #expect(pty.specs.last?.arguments.last == "exec pi")
+        #expect(pty.specs.last?.arguments.last?.hasPrefix("exec pi --session-id ") == true)
     }
 
     @Test func aRequestForAWorkspaceThatNeverCameStartsNothingInAnotherOne() async throws {
@@ -326,6 +331,86 @@ import Testing
         #expect(model.activeTab?.id == wanted.id)
         #expect(model.focusRequest > before)
         #expect(open.focused == wanted.id)
+    }
+
+    // MARK: Resuming
+
+    /// Starts sessions in `root` in one window and closes it, as a person
+    /// quitting does: the tabs are remembered, the processes end.
+    func closedWindow(starting agents: [String], selecting index: Int) async throws -> [UUID] {
+        let registry = makeRegistry()
+        let model = makeModel()
+        let workspace = try await workspace(root, in: registry)
+        await model.show(workspace)
+        for id in agents { await model.startSession(try #require(catalog.agent(id))) }
+        model.select(model.tabs[index])
+        let ids = model.tabs.map(\.id)
+        model.terminateAll()
+        await workspace.saveSnapshot()
+        return ids
+    }
+
+    @Test func reopeningResumesTheSessionInFrontAndPausesTheRest() async throws {
+        let ids = try await closedWindow(starting: ["claude-code", "codex"], selecting: 0)
+        let before = pty.specs.count
+
+        let model = makeModel()
+        await model.show(try await workspace(root, in: makeRegistry()))
+
+        #expect(model.tabs.map(\.id) == ids)
+        #expect(model.activeTab?.id == ids[0])
+        #expect(pty.specs.count == before + 1)
+        #expect(pty.specs.last?.arguments.last == "exec claude --resume \(ids[0].uuidString.lowercased())")
+        #expect(model.tabs[1].phase == .waiting)
+        #expect(open.sessions.map(\.state).last == .paused)
+    }
+
+    @Test func aPausedSessionResumesWhenItIsClicked() async throws {
+        _ = try await closedWindow(starting: ["claude-code", "codex"], selecting: 0)
+        let model = makeModel()
+        await model.show(try await workspace(root, in: makeRegistry()))
+
+        model.select(model.tabs[1])
+
+        try await eventually("codex resumes") { pty.specs.last?.arguments.last == "exec codex resume --last" }
+        #expect(model.tabs.map { model.title(of: $0) } == ["Claude Code", "Codex"])
+    }
+
+    @Test func aWorkspaceHeldButNotShownIsListedWithoutStartingAnything() async throws {
+        _ = try await closedWindow(starting: ["claude-code"], selecting: 0)
+        let before = pty.specs.count
+
+        let model = makeModel()
+        model.restore(try await workspace(root, in: makeRegistry()))
+
+        #expect(open.sessions(in: WorkspaceID(root)).map(\.state) == [.paused])
+        #expect(pty.specs.count == before)
+        withExtendedLifetime(model) {}
+    }
+
+    @Test func aClosedTabIsForgotten() async throws {
+        let registry = makeRegistry()
+        let model = makeModel()
+        let workspace = try await workspace(root, in: registry)
+        await model.show(workspace)
+        await model.startSession()
+        model.closeActiveTab()
+        await workspace.saveSnapshot()
+
+        let reopened = makeModel()
+        await reopened.show(try await self.workspace(root, in: makeRegistry()))
+
+        #expect(reopened.tabs.isEmpty)
+    }
+
+    @Test func numberingCarriesOnFromTheRememberedSessions() async throws {
+        _ = try await closedWindow(starting: ["codex", "codex"], selecting: 0)
+        let model = makeModel()
+        await model.show(try await workspace(root, in: makeRegistry()))
+
+        await model.startSession(try #require(catalog.agent("codex")))
+
+        #expect(model.tabs.map { model.title(of: $0) } == ["Codex", "Codex 2", "Codex 3"])
     }
 }
 

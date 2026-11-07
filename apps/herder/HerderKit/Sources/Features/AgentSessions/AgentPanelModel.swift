@@ -16,9 +16,11 @@ import TerminalUI
 /// run their own. Switching workspaces changes which are shown and nothing
 /// else; the others keep running.
 ///
-/// Nothing persists. A process cannot be brought back, and starting one for
-/// every worktree shown would cost a process each: a worktree with no sessions
-/// shows a button per agent instead.
+/// The open sessions persist, on the workspace (``AgentPanelUIState``). A
+/// process cannot be brought back, so a remembered tab comes back paused and
+/// is resumed, with the agent's resume command, when it is shown: the one in
+/// front at once, the others when they are clicked. A worktree with no
+/// sessions starts nothing by itself, and shows a button per agent instead.
 @Observable
 public final class AgentPanelModel {
     private let pty: any PTYClient
@@ -46,6 +48,14 @@ public final class AgentPanelModel {
     private var tabsByWorkspace: [WorkspaceID: [AgentTab]] = [:]
     private var activeByWorkspace: [WorkspaceID: UUID] = [:]
     private var openedByWorkspace: [WorkspaceID: [Agent.ID: Int]] = [:]
+
+    /// The workspaces whose sessions are here, to remember them on. Weak: the
+    /// registry owns a workspace, and a closed one should not live on here.
+    @ObservationIgnored private var workspaceObjects: [WorkspaceID: WeakWorkspace] = [:]
+
+    private struct WeakWorkspace {
+        weak var workspace: Workspace?
+    }
 
     /// A session to start once its worktree is the one showing, with the
     /// agent asked for, or `nil` for the one used last. See
@@ -100,12 +110,14 @@ public final class AgentPanelModel {
 
     // MARK: Showing a workspace
 
-    /// Points the panel at `workspace`'s sessions, and starts the one asked
-    /// for on the way there, if any.
+    /// Points the panel at `workspace`'s sessions, remembered ones included,
+    /// resumes the one in front, and starts the one asked for on the way there,
+    /// if any.
     public func show(_ workspace: Workspace?) async {
         self.workspace = workspace
         defer { publish() }
         guard let workspace else { return }
+        restore(workspace)
         if pendingFocus {
             pendingFocus = false
             focusRequest += 1
@@ -118,7 +130,38 @@ public final class AgentPanelModel {
         pending = nil
         if let requested, requested.workspace == workspace.id {
             await startSession(requested.agent)
+        } else {
+            await resumeActive()
         }
+    }
+
+    /// Brings back the sessions `workspace` had open, paused, unless this
+    /// window has them already. Called for every workspace the window holds,
+    /// so the sidebar lists them before they are shown.
+    public func restore(_ workspace: Workspace) {
+        let id = workspace.id
+        workspaceObjects[id] = WeakWorkspace(workspace: workspace)
+        guard tabsByWorkspace[id] == nil else { return }
+        let state = workspace.uiState(AgentPanelUIState.self)
+        guard !state.tabs.isEmpty else { return }
+        let tabs = state.tabs.map { AgentTab(id: $0.id, agent: $0.agent, number: $0.number, restored: true) }
+        for tab in tabs {
+            watch(tab, in: id)
+            openedByWorkspace[id, default: [:]][tab.agent.id] = max(
+                openedByWorkspace[id]?[tab.agent.id] ?? 0, tab.number
+            )
+        }
+        tabsByWorkspace[id] = tabs
+        activeByWorkspace[id] = state.active
+        startSampling()
+        publish()
+    }
+
+    /// Resumes the tab in front if it is one still waiting from before.
+    private func resumeActive() async {
+        guard let workspace, let tab = activeTab, tab.phase == .waiting else { return }
+        await attach(tab, in: workspace)
+        publish()
     }
 
     // MARK: Sessions
@@ -131,6 +174,7 @@ public final class AgentPanelModel {
         activeByWorkspace[workspace] = id
         if self.workspace?.id == workspace {
             focusRequest += 1
+            Task { await resumeActive() }
         } else {
             pendingFocus = true
         }
@@ -167,6 +211,7 @@ public final class AgentPanelModel {
         activeByWorkspace[id] = tab.id
         focusRequest += 1
         startSampling()
+        remember(id)
         publish()
         await attach(tab, in: workspace)
         publish()
@@ -178,7 +223,9 @@ public final class AgentPanelModel {
         guard let workspace, tabs.contains(where: { $0.id == tab.id }) else { return }
         activeByWorkspace[workspace.id] = tab.id
         focusRequest += 1
+        remember(workspace.id)
         publish()
+        if tab.phase == .waiting { Task { await resumeActive() } }
     }
 
     public func selectNextTab() { cycle(by: 1) }
@@ -211,7 +258,9 @@ public final class AgentPanelModel {
             activeByWorkspace[id] = tabs.isEmpty ? nil : tabs[min(index, tabs.count - 1)].id
         }
         if workspace?.id == id { focusRequest += 1 }
+        remember(id)
         publish()
+        if workspace?.id == id { Task { await resumeActive() } }
     }
 
     /// Starts the agent again in a tab that stopped.
@@ -228,8 +277,9 @@ public final class AgentPanelModel {
     /// where their terminal would find it. The command is the user's own, typed
     /// in Settings or one of the presets, and is run as they wrote it.
     private func attach(_ tab: AgentTab, in workspace: Workspace) async {
+        let line = tab.agent.commandLine(for: tab.id, resuming: tab.hasStarted)
         let spec = ShellLaunch.command(
-            "exec \(tab.agent.command)",
+            "exec \(line)",
             environment: environment,
             directory: workspace.id.url,
             size: PTYSize(columns: 100, rows: 30)
@@ -252,6 +302,22 @@ public final class AgentPanelModel {
         }
     }
 
+    // MARK: Remembering
+
+    /// Writes down the sessions open in `id`, and which is in front, on that
+    /// workspace. Only for a change the person made: closing the window ends
+    /// the processes but remembers the tabs, so they come back with it.
+    private func remember(_ id: WorkspaceID) {
+        guard let workspace = workspaceObjects[id]?.workspace else { return }
+        let state = workspace.uiState(AgentPanelUIState.self)
+        let tabs = (tabsByWorkspace[id] ?? []).map { AgentPanelUIState.Tab(id: $0.id, agent: $0.agent, number: $0.number) }
+        let active = activeByWorkspace[id]
+        guard state.tabs != tabs || state.active != active else { return }
+        state.tabs = tabs
+        state.active = active
+        workspace.scheduleSnapshotSave()
+    }
+
     // MARK: Letting go
 
     /// Ends every session for a workspace this window has stopped keeping.
@@ -260,6 +326,7 @@ public final class AgentPanelModel {
         tabsByWorkspace[id] = nil
         activeByWorkspace[id] = nil
         openedByWorkspace[id] = nil
+        workspaceObjects[id] = nil
         publish()
     }
 

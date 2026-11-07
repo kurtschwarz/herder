@@ -9,6 +9,9 @@ import Foundation
 /// whether it has exited.
 public struct AgentSessionSummary: Sendable, Equatable, Identifiable {
     public enum State: Sendable, Equatable {
+        /// Remembered from before, and not yet picked up again: it resumes
+        /// when its tab is shown.
+        case paused
         case starting
         /// Writing to its terminal, or reporting progress.
         case working

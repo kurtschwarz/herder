@@ -8,6 +8,8 @@ import TerminalUI
 @Observable
 final class AgentTab: Identifiable {
     enum Phase: Equatable {
+        /// Remembered from before, and not yet picked up again.
+        case waiting
         case starting
         case running
         /// The terminal UI went by itself, with this status.
@@ -16,7 +18,10 @@ final class AgentTab: Identifiable {
         case failed(String)
     }
 
-    let id = UUID()
+    /// Names the tab, and the agent's session too where the agent can be told
+    /// its id: see ``Agent/sessionToken``. Kept across launches, so a resumed
+    /// tab names the same session it started.
+    let id: UUID
 
     /// What runs in it, as it was when the tab was opened: editing the agent
     /// in Settings afterwards changes the next session, not this one.
@@ -27,7 +32,11 @@ final class AgentTab: Identifiable {
     /// nothing outside.
     let number: Int
 
-    private(set) var phase: Phase = .starting
+    private(set) var phase: Phase
+
+    /// Whether its agent has been started before, here or before a relaunch:
+    /// from then on, starting it again means resuming it.
+    private(set) var hasStarted: Bool
 
     /// What the terminal UI draws on. Replaced by each attach, so a view keyed
     /// on ``generation`` starts over with it.
@@ -55,9 +64,14 @@ final class AgentTab: Identifiable {
     @ObservationIgnored private var process: (any PTYSession)?
     @ObservationIgnored private var watching: Task<Void, Never>?
 
-    init(agent: Agent, number: Int) {
+    /// A tab for a new session, or, with `restored`, one remembered from
+    /// before, which waits to be shown before it resumes.
+    init(id: UUID = UUID(), agent: Agent, number: Int, restored: Bool = false) {
+        self.id = id
         self.agent = agent
         self.number = number
+        self.hasStarted = restored
+        self.phase = restored ? .waiting : .starting
     }
 
     deinit {
@@ -73,6 +87,7 @@ final class AgentTab: Identifiable {
             let session = try await pty.spawn(spec)
             process = session
             screen = TerminalScreen(session: session, size: spec.size)
+            hasStarted = true
             seenOutput = 0
             seenInput = 0
             seenBells = 0
@@ -128,6 +143,7 @@ final class AgentTab: Identifiable {
 
     var state: AgentSessionSummary.State {
         switch phase {
+        case .waiting: return .paused
         case .starting: return .starting
         case .failed: return .failed
         case .exited(let code): return .exited(code)

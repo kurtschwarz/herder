@@ -98,13 +98,14 @@ private struct AgentSessionRow: View {
         case .needsInput: Theme.Palette.warning
         case .exited(let code) where code != 0: Theme.Palette.danger
         case .failed: Theme.Palette.danger
-        case .starting, .idle, .exited: Theme.Palette.tertiaryText
+        case .paused, .starting, .idle, .exited: Theme.Palette.tertiaryText
         }
     }
 
     /// The second line: the agent, and what it seems to be up to.
     private var summary: String {
         switch session.state {
+        case .paused: "\(session.agentName) \u{00B7} Resumes when opened"
         case .starting: "\(session.agentName) \u{00B7} Starting"
         case .working: "\(session.agentName) \u{00B7} Working"
         case .needsInput(let detail): detail.map { "Needs input \u{00B7} \($0)" } ?? "Needs input"

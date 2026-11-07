@@ -129,7 +129,9 @@ final class WindowEnvironment {
     /// apiece and no subprocesses.
     func reopenHeldWorkspaces() async {
         for id in openWorkspaces where id != activeWorkspaceID {
-            await worktrees.open(id, holder: self)
+            // Their agent sessions come back paused, so the sidebar lists
+            // them; each resumes when its worktree is shown.
+            if let workspace = await worktrees.open(id, holder: self) { agentPanel.restore(workspace) }
         }
     }
 
