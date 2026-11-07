@@ -68,6 +68,8 @@ final class AgentTab: Identifiable {
     /// When it last wrote anything, or was opened.
     private(set) var lastActivity = Date()
 
+    /// Whether the last sample saw output of any kind, typed or not.
+    @ObservationIgnored private var wroteLastSample = false
     @ObservationIgnored private var seenOutput = 0
     @ObservationIgnored private var seenInput = 0
     @ObservationIgnored private var seenBells = 0
@@ -116,6 +118,7 @@ final class AgentTab: Identifiable {
             screen = TerminalScreen(session: session, size: spec.size)
             hasStarted = true
             if startedAt == nil { startedAt = Date() }
+            wroteLastSample = false
             seenOutput = 0
             seenInput = 0
             seenBells = 0
@@ -142,12 +145,13 @@ final class AgentTab: Identifiable {
 
     /// Looks at what the terminal did since the last look. Run about once a
     /// second: output in that time is work, unless it was the echo of typing.
-    /// Says whether it just went quiet after working, which is when a turn
-    /// has most likely ended.
+    /// Says whether it just went quiet after writing anything, which is when
+    /// a turn has most likely ended. Anything, not only work: a short reply
+    /// lands in the same sample as the Enter that asked for it, and reads as
+    /// the echo of typing.
     @discardableResult
     func sample(now: Date) -> Bool {
         guard let screen else { return false }
-        let wasWorking = isWorking
         let output = screen.outputCount
         let input = screen.inputCount
         let wrote = output != seenOutput
@@ -161,7 +165,9 @@ final class AgentTab: Identifiable {
         }
         let working = screen.isReportingProgress || (wrote && !typed)
         if isWorking != working { isWorking = working }
-        return wasWorking && !working
+        let wentQuiet = wroteLastSample && !wrote
+        wroteLastSample = wrote
+        return wentQuiet
     }
 
     /// A bell or a notification that nothing has been typed since.

@@ -498,6 +498,17 @@ import Testing
         try await eventually("it is looked up") { model.activeTab?.sessionID == "ses_live" }
     }
 
+    @Test func aReplyThatArrivesWithTheTypingStillTriggersTheLookup() async throws {
+        let (model, _, _) = try await shown()
+        await model.startSession(try #require(catalog.agent("opencode")))
+        answerLookup(with: ["ses_quick"])
+
+        // The Enter and the whole reply inside one sample, then quiet.
+        model.activeTab?.screen?.send(text: "hello\r")
+        pty.sessions[0].emit("Hi! How can I help?")
+        try await eventually("it is looked up") { model.activeTab?.sessionID == "ses_quick" }
+    }
+
     @Test func agentsThatTakeAnIdUpFrontAreNeverLookedUp() async throws {
         _ = try await closedWindow(starting: ["claude-code"], selecting: 0)
 
