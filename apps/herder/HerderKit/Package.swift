@@ -41,7 +41,12 @@ let package = Package(
         // The implementations of Core's service protocols: disk, git, the file
         // watcher, the sandbox, the clock, and the syntax engine. The only
         // module that links the FFI.
-        .target(name: "Services", dependencies: ["Core", "HerderSyntaxFFI"], swiftSettings: core),
+        .target(name: "Services", dependencies: ["Core", "HerderSyntaxFFI", "PTYSpawn"], swiftSettings: core),
+
+        // Starting a process on a terminal, in C because it has to fork and
+        // Swift cannot run safely between a fork and an exec. `Services` is
+        // the only module that imports it.
+        .target(name: "PTYSpawn"),
 
         // Fakes for every service protocol, `#if DEBUG` so a release build
         // links an empty module. Features depend on this for their previews.

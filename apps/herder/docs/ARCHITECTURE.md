@@ -45,7 +45,7 @@ AppFeature            composition root: windows, menus, builds real services
 
 1. **Features** may import `Core`, `DesignSystem`, component modules (`*UI`), and `TestSupport` (for previews). Nothing else from HerderKit.
 2. **Features never import other features.** Cross-feature coordination goes through `Workspace` in Core. Building blocks that several features need (for example the terminal emulator view) live in a component module such as `TerminalUI`.
-3. **Services** may import `Core` and `RustBridge`.
+3. **Services** may import `Core`, `RustBridge` and `PTYSpawn`.
 4. **Core** imports only `Foundation` and `Observation`. Never SwiftUI, AppKit, SwiftData, or RustBridge.
 5. **Only `AppFeature`** knows concrete service types. It constructs them in `AppEnvironment`.
 6. **SwiftData is not imported at all.** It is gone; state is JSON files behind `StateStore`. Reaching for a `@Model` is reintroducing a dependency the app deliberately dropped.
@@ -99,6 +99,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   │   ├── Search/
 │   │   │   │   │   ├── Persistence/
 │   │   │   │   │   └── Workspace/       # WorkspaceServicesFactory implementation
+│   │   │   │   ├── PTYSpawn/            # C: starts a process on a PTY. Imported by Services only
 │   │   │   │   ├── DesignSystem/        # Liquid Glass components, tokens, icons
 │   │   │   │   ├── TestSupport/         # fakes for every service protocol (#if DEBUG)
 │   │   │   │   ├── Components/
@@ -186,7 +187,10 @@ let package = Package(
         .target(name: "Core", swiftSettings: core),
 
         // Protocol implementations. The only module that touches the FFI.
-        .target(name: "Services", dependencies: ["Core", "HerderSyntaxFFI"], swiftSettings: core),
+        .target(name: "Services", dependencies: ["Core", "HerderSyntaxFFI", "PTYSpawn"], swiftSettings: core),
+
+        // C, because starting a process on a PTY takes a fork.
+        .target(name: "PTYSpawn"),
 
         // The Rust highlighter. A build artifact, not a checked-in one: `just
         // syntax` in apps/herder produces it, and a fresh clone has to run
@@ -483,6 +487,7 @@ shows it.
 ## Agents and terminal
 
 - PTY management lives in `Services/Process/`. The terminal emulator view lives in `Components/TerminalUI/`.
+- **Starting a process on a PTY is C, in the `PTYSpawn` target**, and nothing else is. The child needs the terminal as its *controlling* terminal, or a resize sends no SIGWINCH and closing the terminal hangs up nobody. macOS's `posix_spawn` cannot do that: it opens files before it starts the new session. That takes a `fork`, and Swift cannot run safely between a fork and an exec. `herder_pty_spawn` forks, calls `setsid` and `TIOCSCTTY`, then execs in place with `POSIX_SPAWN_SETEXEC`. Only `Services` imports it.
 - `TerminalFeature` and `AgentSessionsFeature` both build on `TerminalUI`.
 - **An agent session is an agent's own terminal UI in a PTY**: the agent's command, run as `exec <command>` through the user's login shell (`ShellLaunch.command`) in a worktree's root. Herder does not talk to any agent: no server client, and no session list beyond what this window has open. That is what lets Claude Code, Codex, opencode and Pi sit side by side, and an agent Herder has never heard of be added as a name and a command.
 - The agents are an `Agent` (id, name, command, optional resume command and session lookup) each, in the app-wide `AgentCatalog` (`Core/Agents`). The presets are code (`Agent.presets`), so a new one reaches everybody; the user's own and the one used last are an `AgentsSnapshot` under the `"agents"` key, edited in the Agents pane in Settings. A session started without naming an agent uses the one used last.

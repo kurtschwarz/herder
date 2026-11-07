@@ -79,6 +79,36 @@ import Testing
         #expect(await everything(from: session).contains("30 100"))
     }
 
+    /// `/dev/tty` opens only for a process with a controlling terminal. zsh as
+    /// well as `sh`, because `sh` takes the terminal for itself when it starts
+    /// and so passes either way.
+    @Test(arguments: ["/bin/sh", "/bin/zsh"])
+    func theTerminalIsItsControllingTerminal(shell: String) async throws {
+        let session = try await spawn(["-c", "exec 3</dev/tty && echo controlling"], executable: shell)
+        #expect(await everything(from: session).contains("controlling"))
+    }
+
+    /// What tells a full-screen program to redraw: without it, a resize
+    /// reaches the terminal and the program never hears of it.
+    @Test(arguments: ["/bin/sh", "/bin/zsh"])
+    func aResizeSignalsTheProcess(shell: String) async throws {
+        let session = try await spawn(
+            ["-c", "trap 'stty size; exit' WINCH; echo ready; while :; do sleep 0.05; done"],
+            executable: shell
+        )
+        defer { session.terminate() }
+        var output = ""
+        var resized = false
+        for await chunk in session.output {
+            output += String(decoding: chunk, as: UTF8.self)
+            if !resized, output.contains("ready") {
+                resized = true
+                await session.resize(PTYSize(columns: 100, rows: 30))
+            }
+        }
+        #expect(output.contains("30 100"))
+    }
+
     @Test func reportsAnExitCode() async throws {
         let session = try await spawn(["-c", "exit 7"])
         #expect(await session.waitForExit() == 7)

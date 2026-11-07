@@ -44,6 +44,11 @@ check "Rust module imported outside Services" \
 check "GhosttyVt imported outside TerminalUI" \
   -e "^import $GHOSTTY_MODULE\$" --type swift --glob '!**/Components/TerminalUI/**' "$SRC" "$APP_DIR"
 
+# Starting a process on a terminal is a service like any other: features get a
+# `PTYClient`, never the fork underneath it.
+check "PTYSpawn imported outside Services" \
+  -e '^import PTYSpawn$' --type swift --glob '!**/Services/**' "$SRC" "$APP_DIR"
+
 # Phase 7 removed SwiftData altogether, so this is no longer "only under
 # Services/Persistence" — it is "not at all". State is JSON files behind
 # `StateStore`; anything reaching for a @Model is reintroducing a dependency
