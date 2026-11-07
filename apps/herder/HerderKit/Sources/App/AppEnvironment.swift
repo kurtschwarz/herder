@@ -40,6 +40,10 @@ public final class AppEnvironment {
     /// ``StateStore``.
     public let repositories: RepositoryStore
 
+    /// The agents a session can be started with, and which was used last.
+    /// App-wide: Settings edits it and every window starts sessions from it.
+    public let agents: AgentCatalog
+
     /// Where windows' snapshots are kept, and which exist.
     let windows: WindowStore
 
@@ -135,6 +139,7 @@ public final class AppEnvironment {
         )
         self.repositories = repositories
         self.windows = WindowStore(snapshots: snapshots, state: persistence.state)
+        self.agents = AgentCatalog(state: persistence.state)
         self.worktrees = WorkspaceRegistry(
             files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
         )
@@ -160,7 +165,7 @@ public final class AppEnvironment {
             fileTree: FileTreeModel(store: worktrees),
             editor: EditorModel(store: worktrees, files: files, highlighter: highlighter),
             terminal: TerminalModel(pty: pty, clock: clock),
-            agentPanel: AgentPanelModel(pty: pty),
+            agentPanel: AgentPanelModel(pty: pty, catalog: agents),
             worktrees: worktrees,
             windows: windows,
             restoring: snapshot
@@ -257,6 +262,7 @@ public final class AppEnvironment {
         // simply gets the colour a moment later.
         Task.detached { await TreeSitterHighlighter.warmUp() }
 
+        await agents.load()
         await repositories.load()
     }
 

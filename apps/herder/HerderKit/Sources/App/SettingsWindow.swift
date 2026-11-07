@@ -8,10 +8,14 @@ public struct SettingsWindow: View {
     /// What the scene is declared under and what ⌘, opens.
     public static let id = "settings"
 
-    public init() {}
+    private let environment: AppEnvironment
+
+    public init(environment: AppEnvironment) {
+        self.environment = environment
+    }
 
     public var body: some View {
-        SettingsView()
+        SettingsView(agents: environment.agents)
             .background { WindowGlass() }
             // No close callbacks: nothing in here can be lost by closing it.
             .background(WindowChrome())
@@ -28,6 +32,6 @@ public struct SettingsWindow: View {
 
 #if DEBUG
 #Preview {
-    SettingsWindow()
+    SettingsWindow(environment: .preview)
 }
 #endif

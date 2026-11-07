@@ -12,6 +12,10 @@ struct WorktreeRow: View {
 
     @Environment(\.startAgentSession) private var startAgentSession
 
+    /// The agents a session can be started with. Absent outside a window,
+    /// which is what lets the previews render without one.
+    @Environment(AgentCatalog.self) private var catalog: AgentCatalog?
+
     var body: some View {
         HStack(spacing: 0) {
             // This row's stretch of the guide line, sitting under the
@@ -51,13 +55,15 @@ struct WorktreeRow: View {
 
             Spacer(minLength: 0)
 
-            Button { startAgentSession(WorkspaceID(worktree.path)) } label: {
-                PhIcon(Ph.sparkle.regular, size: 12)
+            if let catalog {
+                AgentStartMenu(
+                    catalog: catalog,
+                    start: { startAgentSession(WorkspaceID(worktree.path), agent: $0) }
+                ) {
+                    HoverIconLabel(icon: Ph.sparkle.regular, iconSize: 12, side: 20, radius: 6)
+                }
+                .opacity(isHovering ? 1 : 0)
             }
-            .buttonStyle(.icon(size: 20))
-            .pointerStyle(.link)
-            .opacity(isHovering ? 1 : 0)
-            .help("Start an agent session")
         }
         .lineLimit(1)
         .truncationMode(.tail)

@@ -43,7 +43,7 @@ struct HerderApp: App {
 
         // One of it, opened with ⌘, and not brought back on relaunch.
         Window("Settings", id: SettingsWindow.id) {
-            SettingsWindow()
+            SettingsWindow(environment: environment)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)

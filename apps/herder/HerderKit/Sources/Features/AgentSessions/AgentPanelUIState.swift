@@ -4,9 +4,10 @@ import Foundation
 /// Whether the agent panel is open for one workspace.
 ///
 /// All that is remembered: an agent's terminal UI is a process and cannot be
-/// brought back, so an open panel comes back with one fresh session, and
-/// nothing about the tabs is kept. What opencode itself keeps, it keeps: a
-/// session is resumed from inside the terminal UI.
+/// brought back, so an open panel comes back with one fresh session of the
+/// agent used last, and nothing about the tabs is kept. What an agent keeps of
+/// its own sessions, it keeps: an older one is resumed from inside its
+/// terminal UI.
 ///
 /// The panel's width is not here. That is a choice about the window's layout,
 /// so it is the window's, with the other pane widths.

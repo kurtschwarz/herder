@@ -9,6 +9,11 @@ public struct NewSessionOverlay: View {
     private let model: RepositoriesModel
 
     @Environment(\.startAgentSession) private var startAgentSession
+    @Environment(AgentCatalog.self) private var catalog: AgentCatalog?
+
+    /// The agent the session starts with. Chosen afresh each time the modal
+    /// opens, from the one used last.
+    @State private var agentID: Agent.ID?
 
     public init(model: RepositoriesModel) {
         self.model = model
@@ -25,13 +30,19 @@ public struct NewSessionOverlay: View {
 
                 NewSessionCard(
                     model: session,
+                    agents: catalog?.agents.filter(\.isRunnable) ?? [],
+                    agentID: $agentID,
                     cancel: { model.cancelNewSession() },
                     submit: {
+                        let agent = agentID.flatMap { catalog?.agent($0) }
                         Task {
-                            if let worktree = await model.submitNewSession() { startAgentSession(worktree) }
+                            if let worktree = await model.submitNewSession() {
+                                startAgentSession(worktree, agent: agent)
+                            }
                         }
                     }
                 )
+                .onAppear { agentID = catalog?.lastUsed.id }
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
         }
@@ -41,6 +52,8 @@ public struct NewSessionOverlay: View {
 
 private struct NewSessionCard: View {
     let model: NewSessionModel
+    let agents: [Agent]
+    @Binding var agentID: Agent.ID?
     let cancel: () -> Void
     let submit: () -> Void
 
@@ -57,6 +70,22 @@ private struct NewSessionCard: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
                 NewWorktreeCard(model: model)
                 existingWorktrees
+            }
+
+            if !agents.isEmpty {
+                HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
+                    Text("Agent")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                    Spacer(minLength: 0)
+                    Picker("Agent", selection: $agentID) {
+                        ForEach(agents) { agent in
+                            Text(agent.displayName).tag(Optional(agent.id))
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
             }
 
             if let failure = model.failure {

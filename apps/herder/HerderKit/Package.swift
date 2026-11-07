@@ -123,7 +123,7 @@ let package = Package(
 
         .target(
             name: "SettingsFeature",
-            dependencies: ["DesignSystem", icons],
+            dependencies: ["Core", "DesignSystem", "TestSupport", icons],
             path: "Sources/Features/Settings",
             swiftSettings: ui
         ),

@@ -6,8 +6,9 @@ import TerminalUI
 /// The agent panel of one window: the sessions it has running for each
 /// workspace, and whether the panel is showing.
 ///
-/// A session is opencode's own terminal UI, in a terminal of its own, started
-/// in the worktree's root. Nothing here talks to opencode: it is a program in a
+/// A session is an agent's own terminal UI — Claude Code, Codex, opencode, Pi,
+/// or one the user added — in a terminal of its own, started in the
+/// worktree's root. Nothing here talks to any of them: each is a program in a
 /// terminal, as a shell is.
 ///
 /// Per window and per workspace, like the terminal panel's tabs: a terminal
@@ -20,22 +21,22 @@ import TerminalUI
 /// open starts one.
 @Observable
 public final class AgentPanelModel {
-    /// What starts a session. `--standalone` so that it is a terminal UI on its
-    /// own private server rather than a client of the background service.
-    static let command = "exec opencode --standalone"
-
     private let pty: any PTYClient
     private let environment: [String: String]
+
+    /// The agents a session can be started with.
+    public let catalog: AgentCatalog
 
     public private(set) var workspace: Workspace?
 
     private var tabsByWorkspace: [WorkspaceID: [AgentTab]] = [:]
     private var activeByWorkspace: [WorkspaceID: UUID] = [:]
-    private var openedByWorkspace: [WorkspaceID: Int] = [:]
+    private var openedByWorkspace: [WorkspaceID: [Agent.ID: Int]] = [:]
 
-    /// A worktree to start a session in once it is the one showing. See
-    /// ``requestSession(in:)``.
-    private var pending: WorkspaceID?
+    /// A session to start once its worktree is the one showing, with the
+    /// agent asked for, or `nil` for the one used last. See
+    /// ``requestSession(in:agent:)``.
+    private var pending: (workspace: WorkspaceID, agent: Agent?)?
 
     /// The panel is showing for the workspace being shown.
     public private(set) var isOpen = false
@@ -45,9 +46,11 @@ public final class AgentPanelModel {
 
     public init(
         pty: any PTYClient,
+        catalog: AgentCatalog,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         self.pty = pty
+        self.catalog = catalog
         self.environment = environment
     }
 
@@ -68,8 +71,10 @@ public final class AgentPanelModel {
 
     public var canSelectOtherTab: Bool { isOpen && tabs.count > 1 }
 
+    /// The agent's name, and which of its sessions this is once there is more
+    /// than one.
     func title(of tab: AgentTab) -> String {
-        "Session \(tab.number)"
+        tab.number > 1 ? "\(tab.agent.displayName) \(tab.number)" : tab.agent.displayName
     }
 
     // MARK: Showing a workspace
@@ -89,8 +94,8 @@ public final class AgentPanelModel {
         // session in some other one later.
         let requested = pending
         pending = nil
-        if requested == workspace.id {
-            await startSession()
+        if let requested, requested.workspace == workspace.id {
+            await startSession(requested.agent)
         } else if isOpen, tabs.isEmpty {
             await startSession()
         }
@@ -124,27 +129,31 @@ public final class AgentPanelModel {
 
     // MARK: Sessions
 
-    /// Asks for a new session in `id`. If that is the workspace showing, it
-    /// starts now; otherwise when the window gets there, which it is already
-    /// on its way to. See ``show(_:)``.
-    public func requestSession(in id: WorkspaceID) {
+    /// Asks for a new session in `id`, with `agent` or the one used last. If
+    /// that is the workspace showing, it starts now; otherwise when the window
+    /// gets there, which it is already on its way to. See ``show(_:)``.
+    public func requestSession(in id: WorkspaceID, agent: Agent? = nil) {
         if workspace?.id == id {
-            Task { await startSession() }
+            Task { await startSession(agent) }
         } else {
-            pending = id
+            pending = (id, agent)
         }
     }
 
-    /// Starts opencode in the root of the workspace showing, whichever tab is
-    /// in front: a new session is a fresh start, not a copy of the one beside
-    /// it.
-    public func startSession() async {
+    /// Starts `agent`, or the one used last, in the root of the workspace
+    /// showing, whichever tab is in front: a new session is a fresh start, not
+    /// a copy of the one beside it.
+    public func startSession(_ agent: Agent? = nil) async {
         guard let workspace else { return }
-        let id = workspace.id
-        let number = (openedByWorkspace[id] ?? 0) + 1
-        openedByWorkspace[id] = number
+        let agent = agent ?? catalog.lastUsed
+        guard agent.isRunnable else { return }
+        catalog.markUsed(agent)
 
-        let tab = AgentTab(number: number)
+        let id = workspace.id
+        let number = (openedByWorkspace[id]?[agent.id] ?? 0) + 1
+        openedByWorkspace[id, default: [:]][agent.id] = number
+
+        let tab = AgentTab(agent: agent, number: number)
         watch(tab, in: id)
         tabsByWorkspace[id, default: []].append(tab)
         activeByWorkspace[id] = tab.id
@@ -194,7 +203,7 @@ public final class AgentPanelModel {
         if workspace?.id == id { focusRequest += 1 }
     }
 
-    /// Starts opencode again in a tab that stopped.
+    /// Starts the agent again in a tab that stopped.
     func reattach(_ tab: AgentTab) async {
         guard let workspace else { return }
         await attach(tab, in: workspace)
@@ -203,11 +212,12 @@ public final class AgentPanelModel {
 
     // MARK: Terminal UIs
 
-    /// opencode through the user's own shell, so that it is found where their
-    /// terminal would find it.
+    /// The agent's command through the user's own shell, so that it is found
+    /// where their terminal would find it. The command is the user's own, typed
+    /// in Settings or one of the presets, and is run as they wrote it.
     private func attach(_ tab: AgentTab, in workspace: Workspace) async {
         let spec = ShellLaunch.command(
-            Self.command,
+            "exec \(tab.agent.command)",
             environment: environment,
             directory: workspace.id.url,
             size: PTYSize(columns: 100, rows: 30)

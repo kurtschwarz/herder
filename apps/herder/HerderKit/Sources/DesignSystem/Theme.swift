@@ -274,6 +274,11 @@ public enum Theme {
             Color(red: 110 / 255, green: 115 / 255, blue: 124 / 255)
         )
 
+        public static let violetTile = tile(
+            Color(red: 190 / 255, green: 160 / 255, blue: 250 / 255),
+            Color(red: 124 / 255, green: 88 / 255, blue: 214 / 255)
+        )
+
         private static func tile(_ top: Color, _ bottom: Color) -> LinearGradient {
             LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom)
         }

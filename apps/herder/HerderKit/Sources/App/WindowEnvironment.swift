@@ -150,14 +150,15 @@ final class WindowEnvironment {
         await fileTree.setRoot(id?.url)
     }
 
-    /// Starts an agent session in a worktree, switching to it first if this
+    /// Starts an agent session in a worktree, with `agent` or the one used
+    /// last, switching to it first if this
     /// window is showing another.
     ///
     /// The panel is told before the switch, and holds the request until the
     /// switch gets there: the worktree opens asynchronously, and the panel
     /// can only start a session in the workspace it is showing.
-    func startAgentSession(in id: WorkspaceID) {
-        agentPanel.requestSession(in: id)
+    func startAgentSession(in id: WorkspaceID, agent: Agent?) {
+        agentPanel.requestSession(in: id, agent: agent)
         activate(id)
     }
 

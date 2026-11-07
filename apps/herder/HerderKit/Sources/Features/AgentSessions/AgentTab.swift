@@ -3,7 +3,7 @@ import Foundation
 import Observation
 import TerminalUI
 
-/// One agent session's tab: opencode's terminal UI, running in a terminal of
+/// One agent session's tab: an agent's terminal UI, running in a terminal of
 /// its own.
 @Observable
 final class AgentTab: Identifiable {
@@ -18,8 +18,13 @@ final class AgentTab: Identifiable {
 
     let id = UUID()
 
-    /// What the tab is called: the order it was opened in, in its workspace.
-    /// The terminal UI names its own sessions, and says nothing outside.
+    /// What runs in it, as it was when the tab was opened: editing the agent
+    /// in Settings afterwards changes the next session, not this one.
+    let agent: Agent
+
+    /// Which of this agent's sessions in its workspace it is, in the order
+    /// they were opened. The terminal UI names its own sessions, and says
+    /// nothing outside.
     let number: Int
 
     private(set) var phase: Phase = .starting
@@ -35,7 +40,8 @@ final class AgentTab: Identifiable {
     @ObservationIgnored private var process: (any PTYSession)?
     @ObservationIgnored private var watching: Task<Void, Never>?
 
-    init(number: Int) {
+    init(agent: Agent, number: Int) {
+        self.agent = agent
         self.number = number
     }
 

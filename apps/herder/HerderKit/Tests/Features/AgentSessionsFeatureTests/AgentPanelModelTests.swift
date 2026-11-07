@@ -14,15 +14,20 @@ import Testing
     let clock = VirtualClockClient()
     let state = InMemoryStateStore()
     let pty = StubPTYClient()
+    let catalog: AgentCatalog
     let root = URL(filePath: "/code/api")
     let other = URL(filePath: "/code/web")
+
+    init() {
+        catalog = AgentCatalog(state: InMemoryStateStore())
+    }
 
     func makeRegistry() -> WorkspaceRegistry {
         WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
     }
 
     func makeModel() -> AgentPanelModel {
-        AgentPanelModel(pty: pty, environment: ["SHELL": "/bin/sh"])
+        AgentPanelModel(pty: pty, catalog: catalog, environment: ["SHELL": "/bin/sh"])
     }
 
     func workspace(_ url: URL, in registry: WorkspaceRegistry) async throws -> Workspace {
@@ -49,12 +54,12 @@ import Testing
 
     // MARK: Starting
 
-    @Test func aSessionIsOpencodeOnItsOwnServerInTheWorktreeRoot() async throws {
+    @Test func aSessionIsTheAgentsCommandInTheWorktreeRoot() async throws {
         let (model, _, _) = try await shown(sessions: 1)
 
         let spec = try #require(pty.specs.last)
         #expect(spec.executable == "/bin/sh")
-        #expect(spec.arguments == ["/bin/sh", "-l", "-i", "-c", "exec opencode --standalone"])
+        #expect(spec.arguments == ["/bin/sh", "-l", "-i", "-c", "exec claude"])
         #expect(spec.workingDirectory == root)
         #expect(model.isOpen)
         #expect(model.activeTab?.phase == .running)
@@ -64,7 +69,7 @@ import Testing
         let (model, _, _) = try await shown(sessions: 2)
 
         #expect(pty.specs.count == 2)
-        #expect(model.tabs.map { model.title(of: $0) } == ["Session 1", "Session 2"])
+        #expect(model.tabs.map { model.title(of: $0) } == ["Claude Code", "Claude Code 2"])
         #expect(model.activeTab?.number == 2)
     }
 
@@ -79,6 +84,51 @@ import Testing
             return
         }
         #expect(reason.contains("/bin/sh"))
+    }
+
+    @Test func eachAgentRunsItsOwnCommandAndIsNumberedApart() async throws {
+        let (model, _, _) = try await shown()
+        let codex = try #require(catalog.agent("codex"))
+        let pi = try #require(catalog.agent("pi"))
+
+        await model.startSession(codex)
+        await model.startSession(pi)
+        await model.startSession(codex)
+
+        #expect(pty.specs.map { $0.arguments.last } == ["exec codex", "exec pi", "exec codex"])
+        #expect(model.tabs.map { model.title(of: $0) } == ["Codex", "Pi", "Codex 2"])
+    }
+
+    @Test func theAgentUsedLastIsTheOneStartedWhenNobodySays() async throws {
+        let (model, _, _) = try await shown()
+        await model.startSession(try #require(catalog.agent("opencode")))
+
+        await model.startSession()
+
+        #expect(catalog.lastUsed.id == "opencode")
+        #expect(pty.specs.last?.arguments.last == "exec opencode")
+    }
+
+    @Test func aCustomAgentRunsAsTyped() async throws {
+        let (model, _, _) = try await shown()
+        var aider = catalog.add()
+        aider.name = "Aider"
+        aider.command = "aider --model sonnet"
+        catalog.update(aider)
+
+        await model.startSession(aider)
+
+        #expect(pty.specs.last?.arguments.last == "exec aider --model sonnet")
+        #expect(model.activeTab.map { model.title(of: $0) } == "Aider")
+    }
+
+    @Test func anAgentWithNoCommandStartsNothing() async throws {
+        let (model, _, _) = try await shown()
+
+        await model.startSession(catalog.add())
+
+        #expect(pty.specs.isEmpty)
+        #expect(model.tabs.isEmpty)
     }
 
     // MARK: Closing
@@ -148,6 +198,16 @@ import Testing
         #expect(model.tabs.count == 1)
         #expect(model.isOpen)
         #expect(pty.specs.last?.workingDirectory == other)
+    }
+
+    @Test func theAgentAskedForElsewhereIsTheOneThatStarts() async throws {
+        let (model, _, registry) = try await shown()
+        let web = try await workspace(other, in: registry)
+
+        model.requestSession(in: web.id, agent: try #require(catalog.agent("pi")))
+        await model.show(web)
+
+        #expect(pty.specs.last?.arguments.last == "exec pi")
     }
 
     @Test func aRequestForAWorkspaceThatNeverCameStartsNothingInAnotherOne() async throws {

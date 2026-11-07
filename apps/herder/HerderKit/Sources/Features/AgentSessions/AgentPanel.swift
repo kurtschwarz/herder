@@ -52,8 +52,8 @@ private struct AgentTabContent: View {
                 }
                 Banner(
                     message: code == 127
-                        ? "opencode isn\u{2019}t installed. Install it from opencode.ai, then reattach."
-                        : "opencode exited with code \(code).",
+                        ? "\u{201C}\(tab.agent.program)\u{201D} isn\u{2019}t installed, or isn\u{2019}t on your PATH."
+                        : "\(tab.agent.displayName) exited with code \(code).",
                     action: "Reattach"
                 ) { Task { await model.reattach(tab) } }
             }
@@ -83,19 +83,21 @@ private struct Banner: View {
     }
 }
 
-/// What the panel shows with no session open.
+/// What the panel shows with no session open: a button for each agent.
 private struct AgentEmptyState: View {
     let model: AgentPanelModel
 
     var body: some View {
         VStack(spacing: Theme.Spacing.normal) {
-            Text("No session open")
+            Text("Start a session")
                 .font(.callout)
                 .foregroundStyle(Theme.Palette.secondaryText)
-            Button("Start a session") { Task { await model.startSession() } }
-                .buttonStyle(.secondary)
-                .disabled(model.workspace == nil)
+            ForEach(model.catalog.agents.filter(\.isRunnable)) { agent in
+                Button(agent.displayName) { Task { await model.startSession(agent) } }
+                    .buttonStyle(.secondary)
+            }
         }
+        .disabled(model.workspace == nil)
         .padding(Theme.Spacing.loose)
     }
 }

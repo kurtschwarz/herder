@@ -197,7 +197,7 @@ private struct WindowView: View {
         .environment(window.activeWorkspace)
         // And they ask for a different one, or for a session in one, through
         // here, rather than reaching for a window they cannot see.
-        .modifier(WindowActions(window: window))
+        .modifier(WindowActions(window: window, agents: environment.agents))
         // Switching workspaces is this, and only this: the id changed, so open
         // what it names. Nothing else is torn down.
         .task(id: window.activeWorkspaceID) { await window.showActiveWorkspace() }
@@ -271,11 +271,14 @@ private struct WindowView: View {
 /// ``WindowView`` for the same reason as ``TabCommandValues``.
 private struct WindowActions: ViewModifier {
     let window: WindowEnvironment
+    let agents: AgentCatalog
 
     func body(content: Content) -> some View {
         content
             .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
-            .environment(\.startAgentSession, StartAgentSessionAction { window.startAgentSession(in: $0) })
+            .environment(\.startAgentSession, StartAgentSessionAction { window.startAgentSession(in: $0, agent: $1) })
+            // What the sidebar offers when it starts a session.
+            .environment(agents)
     }
 }
 

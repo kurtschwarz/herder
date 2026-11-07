@@ -1,5 +1,7 @@
+import Core
 import DesignSystem
 import SwiftUI
+import TestSupport
 
 /// The settings window's content: a sidebar of panes beside the one chosen.
 ///
@@ -8,7 +10,11 @@ import SwiftUI
 public struct SettingsView: View {
     @State private var selection: SettingsPane = .general
 
-    public init() {}
+    private let agents: AgentCatalog
+
+    public init(agents: AgentCatalog) {
+        self.agents = agents
+    }
 
     public var body: some View {
         HStack(spacing: 0) {
@@ -28,13 +34,14 @@ public struct SettingsView: View {
     private var detail: some View {
         switch selection {
         case .general: GeneralSettings()
+        case .agents: AgentsSettings(catalog: agents)
         }
     }
 }
 
 #if DEBUG
 #Preview {
-    SettingsView()
+    SettingsView(agents: AgentCatalog(state: InMemoryStateStore()))
         .frame(width: Theme.Size.settingsWindow.width, height: Theme.Size.settingsWindow.height)
         .background { WindowGlass() }
         .preferredColorScheme(.dark)

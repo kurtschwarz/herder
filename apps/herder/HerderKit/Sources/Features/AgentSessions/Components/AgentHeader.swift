@@ -27,8 +27,8 @@ struct AgentHeader: View {
             .scrollIndicators(.hidden)
             .fixedSize(horizontal: false, vertical: true)
 
-            HoverIconButton(icon: Ph.plus.regular, help: "New Session") {
-                Task { await model.startSession() }
+            AgentStartMenu(catalog: model.catalog, start: { agent in Task { await model.startSession(agent) } }) {
+                HoverIconLabel(icon: Ph.plus.regular)
             }
             .disabled(model.workspace == nil)
 
