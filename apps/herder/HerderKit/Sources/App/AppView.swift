@@ -165,7 +165,6 @@ private struct WindowView: View {
 
                 StatusBar {
                     TerminalToggle(model: window.terminal)
-                    AgentPanelToggle(model: window.agentPanel)
                     if let checkout = window.activeWorkspace?.checkout {
                         CheckoutLabel(checkout)
                     }
