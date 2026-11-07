@@ -1,3 +1,4 @@
+import AgentSessionsFeature
 import Core
 import EditorFeature
 import FileTreeFeature
@@ -159,6 +160,7 @@ public final class AppEnvironment {
             fileTree: FileTreeModel(store: worktrees),
             editor: EditorModel(store: worktrees, files: files, highlighter: highlighter),
             terminal: TerminalModel(pty: pty, clock: clock),
+            agentPanel: AgentPanelModel(pty: pty),
             worktrees: worktrees,
             windows: windows,
             restoring: snapshot

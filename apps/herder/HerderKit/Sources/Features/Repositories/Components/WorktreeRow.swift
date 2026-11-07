@@ -10,6 +10,8 @@ struct WorktreeRow: View {
 
     @State private var isHovering = false
 
+    @Environment(\.startAgentSession) private var startAgentSession
+
     var body: some View {
         HStack(spacing: 0) {
             // This row's stretch of the guide line, sitting under the
@@ -48,6 +50,14 @@ struct WorktreeRow: View {
             }
 
             Spacer(minLength: 0)
+
+            Button { startAgentSession(WorkspaceID(worktree.path)) } label: {
+                PhIcon(Ph.sparkle.regular, size: 12)
+            }
+            .buttonStyle(.icon(size: 20))
+            .pointerStyle(.link)
+            .opacity(isHovering ? 1 : 0)
+            .help("Start an agent session")
         }
         .lineLimit(1)
         .truncationMode(.tail)

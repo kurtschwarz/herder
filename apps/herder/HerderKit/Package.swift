@@ -115,6 +115,13 @@ let package = Package(
         ),
 
         .target(
+            name: "AgentSessionsFeature",
+            dependencies: ["Core", "DesignSystem", "TestSupport", "TerminalUI", icons],
+            path: "Sources/Features/AgentSessions",
+            swiftSettings: ui
+        ),
+
+        .target(
             name: "SettingsFeature",
             dependencies: ["DesignSystem", icons],
             path: "Sources/Features/Settings",
@@ -130,7 +137,7 @@ let package = Package(
             dependencies: [
                 "Core", "Services", "DesignSystem", "TestSupport",
                 "RepositoriesFeature", "FileTreeFeature", "EditorFeature", "TerminalFeature",
-                "SettingsFeature",
+                "AgentSessionsFeature", "SettingsFeature",
             ],
             path: "Sources/App",
             swiftSettings: ui
@@ -171,6 +178,12 @@ let package = Package(
             name: "TerminalFeatureTests",
             dependencies: ["TerminalFeature", "Core", "TestSupport"],
             path: "Tests/Features/TerminalFeatureTests",
+            swiftSettings: ui
+        ),
+        .testTarget(
+            name: "AgentSessionsFeatureTests",
+            dependencies: ["AgentSessionsFeature", "Core", "TestSupport"],
+            path: "Tests/Features/AgentSessionsFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(

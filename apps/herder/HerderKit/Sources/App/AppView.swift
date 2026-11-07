@@ -1,3 +1,4 @@
+import AgentSessionsFeature
 import Core
 import DesignSystem
 import EditorFeature
@@ -29,6 +30,12 @@ public struct AppView: View {
         _environment = State(initialValue: environment)
     }
 
+    /// What the window needs beyond its usual minimum while the agent panel is
+    /// open: the panel at its narrowest, and the handle beside it.
+    private var agentPanelAllowance: CGFloat {
+        window?.agentPanel.isOpen == true ? Theme.Size.minSidebarWidth + Theme.Spacing.paneGap : 0
+    }
+
     public var body: some View {
         Group {
             if let window {
@@ -38,7 +45,7 @@ public struct AppView: View {
         // Above what the panes need (two minimum panes, the editor's floor, the
         // padding and the gaps): this is the smallest window worth showing, not
         // the smallest the layout survives.
-        .frame(minWidth: 960, minHeight: 460)
+        .frame(minWidth: 960 + agentPanelAllowance, minHeight: 460)
         .background { WindowGlass() }
         .background(
             WindowChrome(
@@ -88,8 +95,21 @@ private struct WindowView: View {
         minimumEditor: Theme.Size.minEditorWidth
     )
 
+    /// The agent panel's own share, which comes off the top: it is laid out
+    /// first, and the sidebar and the file tree divide what it leaves. Zero
+    /// while it is hidden.
+    private var agentWidth: CGFloat {
+        guard window.agentPanel.isOpen else { return 0 }
+        return window.paneWidths.resolvedAgent(in: availableWidth - Theme.Spacing.paneGap, limits: limits)
+    }
+
+    /// What the sidebar, the editor and the file tree share.
+    private var outerWidth: CGFloat {
+        window.agentPanel.isOpen ? availableWidth - Theme.Spacing.paneGap - agentWidth : availableWidth
+    }
+
     var body: some View {
-        let widths = window.paneWidths.resolved(in: availableWidth, limits: limits)
+        let widths = window.paneWidths.resolved(in: outerWidth, limits: limits)
 
         // No spacing: the gaps between panes are the resize handles.
         HStack(spacing: 0) {
@@ -104,6 +124,24 @@ private struct WindowView: View {
                 onCommit: { window.commitPaneWidths() },
                 onReset: { reset(.leading) }
             )
+
+            if window.agentPanel.isOpen {
+                AgentPanel(model: window.agentPanel)
+                    .frame(width: agentWidth)
+                    .glassPaneBackground()
+
+                ResizeHandle(
+                    widens: .trailing,
+                    width: agentWidth,
+                    onResize: {
+                        window.paneWidths = window.paneWidths.settingAgent(
+                            to: $0, in: availableWidth - Theme.Spacing.paneGap, limits: limits
+                        )
+                    },
+                    onCommit: { window.commitPaneWidths() },
+                    onReset: { resetAgent() }
+                )
+            }
 
             VStack(spacing: 0) {
                 VStack(spacing: 0) {
@@ -127,6 +165,7 @@ private struct WindowView: View {
 
                 StatusBar {
                     TerminalToggle(model: window.terminal)
+                    AgentPanelToggle(model: window.agentPanel)
                     if let checkout = window.activeWorkspace?.checkout {
                         CheckoutLabel(checkout)
                     }
@@ -156,9 +195,9 @@ private struct WindowView: View {
         }
         // Features read the workspace; they never ask which one is active.
         .environment(window.activeWorkspace)
-        // And they ask for a different one through here, rather than reaching
-        // for a window they cannot see.
-        .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
+        // And they ask for a different one, or for a session in one, through
+        // here, rather than reaching for a window they cannot see.
+        .modifier(WindowActions(window: window))
         // Switching workspaces is this, and only this: the id changed, so open
         // what it names. Nothing else is torn down.
         .task(id: window.activeWorkspaceID) { await window.showActiveWorkspace() }
@@ -195,11 +234,19 @@ private struct WindowView: View {
         .overlay { NewSessionOverlay(model: window.repositoryList) }
         // Where ⇧⌘N finds the window it should open the modal in.
         .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
-        .modifier(TabCommandValues(editor: window.editor, terminal: window.terminal))
+        .modifier(TabCommandValues(editor: window.editor, terminal: window.terminal, agents: window.agentPanel))
+        .modifier(AgentCommandValues(agents: window.agentPanel))
     }
 
     private func resize(_ side: PaneWidths.Side, to proposed: CGFloat) {
-        window.paneWidths = window.paneWidths.setting(side, to: proposed, in: availableWidth, limits: limits)
+        window.paneWidths = window.paneWidths.setting(side, to: proposed, in: outerWidth, limits: limits)
+    }
+
+    private func resetAgent() {
+        withAnimation(.easeOut(duration: 0.15)) {
+            window.paneWidths = window.paneWidths.resettingAgent()
+        }
+        window.commitPaneWidths()
     }
 
     /// Animated, unlike the drag: the jump back is one the eye needs help
@@ -220,15 +267,48 @@ private struct WindowView: View {
     }
 }
 
+/// What features call to change the window, as environment values. Apart from
+/// ``WindowView`` for the same reason as ``TabCommandValues``.
+private struct WindowActions: ViewModifier {
+    let window: WindowEnvironment
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
+            .environment(\.startAgentSession, StartAgentSessionAction { window.startAgentSession(in: $0) })
+    }
+}
+
+/// What the agent panel's menu commands act on. Apart from
+/// ``TabCommandValues`` for the same reason: one more value was too much for
+/// the type checker.
+private struct AgentCommandValues: ViewModifier {
+    let agents: AgentPanelModel
+
+    func body(content: Content) -> some View {
+        content
+            .focusedSceneValue(
+                \.toggleAgentPanel,
+                agents.workspace == nil ? nil : { Task { await agents.toggle() } }
+            )
+            .focusedSceneValue(
+                \.newAgentSession,
+                agents.workspace == nil ? nil : { Task { await agents.startSession() } }
+            )
+    }
+}
+
 /// What the menu commands act on in this window: each is `nil` when it would do
 /// nothing. Apart from ``WindowView`` because the one expression was too much
 /// for the type checker.
 ///
-/// Tab commands mean the terminal's tabs while a terminal has the keyboard and
-/// the editor's otherwise: the same keys, in the place the person is looking.
+/// Tab commands mean the agent panel's tabs while it has the keyboard, the
+/// terminal's while a terminal has it, and the editor's otherwise: the same
+/// keys, in the place the person is looking.
 private struct TabCommandValues: ViewModifier {
     let editor: EditorModel
     let terminal: TerminalModel
+    let agents: AgentPanelModel
 
     func body(content: Content) -> some View {
         content
@@ -258,19 +338,23 @@ private struct TabCommandValues: ViewModifier {
                 \.newTerminalTab,
                 terminal.workspace == nil ? nil : { Task { await terminal.openTab() } }
             )
+
     }
 
     private var closeTab: (() -> Void)? {
+        if agents.hasFocus { return { agents.closeActiveTab() } }
         if terminal.hasFocus { return { Task { await terminal.requestCloseActiveTab() } } }
         return editor.tabs.isEmpty ? nil : { Task { await editor.closeActiveTab() } }
     }
 
     private var previousTab: (() -> Void)? {
+        if agents.hasFocus, agents.canSelectOtherTab { return { agents.selectPreviousTab() } }
         if terminal.hasFocus, terminal.canSelectOtherTab { return { terminal.selectPreviousTab() } }
         return editor.tabs.count > 1 ? { Task { await editor.selectPreviousTab() } } : nil
     }
 
     private var nextTab: (() -> Void)? {
+        if agents.hasFocus, agents.canSelectOtherTab { return { agents.selectNextTab() } }
         if terminal.hasFocus, terminal.canSelectOtherTab { return { terminal.selectNextTab() } }
         return editor.tabs.count > 1 ? { Task { await editor.selectNextTab() } } : nil
     }

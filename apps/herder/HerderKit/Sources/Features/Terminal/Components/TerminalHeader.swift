@@ -172,33 +172,3 @@ private final class ClickMonitor {
 
     isolated deinit { stop() }
 }
-
-/// A glyph-only button that lights a plate behind it under the pointer, which
-/// becomes a hand.
-private struct HoverIconButton: View {
-    let icon: Image
-    var iconSize: CGFloat = 14
-    var side: CGFloat = Theme.Size.iconButton
-    var radius: CGFloat = Theme.Radius.control
-    let help: String
-    let action: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            PhIcon(icon, size: iconSize)
-                .frame(width: side, height: side)
-                .background(
-                    RoundedRectangle(cornerRadius: radius)
-                        .fill(isHovering ? Theme.Palette.control : .clear)
-                )
-                .contentShape(RoundedRectangle(cornerRadius: radius))
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(isHovering ? Theme.Palette.text : Theme.Palette.secondaryText)
-        .onHover { isHovering = $0 }
-        .pointerStyle(.link)
-        .help(help)
-    }
-}

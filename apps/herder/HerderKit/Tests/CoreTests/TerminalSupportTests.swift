@@ -15,6 +15,16 @@ import Testing
         #expect(spec.size == size)
     }
 
+    @Test func aCommandRunsThroughAnInteractiveLoginShell() {
+        let spec = ShellLaunch.command(
+            "exec opencode", environment: ["SHELL": "/bin/sh"], directory: directory, size: size
+        )
+        #expect(spec.executable == "/bin/sh")
+        #expect(spec.arguments == ["/bin/sh", "-l", "-i", "-c", "exec opencode"])
+        #expect(spec.workingDirectory == directory)
+        #expect(spec.environment["TERM_PROGRAM"] == "Herder")
+    }
+
     @Test func fallsBackToZshWhenThereIsNoShell() {
         #expect(ShellLaunch.spec(environment: [:], directory: directory, size: size).executable == "/bin/zsh")
         #expect(ShellLaunch.spec(environment: ["SHELL": ""], directory: directory, size: size).executable == "/bin/zsh")

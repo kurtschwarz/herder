@@ -108,14 +108,15 @@ public final class RepositoriesModel {
         newSessionRepository = nil
     }
 
-    /// Creates the worktree the modal describes, closes it, and shows the new
-    /// worktree under its repository. A failure leaves the modal up with the
-    /// reason.
-    func submitNewSession() async {
-        guard let newSession, await newSession.create() else { return }
+    /// Makes the worktree the modal describes, if it is a new one, closes it,
+    /// and shows the worktree under its repository. Returns the worktree the
+    /// session is for. A failure leaves the modal up with the reason.
+    func submitNewSession() async -> WorkspaceID? {
+        guard let newSession, let path = await newSession.submit() else { return nil }
         let repository = newSessionRepository
         cancelNewSession()
         if let repository { await refresh(repository) }
+        return WorkspaceID(path)
     }
 
     func isExpanded(_ repository: Repository) -> Bool {

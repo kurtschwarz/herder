@@ -38,9 +38,27 @@ public enum ShellLaunch {
         )
     }
 
+    /// A login shell that runs `line` in place of itself and ends with it.
+    ///
+    /// Interactive as well as login: a person's `PATH` is as often set in the
+    /// file an interactive shell reads as in the one a login shell does, and
+    /// what is being started here is a program of theirs, found the way their
+    /// own terminal would find it. `line` should `exec` its program, so that
+    /// the shell is not left in front of it.
+    public static func command(
+        _ line: String,
+        environment: [String: String],
+        directory: URL,
+        size: PTYSize
+    ) -> PTYSpec {
+        var spec = spec(environment: environment, directory: directory, size: size)
+        spec.arguments = [spec.executable, "-l", "-i", "-c", line]
+        return spec
+    }
+
     /// `$SHELL` if it is a path to something, and zsh, which every Mac has,
     /// if not.
-    static func shell(from environment: [String: String]) -> String {
+    public static func shell(from environment: [String: String]) -> String {
         guard let shell = environment["SHELL"], shell.hasPrefix("/"),
               FileManager.default.isExecutableFile(atPath: shell)
         else { return fallbackShell }

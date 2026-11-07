@@ -29,6 +29,12 @@ extension FocusedValues {
 
     /// Start a shell in the workspace showing.
     @Entry var newTerminalTab: (() -> Void)?
+
+    /// Show or hide the agent panel, and move into it when it opens.
+    @Entry var toggleAgentPanel: (() -> Void)?
+
+    /// Start an agent session in the workspace showing.
+    @Entry var newAgentSession: (() -> Void)?
 }
 
 /// The menu commands that act on a window.
@@ -46,6 +52,8 @@ public struct AppCommands: Commands {
     @FocusedValue(\.moveEditorTabRight) private var moveEditorTabRight
     @FocusedValue(\.toggleTerminal) private var toggleTerminal
     @FocusedValue(\.newTerminalTab) private var newTerminalTab
+    @FocusedValue(\.toggleAgentPanel) private var toggleAgentPanel
+    @FocusedValue(\.newAgentSession) private var newAgentSession
     @Environment(\.openWindow) private var openWindow
 
     public init() {}
@@ -68,6 +76,10 @@ public struct AppCommands: Commands {
                 .keyboardShortcut("t", modifiers: .command)
                 .disabled(newTerminalTab == nil)
 
+            Button("New Agent Session") { newAgentSession?() }
+                .keyboardShortcut("n", modifiers: [.command, .option])
+                .disabled(newAgentSession == nil)
+
             Divider()
 
             // Two items answer to ⌘W: this one and the window's own "Close".
@@ -86,6 +98,10 @@ public struct AppCommands: Commands {
             Button("Toggle Terminal") { toggleTerminal?() }
                 .keyboardShortcut("`", modifiers: .control)
                 .disabled(toggleTerminal == nil)
+
+            Button("Toggle Agents") { toggleAgentPanel?() }
+                .keyboardShortcut("a", modifiers: [.command, .option])
+                .disabled(toggleAgentPanel == nil)
         }
 
         CommandGroup(replacing: .saveItem) {

@@ -35,15 +35,46 @@ public struct PaneWidths: Codable, Sendable, Equatable {
     public var leading: CGFloat?
     public var trailing: CGFloat?
 
-    public init(leading: CGFloat? = nil, trailing: CGFloat? = nil) {
+    /// The agent panel, which sits between the sidebar and the editor while it
+    /// is open. Held apart from the two above because it comes and goes: the
+    /// sidebar and the file tree are laid out in what it leaves.
+    public var agent: CGFloat?
+
+    public init(leading: CGFloat? = nil, trailing: CGFloat? = nil, agent: CGFloat? = nil) {
         self.leading = leading
         self.trailing = trailing
+        self.agent = agent
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         leading = try container.decodeIfPresent(CGFloat.self, forKey: .leading)
         trailing = try container.decodeIfPresent(CGFloat.self, forKey: .trailing)
+        agent = try container.decodeIfPresent(CGFloat.self, forKey: .agent)
+    }
+
+    /// The agent panel's width to draw, given what is `available` to it, the
+    /// sidebar, the file tree and the editor together.
+    ///
+    /// The two outer panes are protected first, at their minimum, and so is
+    /// the editor: the panel takes what is left, down to its own minimum.
+    public func resolvedAgent(in available: CGFloat, limits: Limits) -> CGFloat {
+        let room = available - limits.minimumEditor - 2 * limits.minimumPane
+        return min(max(agent ?? limits.defaultWidth, limits.minimumPane), max(room, limits.minimumPane))
+    }
+
+    /// These widths with the agent panel set towards `proposed`.
+    public func settingAgent(to proposed: CGFloat, in available: CGFloat, limits: Limits) -> PaneWidths {
+        let room = available - limits.minimumEditor - 2 * limits.minimumPane
+        var result = self
+        result.agent = min(max(proposed, limits.minimumPane), max(room, limits.minimumPane))
+        return result
+    }
+
+    public func resettingAgent() -> PaneWidths {
+        var result = self
+        result.agent = nil
+        return result
     }
 
     /// The widths to draw, given the `available` width the two panes and the

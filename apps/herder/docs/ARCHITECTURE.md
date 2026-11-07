@@ -247,7 +247,6 @@ WorkspaceRegistry          app-wide, one per process (Core)
  └── Workspace             one checkout: a repository's worktree, or a plain folder
       ├── (DocumentStore       lives on each window's EditorModel, not here:
       │                        see "Editor surface")
-      ├── AgentSessionStore    agent sessions running in this worktree
       ├── git state            branch, status
       └── UI state bag         per-feature UI state (see below)
 
@@ -375,7 +374,7 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 - **Every write to `AppSnapshot` goes through `AppSnapshotStore`.** The repository list and the window index share that key and each change reads the whole snapshot, edits its part and writes it back; two at once would lose a field, and the field could be the bookmarks. `AppSnapshotStore` queues them.
 - **Taking a repository out of a window is not forgetting it.** `WindowRepositories.remove(_:)` changes the window's membership only; the record, its bookmark and its folder access stay in the pool. Adding a folder the pool already has joins the existing record rather than minting a second bookmark. The cost is that a repository no window lists can only be got back by picking its folder again, which works but is clumsy; a list of what was adopted before belongs in the add modal and is not built.
 - Which files a workspace had open is `EditorUIState`, under `"editor.openFile"`, in that workspace's snapshot. It is the workspace's, not the window's, so switching away and back restores it too. A file that has gone from disk stays remembered and is shown struck through; only closing its tab forgets it. The key still says `openFile` because it is a file name on the user's disk: the tab list arrived as fields inside the stored object, which is the shape it was given for exactly this, and a build that wrote one `file` still decodes as a single tab.
-- Agent transcripts are not stored by Herder. Store an `AgentSessionRef` (the Claude Code session ID plus any Herder label) so sessions can be resumed.
+- Agent transcripts and sessions are not stored by Herder: opencode keeps its own, and Herder remembers only whether a workspace's agent panel was open.
 - **Secrets go in the Keychain, never a file. A capability is not a secret.** A credential that grants access to something otherwise out of reach — an API token — is a secret. A security-scoped bookmark is a handle to a folder the user themselves picked, sitting in a file in their own home directory, and anything running as them can already read that folder without it. So the bookmark lives in `state.json` as base64, where it stays in one atomic write with the record it belongs to. Splitting it out would put one repository in two stores and double the window in which a crash leaves a record with no bookmark.
 - Searchable indexes and history, when needed, use SQLite on the Rust side.
 
@@ -410,7 +409,7 @@ The bookmark's storage was an open question for a long time. It is settled: base
 ~/Library/Application Support/Herder/
 ├── state.json                       # AppSnapshot: adopted repositories, index of windows
 ├── windows/<id>-<hash>.json         # WindowSnapshot: repositories listed, workspaces open and shown
-└── workspaces/<name>-<hash>.json    # WorkspaceSnapshot: tabs, UI state, agent session refs
+└── workspaces/<name>-<hash>.json    # WorkspaceSnapshot: tabs, UI state
 ```
 
 **The file name is not the id.** A `WorkspaceID` is an absolute path, which cannot be a file name: it contains separators, and a deep enough one runs past the 255-byte limit and fails the save. So the name is the last path component — readable, so the directory can be looked through by eye — plus six bytes of SHA-256 of the whole key, because two worktrees called `main` under different repositories would otherwise overwrite each other. **SHA-256 and not `hashValue`:** Swift's hashing is seeded per process, so a store built on it would look for every file under a name it had never written.
@@ -421,7 +420,6 @@ This is the shape it grows into, not the shape it has. Fields arrive with the fe
 public struct WorkspaceSnapshot: Codable, Sendable {
     public var version = 1
     public var id: WorkspaceID
-    public var agentSessions: [AgentSessionRef] // with AgentSessionsFeature
     public var uiState: [String: Data]   // keyed by PersistedWorkspaceUIState.persistenceKey
 }
 ```
@@ -486,7 +484,10 @@ shows it.
 
 - PTY management lives in `Services/Process/`. The terminal emulator view lives in `Components/TerminalUI/`.
 - `TerminalFeature` and `AgentSessionsFeature` both build on `TerminalUI`.
-- Agent sessions belong to a `Workspace` (`AgentSessionStore`) and keep running while that workspace is in the background.
+- **An agent session is opencode's own terminal UI in a PTY**, started as `opencode --standalone` through the user's login shell (`ShellLaunch.command`) in a worktree's root. Herder does not talk to opencode: no server client, no session list, no status. `--standalone` keeps each one a TUI on a private server rather than a client of opencode's shared background service, which Herder neither starts nor reads.
+- The panel (`AgentPanelModel`) is per window and per workspace, like the terminal's tabs. Switching workspaces never ends a session; closing a tab or a window does. What persists is `AgentPanelUIState` and is only whether the panel was open: a relaunch with it open starts one fresh session, and resuming an older one is done from inside opencode.
+- The sidebar starts a session through `StartAgentSessionAction` (Core, with its environment key in `DesignSystem`), since the sidebar and the panel are two features that cannot see each other. The window's `startAgentSession(in:)` switches workspace and asks the panel, which holds the request until that workspace is showing.
+- The panel's width is a layout choice, so it is the window's: `PaneWidths.agent`, beside the outer panes. It sits between the sidebar and the editor, and the window's minimum width grows while it is open.
 
 ## Testing and previews
 

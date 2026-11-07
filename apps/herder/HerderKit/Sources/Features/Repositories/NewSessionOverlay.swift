@@ -8,6 +8,8 @@ import SwiftUI
 public struct NewSessionOverlay: View {
     private let model: RepositoriesModel
 
+    @Environment(\.startAgentSession) private var startAgentSession
+
     public init(model: RepositoriesModel) {
         self.model = model
     }
@@ -24,7 +26,11 @@ public struct NewSessionOverlay: View {
                 NewSessionCard(
                     model: session,
                     cancel: { model.cancelNewSession() },
-                    submit: { Task { await model.submitNewSession() } }
+                    submit: {
+                        Task {
+                            if let worktree = await model.submitNewSession() { startAgentSession(worktree) }
+                        }
+                    }
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
@@ -172,8 +178,7 @@ private struct NewSessionCard: View {
             }
             .buttonStyle(.primary)
             .keyboardShortcut(.defaultAction)
-            .disabled(!model.canCreate)
-            .help(model.choice == .newWorktree ? "" : "Sessions can't be opened yet.")
+            .disabled(!model.canSubmit)
         }
     }
 

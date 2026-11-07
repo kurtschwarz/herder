@@ -1,3 +1,4 @@
+import AgentSessionsFeature
 import Core
 import EditorFeature
 import FileTreeFeature
@@ -41,6 +42,9 @@ final class WindowEnvironment {
     let editor: EditorModel
     let terminal: TerminalModel
 
+    /// The agent panel, with the sessions it has open for each workspace.
+    let agentPanel: AgentPanelModel
+
     @ObservationIgnored
     private let worktrees: WorkspaceRegistry
 
@@ -66,6 +70,7 @@ final class WindowEnvironment {
         fileTree: FileTreeModel,
         editor: EditorModel,
         terminal: TerminalModel,
+        agentPanel: AgentPanelModel,
         worktrees: WorkspaceRegistry,
         windows: WindowStore,
         restoring snapshot: WindowSnapshot? = nil
@@ -76,6 +81,7 @@ final class WindowEnvironment {
         self.fileTree = fileTree
         self.editor = editor
         self.terminal = terminal
+        self.agentPanel = agentPanel
         self.worktrees = worktrees
         self.windows = windows
         self.activeWorkspaceID = snapshot?.activeWorkspace
@@ -110,6 +116,7 @@ final class WindowEnvironment {
     func forget(_ id: WorkspaceID) async {
         openWorkspaces.removeAll { $0 == id }
         terminal.discard(id)
+        agentPanel.discard(id)
         if activeWorkspaceID == id { activeWorkspaceID = nil }
         scheduleSave()
         await worktrees.close(id, holder: self)
@@ -139,7 +146,19 @@ final class WindowEnvironment {
         guard !Task.isCancelled else { return }
         await editor.restore(in: workspace)
         await terminal.show(workspace)
+        await agentPanel.show(workspace)
         await fileTree.setRoot(id?.url)
+    }
+
+    /// Starts an agent session in a worktree, switching to it first if this
+    /// window is showing another.
+    ///
+    /// The panel is told before the switch, and holds the request until the
+    /// switch gets there: the worktree opens asynchronously, and the panel
+    /// can only start a session in the workspace it is showing.
+    func startAgentSession(in id: WorkspaceID) {
+        agentPanel.requestSession(in: id)
+        activate(id)
     }
 
     /// Selection only ever opens. A file that goes from disk loses its
@@ -218,6 +237,7 @@ final class WindowEnvironment {
     /// of the workspaces only it held and forgets its snapshot.
     func didClose() async {
         terminal.terminateAll()
+        agentPanel.terminateAll()
         await flushSaves()
         await worktrees.release(holder: self)
         worktrees.stopDisplaying(from: self)

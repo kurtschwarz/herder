@@ -92,4 +92,42 @@ import Testing
 
         #expect(widths == PaneWidths())
     }
+
+    // MARK: - The agent panel
+
+    @Test func anAgentPanelNeverDraggedTakesTheDefault() {
+        #expect(PaneWidths().resolvedAgent(in: 1400, limits: limits) == 236)
+    }
+
+    @Test func theAgentPanelLeavesTheOuterPanesAndTheEditorTheirMinimums() {
+        // 1000 shared: 400 for the editor and 360 for two minimum panes leave 240.
+        #expect(PaneWidths(agent: 600).resolvedAgent(in: 1000, limits: limits) == 240)
+    }
+
+    @Test func theAgentPanelIsNeverNarrowerThanAPane() {
+        #expect(PaneWidths(agent: 20).resolvedAgent(in: 1400, limits: limits) == 180)
+        #expect(PaneWidths().resolvedAgent(in: 500, limits: limits) == 180)
+    }
+
+    @Test func draggingTheAgentPanelIsHeldToTheRoom() {
+        let widths = PaneWidths().settingAgent(to: 900, in: 1000, limits: limits)
+
+        #expect(widths.agent == 240)
+        #expect(widths.settingAgent(to: 10, in: 1000, limits: limits).agent == 180)
+    }
+
+    @Test func resettingTheAgentPanelLeavesTheOtherPanesAlone() {
+        let widths = PaneWidths(leading: 300, trailing: 250, agent: 400).resettingAgent()
+
+        #expect(widths == PaneWidths(leading: 300, trailing: 250))
+    }
+
+    @Test func theAgentWidthSurvivesTheRoundTripAndAnOldFileHasNone() throws {
+        let widths = PaneWidths(leading: 300, agent: 320)
+        let decoded = try JSONDecoder().decode(PaneWidths.self, from: JSONEncoder().encode(widths))
+        #expect(decoded == widths)
+
+        let old = try JSONDecoder().decode(PaneWidths.self, from: Data(#"{"leading":300}"#.utf8))
+        #expect(old == PaneWidths(leading: 300))
+    }
 }

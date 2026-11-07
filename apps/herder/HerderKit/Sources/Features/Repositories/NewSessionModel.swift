@@ -5,9 +5,9 @@ import Observation
 /// The new-session modal's state: which worktree the session is for, and, for a
 /// new one, the branch it is cut as and from.
 ///
-/// Only creating a worktree does anything yet. Opening a session in an existing
-/// worktree waits for a session runtime, so that choice can be made but not
-/// submitted.
+/// Submitting either creates the worktree or takes the existing one, and says
+/// where the session should start. Starting it is not this model's business:
+/// it knows about git, not about agents.
 @Observable
 final class NewSessionModel {
     enum Choice: Equatable {
@@ -108,6 +108,29 @@ final class NewSessionModel {
     }
 
     // MARK: - Creating
+
+    /// The worktree chosen from the list, if one is.
+    var selectedWorktree: GitWorktree? {
+        guard case .existing(let id) = choice else { return nil }
+        return worktrees.first { $0.id == id }
+    }
+
+    /// Whether there is something to submit: a name that will do for a new
+    /// worktree, or an existing worktree to open.
+    var canSubmit: Bool {
+        selectedWorktree != nil ? !isLoading && !isCreating : canCreate
+    }
+
+    /// Makes the worktree if a new one is wanted, and says where the session
+    /// goes. `nil` when it could not be made, with `failure` saying why.
+    func submit() async -> URL? {
+        if let worktree = selectedWorktree {
+            guard canSubmit else { return nil }
+            return worktree.path
+        }
+        guard await create(), let location else { return nil }
+        return location
+    }
 
     /// `nil` for an empty name: nothing to complain about yet.
     var nameProblem: NameProblem? {

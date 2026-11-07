@@ -186,15 +186,39 @@ import Testing
         #expect(model.failure == nil)
     }
 
-    @Test func anExistingWorktreeCannotBeSubmittedYet() async {
+    @Test func anExistingWorktreeIsSubmittedWithoutCreatingAnything() async throws {
         seed()
         await model.load()
         model.editBranchName("fix")
         model.select(model.worktrees[0])
 
+        // `canCreate` is about making a worktree, which this is not.
         #expect(!model.canCreate)
+        #expect(model.canSubmit)
         #expect(await !model.create())
+        #expect(await model.submit() == model.worktrees[0].path)
         #expect(git.addedWorktrees.isEmpty)
+    }
+
+    @Test func submittingANewWorktreeCreatesItAndSaysWhere() async {
+        seed()
+        await model.load()
+        model.editBranchName("agent/add-minimap")
+
+        let path = await model.submit()
+
+        #expect(path == repository.appending(path: "agent/add-minimap"))
+        #expect(git.addedWorktrees.count == 1)
+    }
+
+    @Test func aWorktreeThatCannotBeMadeIsNotSubmitted() async {
+        seed()
+        git.failAddingWorktrees(with: "boom")
+        await model.load()
+        model.editBranchName("fix")
+
+        #expect(await model.submit() == nil)
+        #expect(model.failure == "boom")
     }
 
     @Test func anUnreadableRepositoryLeavesEverythingDisabled() async {
