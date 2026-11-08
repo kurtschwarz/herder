@@ -1,0 +1,60 @@
+set shell := ["zsh", "-cu"]
+
+# Recipes for the opencode theme. Callable from here, or from the repo root as
+# `just <recipe> packages/opencode-theme`.
+
+theme := "herder.json"
+themes := env("XDG_CONFIG_HOME", env("HOME") + "/.config") + "/opencode/themes"
+
+# Show available recipes
+default:
+    @just --list --unsorted
+
+# Link the theme into opencode's themes folder
+install: test
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    mkdir -p "{{ themes }}"
+    ln -sfn "$PWD/{{ theme }}" "{{ themes }}/{{ theme }}"
+    print -r -- "Linked {{ themes }}/{{ theme }}"
+
+# Check the theme has what opencode needs to load it
+test:
+    #!/usr/bin/env python3 -I
+    import json, re, sys
+
+    theme = json.load(open("{{ theme }}"))
+    problems = []
+    for key in ("base", "dark"):
+        if key not in theme:
+            problems.append(f"no {key}")
+    hues = theme.get("dark", {}).get("hue", {})
+    for name in ("gray", "red", "orange", "yellow", "green", "cyan", "blue", "purple"):
+        steps = hues.get(name)
+        if not isinstance(steps, dict) or sorted(steps) != [str(n) for n in range(100, 1000, 100)]:
+            problems.append(f"hue {name} is not nine steps")
+    for name in ("accent", "interactive", "neutral"):
+        if name not in hues:
+            problems.append(f"no hue alias {name}")
+    if theme.get("base", {}).get("background", {}).get("base") != "transparent":
+        problems.append("background.base is not transparent")
+
+    def colours(node, path=""):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                yield from colours(value, f"{path}.{key}")
+        elif isinstance(node, str):
+            yield path, node
+    for path, value in colours({k: v for k, v in theme.items() if k != "$schema"}):
+        if not re.fullmatch(r"#[0-9a-f]{6}|transparent|\$[a-z@.0-9A-Z]+", value):
+            problems.append(f"{path}: {value} is not a colour")
+
+    for problem in problems:
+        print(f"✗ {problem}", file=sys.stderr)
+    sys.exit(1 if problems else 0)
+
+# Remove the link install made
+clean:
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    if [[ -L "{{ themes }}/{{ theme }}" ]]; then rm "{{ themes }}/{{ theme }}"; fi

@@ -78,8 +78,9 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     ///
     /// opencode is told to use the `herder` theme, which leaves its background
     /// clear so the pane shows through, as Herder's own terminals do. The
-    /// theme is a file in `~/.config/opencode/themes/`; without it opencode
-    /// falls back to a theme of its own.
+    /// theme is `packages/opencode-theme`, which `just install` there puts in
+    /// `~/.config/opencode/themes/`; without it opencode falls back to a theme
+    /// of its own.
     public static let presets: [Agent] = [
         Agent(
             id: "claude-code",

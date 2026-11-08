@@ -130,6 +130,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 └── packages/
     ├── syntax-highlighter/              # Rust highlighter: stays here, owns its own build
     ├── ghostty-vt/                      # a pinned Ghostty commit and the recipe that builds libghostty-vt
+    ├── opencode-theme/                  # the `herder` opencode theme the agent panel asks for; `just install`
     └── ...                              # other shared packages
 ```
 
