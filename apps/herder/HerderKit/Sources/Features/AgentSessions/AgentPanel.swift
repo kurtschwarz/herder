@@ -34,6 +34,9 @@ private struct AgentTabContent: View {
     let tab: AgentTab
     let model: AgentPanelModel
 
+    /// Small, since an agent's terminal UI lays out margins of its own.
+    private static let inset = NSSize(width: Theme.Spacing.tight, height: Theme.Spacing.tight)
+
     var body: some View {
         switch tab.phase {
         case .waiting, .starting:
@@ -41,13 +44,13 @@ private struct AgentTabContent: View {
                 .controlSize(.small)
         case .running:
             if let screen = tab.screen {
-                TerminalView(screen: screen, focusRequest: model.focusRequest)
+                TerminalView(screen: screen, focusRequest: model.focusRequest, inset: Self.inset)
                     .id(tab.generation)
             }
         case .exited(let code):
             VStack(spacing: 0) {
                 if let screen = tab.screen {
-                    TerminalView(screen: screen, focusRequest: model.focusRequest)
+                    TerminalView(screen: screen, focusRequest: model.focusRequest, inset: Self.inset)
                         .id(tab.generation)
                 }
                 Banner(

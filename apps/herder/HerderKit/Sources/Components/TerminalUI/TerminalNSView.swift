@@ -13,7 +13,7 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     private let screen: TerminalScreen
     private var emulator: TerminalEmulator { screen.emulator }
 
-    private static let inset = NSSize(width: Theme.Spacing.paneInset, height: Theme.Spacing.tight)
+    private let inset: NSSize
 
     private let regular = NSFont.monospacedSystemFont(ofSize: Theme.Size.terminal, weight: .regular)
     private lazy var bold = NSFont.monospacedSystemFont(ofSize: Theme.Size.terminal, weight: .bold)
@@ -37,8 +37,9 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     private var pressedButton: MouseButton?
     private var scrollRemainder: CGFloat = 0
 
-    init(screen: TerminalScreen) {
+    init(screen: TerminalScreen, inset: NSSize) {
         self.screen = screen
+        self.inset = inset
         super.init(frame: .zero)
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
@@ -58,8 +59,8 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
 
     override func layout() {
         super.layout()
-        let columns = Int((bounds.width - 2 * Self.inset.width) / cellSize.width)
-        let rows = Int((bounds.height - 2 * Self.inset.height) / cellSize.height)
+        let columns = Int((bounds.width - 2 * inset.width) / cellSize.width)
+        let rows = Int((bounds.height - 2 * inset.height) / cellSize.height)
         guard columns >= 2, rows >= 1 else { return }
         screen.resize(
             columns: columns, rows: rows,
@@ -75,14 +76,14 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
 
     private func rect(forRow row: Int) -> NSRect {
         NSRect(
-            x: 0, y: Self.inset.height + CGFloat(row) * cellSize.height,
+            x: 0, y: inset.height + CGFloat(row) * cellSize.height,
             width: bounds.width, height: cellSize.height
         )
     }
 
     private func cell(at point: NSPoint) -> (column: Int, row: Int) {
-        let column = Int(((point.x - Self.inset.width) / cellSize.width).rounded(.down))
-        let row = Int(((point.y - Self.inset.height) / cellSize.height).rounded(.down))
+        let column = Int(((point.x - inset.width) / cellSize.width).rounded(.down))
+        let row = Int(((point.y - inset.height) / cellSize.height).rounded(.down))
         return (max(0, min(column, emulator.columns - 1)), max(0, min(row, emulator.rows - 1)))
     }
 
@@ -95,8 +96,8 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
 
         // Clamped as numbers before they are rows: a layer-backed view can be
         // asked to draw an unbounded rect, which does not fit an `Int`.
-        let top = ((dirtyRect.minY - Self.inset.height) / cellSize.height).rounded(.down)
-        let bottom = ((dirtyRect.maxY - Self.inset.height) / cellSize.height).rounded(.down)
+        let top = ((dirtyRect.minY - inset.height) / cellSize.height).rounded(.down)
+        let bottom = ((dirtyRect.maxY - inset.height) / cellSize.height).rounded(.down)
         let last = Int(min(max(bottom, 0), Double(cells.count - 1)))
         let first = Int(min(max(top, 0), Double(last)))
         guard bottom >= 0, top <= Double(cells.count - 1) else { return }
@@ -110,7 +111,7 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     }
 
     private func origin(column: Int, row: Int) -> NSPoint {
-        NSPoint(x: Self.inset.width + CGFloat(column) * cellSize.width, y: Self.inset.height + CGFloat(row) * cellSize.height)
+        NSPoint(x: inset.width + CGFloat(column) * cellSize.width, y: inset.height + CGFloat(row) * cellSize.height)
     }
 
     private func drawRow(_ row: Int, _ cells: [TerminalCell], in context: CGContext) {
@@ -363,8 +364,8 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         let point = convert(event.locationInWindow, from: nil)
         let bytes = emulator.encode(
             mouse: action, button: button, modifiers: modifiers(of: event),
-            at: NSPoint(x: point.x - Self.inset.width, y: point.y - Self.inset.height),
-            in: NSSize(width: bounds.width - 2 * Self.inset.width, height: bounds.height - 2 * Self.inset.height),
+            at: NSPoint(x: point.x - inset.width, y: point.y - inset.height),
+            in: NSSize(width: bounds.width - 2 * inset.width, height: bounds.height - 2 * inset.height),
             cell: cellSize, scale: window?.backingScaleFactor ?? 2
         )
         screen.send(bytes)

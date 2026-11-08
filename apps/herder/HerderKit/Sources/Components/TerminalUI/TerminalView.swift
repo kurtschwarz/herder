@@ -1,3 +1,4 @@
+import DesignSystem
 import SwiftUI
 
 /// A terminal, drawn. Fills what it is given and tells the process how many
@@ -9,9 +10,18 @@ public struct TerminalView: NSViewRepresentable {
     /// than a flag: asking twice has to work twice.
     private let focusRequest: Int
 
-    public init(screen: TerminalScreen, focusRequest: Int = 0) {
+    /// Space between the edge and the grid. A full-screen program that lays
+    /// out its own margins wants less than a shell does.
+    private let inset: NSSize
+
+    public init(
+        screen: TerminalScreen,
+        focusRequest: Int = 0,
+        inset: NSSize = NSSize(width: Theme.Spacing.paneInset, height: Theme.Spacing.tight)
+    ) {
         self.screen = screen
         self.focusRequest = focusRequest
+        self.inset = inset
     }
 
     public func makeCoordinator() -> Coordinator { Coordinator() }
@@ -21,7 +31,7 @@ public struct TerminalView: NSViewRepresentable {
     }
 
     public func makeNSView(context: Context) -> NSView {
-        TerminalNSView(screen: screen)
+        TerminalNSView(screen: screen, inset: inset)
     }
 
     public func updateNSView(_ view: NSView, context: Context) {
