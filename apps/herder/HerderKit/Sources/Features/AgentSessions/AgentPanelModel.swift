@@ -297,11 +297,19 @@ public final class AgentPanelModel {
         let line = tab.agent.commandLine(session: tab.sessionName, resuming: resuming)
         let spec = ShellLaunch.command(
             "exec \(line)",
-            environment: environment,
+            environment: environment(for: tab.agent),
             directory: workspace.id.url,
             size: PTYSize(columns: 100, rows: 30)
         )
         await tab.attach(using: pty, spec: spec)
+    }
+
+    /// The app's environment with the agent's over it. A preset's comes from
+    /// the preset as it is now, not the tab's copy: it is Herder's choice, not
+    /// the person's, so a tab saved before it changed takes the change too.
+    private func environment(for agent: Agent) -> [String: String] {
+        let preset = Agent.presets.first { $0.id == agent.id }
+        return environment.merging((preset ?? agent).environment ?? [:]) { $1 }
     }
 
     /// The terminal UI stopped by itself. Quitting it ends the tab, as quitting

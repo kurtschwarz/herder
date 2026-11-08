@@ -121,6 +121,18 @@ import Testing
         #expect(pty.specs.last?.arguments.last == "exec opencode")
     }
 
+    /// opencode's colours are set for the panel alone, so a person's own
+    /// terminals keep whatever theme they chose there.
+    @Test func anAgentsOwnEnvironmentReachesItsTerminal() async throws {
+        let (model, _, _) = try await shown()
+        await model.startSession(try #require(catalog.agent("opencode")))
+        await model.startSession(try #require(catalog.agent("codex")))
+
+        let opencode = try #require(pty.specs.first?.environment["OPENCODE_CLI_CONFIG_CONTENT"])
+        #expect(opencode.contains("\"herder\""))
+        #expect(pty.specs.last?.environment["OPENCODE_CLI_CONFIG_CONTENT"] == nil)
+    }
+
     @Test func aCustomAgentRunsAsTyped() async throws {
         let (model, _, _) = try await shown()
         var aider = catalog.add()
@@ -455,6 +467,24 @@ import Testing
         await model.show(try await self.workspace(root, in: makeRegistry()))
 
         #expect(pty.specs.last?.arguments.last == "exec opencode -s ses_abc")
+    }
+
+    /// A tab saved before a preset's environment changed still gets the
+    /// current one: a preset's environment is Herder's, not the person's.
+    @Test func aSavedPresetTabResumesWithThePresetsCurrentEnvironment() async throws {
+        _ = try await closedWindow(starting: ["opencode"], selecting: 0)
+        let key = WorkspaceSnapshot.persistenceKey(for: WorkspaceID(root))
+        var snapshot = try #require(try await state.load(WorkspaceSnapshot.self, forKey: key))
+        let panel = AgentPanelUIState()
+        try panel.restore(from: try #require(snapshot.uiState[AgentPanelUIState.persistenceKey]))
+        panel.tabs[0].agent.environment = nil
+        snapshot.uiState[AgentPanelUIState.persistenceKey] = try panel.encode()
+        try await state.save(snapshot, forKey: key)
+
+        let model = makeModel()
+        await model.show(try await workspace(root, in: makeRegistry()))
+
+        #expect(pty.specs.last?.environment["OPENCODE_CLI_CONFIG_CONTENT"] != nil)
     }
 
     @Test func anOpencodeSessionThatCannotBeFoundStartsAfresh() async throws {

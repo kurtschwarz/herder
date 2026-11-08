@@ -29,6 +29,11 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// ``AgentSessionLookup`` for what it may print.
     public var sessionLookup: String?
 
+    /// Variables set for the agent's terminal alone, over the app's own.
+    /// For what an agent reads from its environment and nowhere else Herder
+    /// can reach, without changing it in the person's other terminals.
+    public var environment: [String: String]?
+
     /// Stands for the session's id in a command. For most agents Herder mints
     /// the id, a UUID, and tells the agent; for one with a ``sessionLookup``,
     /// it is the id the agent chose, once the lookup has found it.
@@ -39,13 +44,15 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
         name: String,
         command: String,
         resumeCommand: String? = nil,
-        sessionLookup: String? = nil
+        sessionLookup: String? = nil,
+        environment: [String: String]? = nil
     ) {
         self.id = id
         self.name = name
         self.command = command
         self.resumeCommand = resumeCommand
         self.sessionLookup = sessionLookup
+        self.environment = environment
     }
 
     /// Whether the agent mints its own session ids, so Herder has to look
@@ -68,6 +75,11 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// exactly. opencode names its own, so its sessions are looked up and then
     /// resumed exactly. Codex can do neither here: it resumes the last session
     /// in the worktree, which is the right one unless several were open.
+    ///
+    /// opencode is told to use the `herder` theme, which leaves its background
+    /// clear so the pane shows through, as Herder's own terminals do. The
+    /// theme is a file in `~/.config/opencode/themes/`; without it opencode
+    /// falls back to a theme of its own.
     public static let presets: [Agent] = [
         Agent(
             id: "claude-code",
@@ -81,7 +93,8 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
             name: "opencode",
             command: "opencode",
             resumeCommand: "opencode -s \(sessionToken)",
-            sessionLookup: "opencode session list --format json -n 20"
+            sessionLookup: "opencode session list --format json -n 20",
+            environment: ["OPENCODE_CLI_CONFIG_CONTENT": #"{"theme":{"name":"herder"}}"#]
         ),
         Agent(
             id: "pi",
