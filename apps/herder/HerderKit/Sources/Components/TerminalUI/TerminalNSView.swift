@@ -186,6 +186,10 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     private func drawText(_ text: String, key: RunKey, at point: NSPoint, in context: CGContext) {
         var color = key.foreground.nsColor
         if key.attributes.contains(.faint) { color = color.withAlphaComponent(0.6) }
+        if let block = BlockElement(text) {
+            drawBlock(block, color: color, at: point, in: context)
+            return
+        }
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font(for: key.attributes),
             .foregroundColor: color,
@@ -201,6 +205,21 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         context.textPosition = CGPoint(x: point.x, y: point.y + ascent)
         CTLineDraw(line, context)
+        context.restoreGState()
+    }
+
+    private func drawBlock(_ block: BlockElement, color: NSColor, at point: NSPoint, in context: CGContext) {
+        // Unsmoothed, so neighbouring blocks meet on a pixel instead of
+        // leaving a faint seam where both edges are half covered.
+        context.saveGState()
+        context.setShouldAntialias(false)
+        for part in block.parts {
+            context.setFillColor(color.withAlphaComponent(color.alphaComponent * part.opacity).cgColor)
+            context.fill(CGRect(
+                x: point.x + part.rect.minX * cellSize.width, y: point.y + part.rect.minY * cellSize.height,
+                width: part.rect.width * cellSize.width, height: part.rect.height * cellSize.height
+            ))
+        }
         context.restoreGState()
     }
 
