@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.1](https://github.com/kurtschwarz/herder/compare/herder-v0.1.0...herder-v0.1.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **herder:** ship release builds without coverage ([f12377c](https://github.com/kurtschwarz/herder/commit/f12377c1290324c2566361ae78375ba655c82996))
+
+
+### Performance Improvements
+
+* **herder:** bundle only the icons the app uses ([84738af](https://github.com/kurtschwarz/herder/commit/84738af5ff44a71f758588650fce0956cf65447e))
+
 ## 0.1.0 (2026-11-09)
 
 
