@@ -11,7 +11,9 @@ import Testing
     )
 
     /// Starts `sleep`, marked with `mark` (`$$` for its own pid), ignoring
-    /// HUP and TERM, under a shell that exits at once. Returns its pid.
+    /// HUP and TERM, under a shell that exits at once. Returns its pid once
+    /// it is `sleep`: the pid is written before the `exec`, and until then
+    /// the process has no mark to find.
     ///
     /// A copy of `sleep`, signed again: the kernel hides the environment of
     /// Apple's own binaries, and an agent is never one of those.
@@ -35,7 +37,8 @@ import Testing
         for _ in 0..<200 {
             if let text = try? String(contentsOf: file, encoding: .utf8),
                let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
-               LiveLeftoverAgentClient.processes().first(where: { $0.pid == pid })?.parent == 1 {
+               LiveLeftoverAgentClient.processes().first(where: { $0.pid == pid })?.parent == 1,
+               ProcessArguments.environment(of: pid)?[AgentMark.variable] != nil {
                 return pid
             }
             try await Task.sleep(for: .milliseconds(25))
