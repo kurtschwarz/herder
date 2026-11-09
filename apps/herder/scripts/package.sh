@@ -48,12 +48,24 @@ printf 'Version %s (%s), commit %s\n' "$built" \
     "$(plutil -extract CFBundleVersion raw "$APP/Contents/Info.plist")" \
     "$(plutil -extract HerderGitCommit raw "$APP/Contents/Info.plist")"
 
-if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
-    codesign --force --deep --sign "$CODESIGN_IDENTITY" --timestamp --options runtime \
-        --entitlements "$ENTITLEMENTS" "$APP"
-else
-    codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "$APP"
-fi
+sign() {  # usage: sign [codesign args...] <path>
+    if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+        codesign --force --sign "$CODESIGN_IDENTITY" --timestamp --options runtime "$@"
+    else
+        codesign --force --sign - "$@"
+    fi
+}
+
+# Inside out, and not with --deep, which would strip the entitlements
+# Sparkle's downloader is signed with. The order is Sparkle's own:
+# https://sparkle-project.org/documentation/sandboxing/#code-signing
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+sign "$SPARKLE/Versions/B/XPCServices/Installer.xpc"
+sign --preserve-metadata=entitlements "$SPARKLE/Versions/B/XPCServices/Downloader.xpc"
+sign "$SPARKLE/Versions/B/Autoupdate"
+sign "$SPARKLE/Versions/B/Updater.app"
+sign "$SPARKLE"
+sign --entitlements "$ENTITLEMENTS" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
 rm -rf "$STAGE"

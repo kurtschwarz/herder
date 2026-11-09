@@ -20,6 +20,10 @@ jobs:
     timeout-minutes: 45
     outputs:
       version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.update.outputs.build }}
+      minimum: ${{ steps.update.outputs.minimum }}
+      signature: ${{ steps.update.outputs.signature }}
+      length: ${{ steps.update.outputs.length }}
     env:
       CODESIGN_IDENTITY: "Developer ID Application: KURT SCHWARZ (P9DZH3LW75)"
       DMG_PATH: apps/herder/build/Herder.dmg
@@ -146,6 +150,28 @@ jobs:
             --verbose=2 \
             "$DMG_PATH"
 
+      # After stapling, which changes the DMG. The signature is what installed
+      # copies check before installing it, and it is not a secret: the publish
+      # job puts it in the appcast.
+      - name: Sign DMG for Sparkle
+        id: update
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          : "${SPARKLE_PRIVATE_KEY:?SPARKLE_PRIVATE_KEY secret is required}"
+
+          # The tools that come with the Sparkle the app was built against.
+          sign_update=apps/herder/build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update
+          info=apps/herder/build/Herder.app/Contents/Info.plist
+
+          signature="$(printf '%s' "$SPARKLE_PRIVATE_KEY" | "$sign_update" --ed-key-file - -p "$DMG_PATH")"
+          {
+            printf 'build=%s\n' "$(plutil -extract CFBundleVersion raw "$info")"
+            printf 'minimum=%s\n' "$(plutil -extract LSMinimumSystemVersion raw "$info")"
+            printf 'signature=%s\n' "$signature"
+            printf 'length=%s\n' "$(stat -f %z "$DMG_PATH")"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload DMG
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
@@ -187,16 +213,36 @@ jobs:
           name: Herder-${{ github.sha }}
           path: dist
 
+      # Installed copies read the appcast on the latest release, which this one
+      # becomes once it is published.
+      - name: Write appcast
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          BUILD: ${{ needs.build.outputs.build }}
+          MINIMUM: ${{ needs.build.outputs.minimum }}
+          SIGNATURE: ${{ needs.build.outputs.signature }}
+          LENGTH: ${{ needs.build.outputs.length }}
+        run: |
+          export URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/Herder.dmg"
+          export LINK="https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+          # What release-please wrote, read while only a token with write access can see the draft.
+          NOTES="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+          export NOTES
+
+          apps/herder/scripts/appcast.sh > dist/appcast.xml
+          cat dist/appcast.xml
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$GITHUB_REF_NAME" dist/Herder.dmg \
+          gh release upload "$GITHUB_REF_NAME" dist/Herder.dmg dist/appcast.xml \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
           # Publishing seals the release: immutable releases reject later uploads,
-          # so the DMG has to be attached while the release is still a draft.
+          # so the DMG and appcast have to be attached while the release is still a draft.
           gh release edit "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false

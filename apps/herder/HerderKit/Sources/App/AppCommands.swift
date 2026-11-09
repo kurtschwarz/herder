@@ -1,3 +1,4 @@
+import Core
 import SwiftUI
 
 extension FocusedValues {
@@ -52,9 +53,19 @@ public struct AppCommands: Commands {
     @FocusedValue(\.newAgentSession) private var newAgentSession
     @Environment(\.openWindow) private var openWindow
 
-    public init() {}
+    private let updater: (any UpdaterClient)?
+
+    public init(updater: (any UpdaterClient)?) {
+        self.updater = updater
+    }
 
     public var body: some Commands {
+        // Under About, where a Mac app keeps it.
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") { updater?.checkForUpdates() }
+                .disabled(updater == nil)
+        }
+
         // The settings window is a `Window` scene rather than SwiftUI's
         // `Settings`, which keeps a title bar that this design hides.
         CommandGroup(replacing: .appSettings) {

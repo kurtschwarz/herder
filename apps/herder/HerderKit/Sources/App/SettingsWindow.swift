@@ -16,7 +16,11 @@ public struct SettingsWindow: View {
     }
 
     public var body: some View {
-        SettingsView(agents: environment.agents, version: AppVersion(info: Bundle.main.infoDictionary ?? [:]))
+        SettingsView(
+            agents: environment.agents,
+            version: AppVersion(info: Bundle.main.infoDictionary ?? [:]),
+            updater: environment.updater
+        )
             .background { WindowGlass() }
             // No close callbacks: nothing in here can be lost by closing it.
             .background(WindowChrome())

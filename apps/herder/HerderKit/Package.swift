@@ -27,6 +27,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/phosphor-icons/swift", from: "2.1.0"),
+        // 2.9 at least, the first to show Markdown release notes.
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.1"),
     ],
     targets: [
         // Models, service protocols and workspace state.
@@ -39,9 +41,13 @@ let package = Package(
         .target(name: "Core", swiftSettings: core),
 
         // The implementations of Core's service protocols: disk, git, the file
-        // watcher, the sandbox, the clock, and the syntax engine. The only
-        // module that links the FFI.
-        .target(name: "Services", dependencies: ["Core", "HerderSyntaxFFI", "PTYSpawn"], swiftSettings: core),
+        // watcher, the sandbox, the clock, the syntax engine and the updater.
+        // The only module that links the FFI, or Sparkle.
+        .target(
+            name: "Services",
+            dependencies: ["Core", "HerderSyntaxFFI", "PTYSpawn", .product(name: "Sparkle", package: "Sparkle")],
+            swiftSettings: core
+        ),
 
         // Starting a process on a terminal, in C because it has to fork and
         // Swift cannot run safely between a fork and an exec. `Services` is

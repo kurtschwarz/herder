@@ -12,10 +12,12 @@ public struct SettingsView: View {
 
     private let agents: AgentCatalog
     private let version: AppVersion
+    private let updater: (any UpdaterClient)?
 
-    public init(agents: AgentCatalog, version: AppVersion) {
+    public init(agents: AgentCatalog, version: AppVersion, updater: (any UpdaterClient)?) {
         self.agents = agents
         self.version = version
+        self.updater = updater
     }
 
     public var body: some View {
@@ -35,7 +37,7 @@ public struct SettingsView: View {
     @ViewBuilder
     private var detail: some View {
         switch selection {
-        case .general: GeneralSettings(version: version)
+        case .general: GeneralSettings(version: version, updater: updater)
         case .agents: AgentsSettings(catalog: agents)
         }
     }
@@ -43,9 +45,13 @@ public struct SettingsView: View {
 
 #if DEBUG
 #Preview {
-    SettingsView(agents: AgentCatalog(state: InMemoryStateStore()), version: AppVersion(version: "0.1.0", build: "1", commit: "e87cd6e"))
-        .frame(width: Theme.Size.settingsWindow.width, height: Theme.Size.settingsWindow.height)
-        .background { WindowGlass() }
-        .preferredColorScheme(.dark)
+    SettingsView(
+        agents: AgentCatalog(state: InMemoryStateStore()),
+        version: AppVersion(version: "0.1.0", build: "1", commit: "e87cd6e"),
+        updater: StubUpdaterClient()
+    )
+    .frame(width: Theme.Size.settingsWindow.width, height: Theme.Size.settingsWindow.height)
+    .background { WindowGlass() }
+    .preferredColorScheme(.dark)
 }
 #endif

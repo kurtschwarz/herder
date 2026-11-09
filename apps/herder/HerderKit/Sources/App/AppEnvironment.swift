@@ -76,6 +76,11 @@ public final class AppEnvironment {
     /// bundle is pointed at it until it is `.settled`.
     let location: AppLocation
 
+    /// What finds and installs new releases, for the menu and Settings.
+    /// `nil` when there is nothing to update from, which a debug build is
+    /// treated as: it would always find a release newer than itself.
+    public let updater: (any UpdaterClient)?
+
     /// The live app: every service is the real one.
     ///
     /// There is no app without its repositories, and nothing useful to fall back
@@ -120,6 +125,12 @@ public final class AppEnvironment {
             )
         }
 
+        #if DEBUG
+        let updater: (any UpdaterClient)? = nil
+        #else
+        let updater: (any UpdaterClient)? = SparkleUpdaterClient()
+        #endif
+
         self.init(
             files: LiveFileClient(),
             bookmarks: LiveBookmarkClient(),
@@ -129,7 +140,8 @@ public final class AppEnvironment {
             clock: LiveClockClient(),
             persistence: persistence,
             leftovers: LiveLeftoverAgentClient(),
-            opencode: opencode
+            opencode: opencode,
+            updater: updater
         )
     }
 
@@ -143,7 +155,8 @@ public final class AppEnvironment {
     /// ends a real process the developer's own Herder left behind. `opencode`
     /// is `nil` for the same reason: a test must not link into the
     /// developer's own opencode config. `bundle` is where the app is running
-    /// from, which decides whether `opencode` is asked at all.
+    /// from, which decides whether `opencode` is asked at all. `updater` is
+    /// `nil` so that nothing checks GitHub from a test.
     public init(
         files: any FileClient,
         bookmarks: any BookmarkClient,
@@ -157,6 +170,7 @@ public final class AppEnvironment {
         commands: any CommandClient = LiveCommandClient(),
         leftovers: (any LeftoverAgentClient)? = nil,
         opencode: (any OpencodeIntegrationClient)? = nil,
+        updater: (any UpdaterClient)? = nil,
         bundle: URL = Bundle.main.bundleURL
     ) {
         self.persistence = persistence
@@ -180,6 +194,7 @@ public final class AppEnvironment {
         self.clock = clock
         self.leftovers = leftovers
         self.opencode = opencode
+        self.updater = updater
         self.location = AppLocation(bundle: bundle)
     }
 

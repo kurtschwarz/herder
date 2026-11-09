@@ -39,7 +39,7 @@ struct HerderApp: App {
         // The design puts the traffic lights inside the sidebar's header rather
         // than in a title bar of their own.
         .windowStyle(.hiddenTitleBar)
-        .commands { AppCommands() }
+        .commands { AppCommands(updater: environment.updater) }
 
         // One of it, opened with ⌘, and not brought back on relaunch.
         Window("Settings", id: SettingsWindow.id) {
