@@ -1,6 +1,5 @@
 import Core
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 struct WorktreeRow: View {
@@ -39,7 +38,7 @@ struct WorktreeRow: View {
 
     private var content: some View {
         HStack(spacing: Theme.Spacing.normal) {
-            PhIcon(Ph.gitBranch.regular, size: 16)
+            PhIcon(Ph.gitBranch, size: 16)
                 .foregroundStyle(Theme.Palette.secondaryText)
 
             switch worktree.checkout {
@@ -60,7 +59,7 @@ struct WorktreeRow: View {
                     catalog: catalog,
                     start: { startAgentSession(WorkspaceID(worktree.path), agent: $0) }
                 ) {
-                    HoverIconLabel(icon: Ph.sparkle.regular, iconSize: 12, side: 20, radius: 6)
+                    HoverIconLabel(icon: Ph.sparkle, iconSize: 12, side: 20, radius: 6)
                 }
                 .opacity(isHovering ? 1 : 0)
             }

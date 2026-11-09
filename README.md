@@ -121,8 +121,8 @@ the project file stops being a merge battleground.
 
 Run the module tests with `just test`. It takes arguments, so
 `just test -only-testing:CoreTests` works too. Tests run through `xcodebuild`, not
-`swift test`, because PhosphorSwift's icons are an asset catalog that only Xcode's
-build system bundles.
+`swift test`, because DesignSystem's icons are an asset catalog that only Xcode's
+build system compiles.
 
 ### State
 

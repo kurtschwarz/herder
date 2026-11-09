@@ -1,5 +1,4 @@
 import AppKit
-import PhosphorSwift
 import SwiftUI
 
 /// One tab of a ``TabBar``: a click shows it, a double-click or its menu
@@ -71,7 +70,7 @@ struct TabBarTab<Menu: View>: View {
     /// The surface every state of the tab sits on, around `content`.
     private func chrome(@ViewBuilder _ content: () -> some View) -> some View {
         HStack(spacing: Theme.Spacing.normal) {
-            PhIcon(label.isPinned ? Ph.pushPin.fill : label.icon, size: 14)
+            PhIcon(label.isPinned ? Ph.pushPinFill : label.icon, size: 14)
                 .foregroundStyle(iconColor)
 
             content()

@@ -1,5 +1,4 @@
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 /// The status bar's button for the panel: lit while it is open.
@@ -15,7 +14,7 @@ public struct TerminalToggle: View {
             Task { await model.toggle() }
         } label: {
             HStack(spacing: Theme.Spacing.tight + 2) {
-                PhIcon(Ph.terminal.regular, size: 14)
+                PhIcon(Ph.terminal, size: 14)
                 Text("Terminal")
             }
             .foregroundStyle(model.isOpen ? Theme.Palette.violet : Theme.Palette.secondaryText)

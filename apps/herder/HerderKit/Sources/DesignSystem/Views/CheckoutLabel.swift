@@ -1,5 +1,4 @@
 import Core
-import PhosphorSwift
 import SwiftUI
 
 /// The branch a worktree is on, or the short hash it is detached at. Here
@@ -13,7 +12,7 @@ public struct CheckoutLabel: View {
 
     public var body: some View {
         HStack(spacing: Theme.Spacing.tight + 2) {
-            PhIcon(Ph.gitBranch.regular, size: 14)
+            PhIcon(Ph.gitBranch, size: 14)
             switch checkout {
             case .branch(let name):
                 Text(name)

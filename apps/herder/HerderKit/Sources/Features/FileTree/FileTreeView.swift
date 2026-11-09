@@ -1,7 +1,6 @@
 import AppKit
 import Core
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 import TestSupport
 
@@ -110,7 +109,7 @@ private struct FileTreeHeader: View {
             Spacer(minLength: 0)
             if canCollapse {
                 Button(action: collapseAll) {
-                    PhIcon(Ph.arrowsInLineVertical.regular, size: 18)
+                    PhIcon(Ph.arrowsInLineVertical, size: 18)
                 }
                 .buttonStyle(.icon)
                 .help("Collapse all folders")

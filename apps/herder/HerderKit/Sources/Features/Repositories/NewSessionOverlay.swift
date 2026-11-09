@@ -1,6 +1,5 @@
 import Core
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 /// The new-session modal, drawn over the whole window like the add-repository
@@ -122,7 +121,7 @@ private struct NewSessionCard: View {
 
         return VStack(spacing: 0) {
             HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
-                PhIcon(Ph.magnifyingGlass.regular, size: 16)
+                PhIcon(Ph.magnifyingGlass, size: 16)
                     .foregroundStyle(Theme.Palette.secondaryText)
                 TextField(
                     "Filter",
@@ -228,7 +227,7 @@ private struct NewWorktreeCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
             HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
                 RadioDot(isSelected: isSelected)
-                PhIcon(Ph.gitFork.regular, size: 18)
+                PhIcon(Ph.gitFork, size: 18)
                     .foregroundStyle(Theme.Palette.violet)
                 Text("New worktree")
                     .font(.system(size: 16, weight: .semibold))
@@ -308,7 +307,7 @@ private struct BaseBranchPicker: View {
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(Theme.Palette.text)
                     .lineLimit(1)
-                PhIcon(Ph.caretUpDown.regular, size: 12)
+                PhIcon(Ph.caretUpDown, size: 12)
                     .foregroundStyle(Theme.Palette.secondaryText)
             }
             .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
@@ -351,7 +350,7 @@ private struct BranchOption: View {
                     .lineLimit(1)
                 Spacer(minLength: Theme.Spacing.loose)
                 if isSelected {
-                    PhIcon(Ph.check.bold, size: 12)
+                    PhIcon(Ph.checkBold, size: 12)
                 }
             }
             .padding(.horizontal, Theme.Spacing.normal)
@@ -377,7 +376,7 @@ private struct WorktreeChoiceRow: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
             RadioDot(isSelected: isSelected)
-            PhIcon(Ph.gitBranch.regular, size: 16)
+            PhIcon(Ph.gitBranch, size: 16)
                 .foregroundStyle(Theme.Palette.secondaryText)
             Text(NewSessionModel.label(of: worktree))
                 .font(.system(.body, design: .monospaced))

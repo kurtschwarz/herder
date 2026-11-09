@@ -34,6 +34,7 @@ rationale.
 | AppKit bridging | that feature's `Platform/`, or `DesignSystem/Platform/` if two features share it |
 | A view, modifier or shape used by two features | `DesignSystem/Views`, `/Modifiers`, `/Shapes` |
 | A design token | `DesignSystem/Theme.swift` |
+| An icon | its `.imageset` in `DesignSystem/Icons.xcassets` and a property on `Ph`. **Never add the PhosphorSwift package back** — its catalog of every icon was most of the app's size. `DesignSystem/Views/Ph.swift` says where to copy one from. |
 | A colour for a token kind | `DesignSystem/Theme.swift`, paired in `Features/Editor/Platform/SyntaxAttributes.swift` |
 | Anything that constructs a concrete service | `AppFeature` — nowhere else |
 | Something the app persists about itself | nothing new — add a field to a snapshot, decoded with `decodeIfPresent`, and put it through `StateStore`. No schema, no migration. |

@@ -1,5 +1,4 @@
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 /// The strip over the screen: a tab for each shell, a button for another, and
@@ -13,7 +12,7 @@ struct TerminalHeader: View {
             activeID: model.activeTab?.id,
             label: { tab in
                 TabBarLabel(
-                    icon: Ph.terminal.regular,
+                    icon: Ph.terminal,
                     title: tab.displayTitle,
                     isPinned: tab.isPinned,
                     attention: tab.screen.bellCount
@@ -28,7 +27,7 @@ struct TerminalHeader: View {
         ) { _ in
             EmptyView()
         } newTab: {
-            HoverIconButton(icon: Ph.plus.regular, help: "New Terminal Tab") {
+            HoverIconButton(icon: Ph.plus, help: "New Terminal Tab") {
                 Task { await model.openTab() }
             }
         } trailing: {
@@ -40,7 +39,7 @@ struct TerminalHeader: View {
                     .truncationMode(.head)
             }
 
-            HoverIconButton(icon: Ph.caretDown.regular, help: "Hide Terminal") {
+            HoverIconButton(icon: Ph.caretDown, help: "Hide Terminal") {
                 model.hide()
             }
         }

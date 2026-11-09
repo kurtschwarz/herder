@@ -1,7 +1,6 @@
 import AppKit
 import Core
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 struct RepositoryRow: View {
@@ -21,7 +20,7 @@ struct RepositoryRow: View {
             Button {
                 Task { await model.toggle(repository) }
             } label: {
-                PhIcon(Ph.caretDown.bold, size: 10)
+                PhIcon(Ph.caretDownBold, size: 10)
                     .foregroundStyle(Theme.Palette.secondaryText)
                     .rotationEffect(.degrees(model.isExpanded(repository) ? 0 : -90))
                     .animation(.easeOut(duration: 0.15), value: model.isExpanded(repository))
@@ -38,7 +37,7 @@ struct RepositoryRow: View {
             .opacity(isAvailable ? 1 : 0)
             .disabled(!isAvailable)
 
-            PhIcon(isAvailable ? Ph.folderSimple.duotone : Ph.warning.fill, size: 16)
+            PhIcon(isAvailable ? Ph.folderSimpleDuotone : Ph.warningFill, size: 16)
                 .foregroundStyle(isAvailable ? Theme.Palette.secondaryText : Theme.Palette.warning)
 
             if model.renaming == repository.id {
@@ -60,7 +59,7 @@ struct RepositoryRow: View {
             Spacer(minLength: 0)
 
             Button { model.beginNewSession(in: repository) } label: {
-                PhIcon(Ph.plus.regular, size: 12)
+                PhIcon(Ph.plus, size: 12)
             }
             .buttonStyle(.icon(size: 20))
             .pointerStyle(isAvailable ? .link : nil)

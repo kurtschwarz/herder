@@ -1,5 +1,4 @@
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 /// The bar across the top of the panes beside the sidebar, where searching
@@ -12,7 +11,7 @@ import SwiftUI
 struct CommandBar: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.normal) {
-            PhIcon(Ph.magnifyingGlass.regular, size: 16)
+            PhIcon(Ph.magnifyingGlass, size: 16)
                 .foregroundStyle(Theme.Palette.secondaryText)
 
             Text("Search files, run commands, jump to agents\u{2026}")

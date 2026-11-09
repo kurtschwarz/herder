@@ -162,8 +162,6 @@ let core: [SwiftSetting] = [
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
 ]
 
-let icons: Target.Dependency = .product(name: "PhosphorSwift", package: "swift")
-
 func feature(_ name: String, extraDeps: [Target.Dependency] = []) -> Target {
     .target(
         name: "\(name)Feature",
@@ -179,9 +177,6 @@ let package = Package(
     products: [
         // One product. The app target links the composition root and nothing else.
         .library(name: "AppFeature", targets: ["AppFeature"]),
-    ],
-    dependencies: [
-        .package(url: "https://github.com/phosphor-icons/swift", from: "2.1.0"),
     ],
     targets: [
         // Models, service protocols and app state. Nonisolated by default; the
@@ -202,14 +197,15 @@ let package = Package(
         // `Core` for the environment keys carrying Core's action types across
         // the App/feature boundary, which Core cannot declare itself because it
         // may not import SwiftUI. No design token knows about a workspace.
-        .target(name: "DesignSystem", dependencies: ["Core", icons], swiftSettings: ui),
+        .target(name: "DesignSystem", dependencies: ["Core"],
+                resources: [.process("Icons.xcassets")], swiftSettings: ui),
         .target(name: "TestSupport", dependencies: ["Core"], swiftSettings: core),
         .target(name: "TerminalUI", dependencies: ["Core", "DesignSystem"],
                 path: "Sources/Components/TerminalUI", swiftSettings: ui),
 
         feature("Editor"),
-        feature("FileTree", extraDeps: [icons]),
-        feature("Repositories", extraDeps: [icons]),
+        feature("FileTree"),
+        feature("Repositories"),
         feature("Terminal", extraDeps: ["TerminalUI"]),
         feature("AgentSessions", extraDeps: ["TerminalUI"]),
         feature("Search"),
@@ -533,6 +529,6 @@ just uitest    # the XCTest UI suite. Slow; launches the app.
 just check     # scripts/check-boundaries.sh
 ```
 
-`just test` goes through `xcodebuild test -scheme HerderKit-Package` rather than `swift test`, because PhosphorSwift ships its icons as an asset catalog without declaring it a resource, which only Xcode's build system bundles. `swift test` does not work here.
+`just test` goes through `xcodebuild test -scheme HerderKit-Package` rather than `swift test`, because DesignSystem's icons are an asset catalog, which only Xcode's build system compiles: SwiftPM copies it into the bundle as it is, and no image loads from it. `swift test` does not work here.
 
 `build`, `test` and `bootstrap` all depend on `syntax` and `ghostty` (the latter is skipped when the framework already came from the pinned commit), because a stale static library links without complaint: the app would highlight with yesterday's grammars and nothing would say so.

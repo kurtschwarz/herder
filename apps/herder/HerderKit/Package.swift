@@ -14,8 +14,6 @@ let core: [SwiftSetting] = [
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
 ]
 
-let icons: Target.Dependency = .product(name: "PhosphorSwift", package: "swift")
-
 let package = Package(
     name: "HerderKit",
     platforms: [.macOS(.v26)],
@@ -26,7 +24,6 @@ let package = Package(
         .library(name: "AppFeature", targets: ["AppFeature"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/phosphor-icons/swift", from: "2.1.0"),
         // 2.9 at least, the first to show Markdown release notes.
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.1"),
     ],
@@ -79,7 +76,16 @@ let package = Package(
         // action types across the App/feature boundary: `Core` cannot declare
         // them itself because it may not import SwiftUI. No design token knows
         // anything about a workspace.
-        .target(name: "DesignSystem", dependencies: ["Core", icons], swiftSettings: ui),
+        //
+        // Also the icons: the Phosphor ones the app draws, under the licence
+        // they came with.
+        .target(
+            name: "DesignSystem",
+            dependencies: ["Core"],
+            exclude: ["Icons.LICENSE"],
+            resources: [.process("Icons.xcassets")],
+            swiftSettings: ui
+        ),
 
         // The terminal view: the emulator, the renderer and the input, over a
         // `PTYSession` from Core. A component rather than a feature because the
@@ -99,14 +105,14 @@ let package = Package(
         // services are `AppFeature`'s business alone.
         .target(
             name: "RepositoriesFeature",
-            dependencies: ["Core", "DesignSystem", "TestSupport", icons],
+            dependencies: ["Core", "DesignSystem", "TestSupport"],
             path: "Sources/Features/Repositories",
             swiftSettings: ui
         ),
 
         .target(
             name: "FileTreeFeature",
-            dependencies: ["Core", "DesignSystem", "TestSupport", icons],
+            dependencies: ["Core", "DesignSystem", "TestSupport"],
             path: "Sources/Features/FileTree",
             swiftSettings: ui
         ),
@@ -120,21 +126,21 @@ let package = Package(
 
         .target(
             name: "TerminalFeature",
-            dependencies: ["Core", "DesignSystem", "TestSupport", "TerminalUI", icons],
+            dependencies: ["Core", "DesignSystem", "TestSupport", "TerminalUI"],
             path: "Sources/Features/Terminal",
             swiftSettings: ui
         ),
 
         .target(
             name: "AgentSessionsFeature",
-            dependencies: ["Core", "DesignSystem", "TestSupport", "TerminalUI", icons],
+            dependencies: ["Core", "DesignSystem", "TestSupport", "TerminalUI"],
             path: "Sources/Features/AgentSessions",
             swiftSettings: ui
         ),
 
         .target(
             name: "SettingsFeature",
-            dependencies: ["Core", "DesignSystem", "TestSupport", icons],
+            dependencies: ["Core", "DesignSystem", "TestSupport"],
             path: "Sources/Features/Settings",
             swiftSettings: ui
         ),

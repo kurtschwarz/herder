@@ -1,5 +1,4 @@
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 /// One entry in the settings sidebar, and the pane it shows.
@@ -19,8 +18,8 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     /// The glyph on the pane's tile, drawn white over ``tint``.
     var glyph: Image {
         switch self {
-        case .general: Ph.gearSix.fill
-        case .agents: Ph.sparkle.fill
+        case .general: Ph.gearSixFill
+        case .agents: Ph.sparkleFill
         }
     }
 

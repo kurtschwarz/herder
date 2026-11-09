@@ -1,6 +1,5 @@
 import Core
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 /// The open files, above the breadcrumb. A file's tab is not named here:
@@ -14,7 +13,7 @@ struct EditorTabBar: View {
             activeID: model.activeTab,
             label: { tab in
                 TabBarLabel(
-                    icon: Ph.file.regular,
+                    icon: Ph.file,
                     iconColor: Theme.Palette.fileIcon(forExtension: Self.ext(of: tab.name)),
                     title: tab.name,
                     // Two tabs called `index.ts` are the same tab otherwise.

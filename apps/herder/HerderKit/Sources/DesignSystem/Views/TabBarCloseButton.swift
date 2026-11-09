@@ -1,4 +1,3 @@
-import PhosphorSwift
 import SwiftUI
 
 /// A tab's ✕. Always visible, so there is no tab whose close button has to be
@@ -10,7 +9,7 @@ struct TabBarCloseButton: View {
 
     var body: some View {
         Button(action: action) {
-            PhIcon(Ph.x.bold, size: 10)
+            PhIcon(Ph.xBold, size: 10)
                 .foregroundStyle(isHovering ? Theme.Palette.text : Theme.Palette.tertiaryText)
                 .frame(width: Theme.Size.chevron, height: Theme.Size.chevron)
                 .background {

@@ -1,5 +1,5 @@
 {
-  "originHash" : "3ad4f7788bc121f79913f05fb34fb628aefad96b48ed732b50045713d07ecf9f",
+  "originHash" : "7c38811dd10ed95761edd20ebf1e8e3727d49aec2ef0ed5f1a52d4b995b48c69",
   "pins" : [
     {
       "identity" : "sparkle",
@@ -8,15 +8,6 @@
       "state" : {
         "revision" : "ab7d71291238df6e0492143b120c9b696a35f603",
         "version" : "2.10.1"
-      }
-    },
-    {
-      "identity" : "swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/phosphor-icons/swift",
-      "state" : {
-        "revision" : "9a9467181782bbe319ad4935d0993c77cd8a5fbc",
-        "version" : "2.1.0"
       }
     }
   ],

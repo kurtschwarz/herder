@@ -1,6 +1,5 @@
 import Core
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 import TestSupport
 
@@ -147,7 +146,7 @@ private struct Breadcrumb: View {
         HStack(spacing: Theme.Spacing.normal) {
             ForEach(Array(components.enumerated()), id: \.offset) { index, name in
                 if index > 0 {
-                    PhIcon(Ph.caretRight.bold, size: 10)
+                    PhIcon(Ph.caretRightBold, size: 10)
                         .foregroundStyle(Theme.Palette.tertiaryText)
                 }
                 let isFile = index == components.count - 1

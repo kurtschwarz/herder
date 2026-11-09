@@ -1,5 +1,4 @@
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 /// The add-repository modal, drawn over the whole window.
@@ -157,7 +156,7 @@ private struct RefusalMessage: View {
                 Text(message)
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
-                PhIcon(Ph.warning.fill, size: 14)
+                PhIcon(Ph.warningFill, size: 14)
             }
             .font(.callout)
             .foregroundStyle(Theme.Palette.warning)

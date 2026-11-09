@@ -1,7 +1,6 @@
 import AppKit
 import Core
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 import TestSupport
 
@@ -57,7 +56,7 @@ private struct RepositoriesHeader: View {
                 .foregroundStyle(Theme.Palette.text)
             Spacer(minLength: 0)
             Button(action: add) {
-                PhIcon(Ph.folderSimplePlus.regular, size: 18)
+                PhIcon(Ph.folderSimplePlus, size: 18)
             }
             .buttonStyle(.icon)
             .help("Add workspace")

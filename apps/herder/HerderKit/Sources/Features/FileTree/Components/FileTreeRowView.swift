@@ -1,7 +1,6 @@
 import AppKit
 import Core
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 /// One line of the tree: a folder that opens and closes, a file that selects, or
@@ -66,7 +65,7 @@ private struct EntryLine: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.normal) {
             if entry.isDirectory {
-                PhIcon(Ph.caretDown.bold, size: 10)
+                PhIcon(Ph.caretDownBold, size: 10)
                     .foregroundStyle(Theme.Palette.secondaryText)
                     .rotationEffect(.degrees(model.isExpanded(entry.url) ? 0 : -90))
                     .animation(.easeOut(duration: 0.15), value: model.isExpanded(entry.url))
@@ -75,7 +74,7 @@ private struct EntryLine: View {
                 Color.clear.frame(width: Theme.Size.treeIndent - Theme.Spacing.tight, height: 1)
             }
 
-            PhIcon(entry.isDirectory ? Ph.folderSimple.duotone : Ph.file.regular, size: 16)
+            PhIcon(entry.isDirectory ? Ph.folderSimpleDuotone : Ph.file, size: 16)
                 .foregroundStyle(iconColor)
 
             if model.renaming == entry.url {
@@ -193,7 +192,7 @@ private struct CreatingLine: View {
         HStack(spacing: Theme.Spacing.normal) {
             Color.clear.frame(width: Theme.Size.treeIndent - Theme.Spacing.tight, height: 1)
 
-            PhIcon(isDirectory ? Ph.folderSimple.duotone : Ph.file.regular, size: 16)
+            PhIcon(isDirectory ? Ph.folderSimpleDuotone : Ph.file, size: 16)
                 .foregroundStyle(isDirectory ? Theme.Palette.violet : Theme.Palette.tertiaryText)
 
             RenameField(name: "", isFolder: isDirectory, focus: focus) { name in

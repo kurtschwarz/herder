@@ -1,6 +1,5 @@
 import Core
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 /// The agents a session can be started with: the presets, which are fixed, and
@@ -76,7 +75,7 @@ private struct CustomAgentRow: View {
                 commandField("Session lookup (optional), lists the agent\u{2019}s sessions", text: optionalBinding(\.sessionLookup))
             }
 
-            HoverIconButton(icon: Ph.trash.regular, help: "Remove \(agent.displayName)") {
+            HoverIconButton(icon: Ph.trash, help: "Remove \(agent.displayName)") {
                 catalog.remove(agent.id)
             }
         }

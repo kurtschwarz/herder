@@ -1,6 +1,5 @@
 import Core
 import DesignSystem
-import PhosphorSwift
 import SwiftUI
 
 /// The strip over the screen: a tab for each open session, and a button for
@@ -12,7 +11,7 @@ struct AgentHeader: View {
         TabBar(
             tabs: model.tabs,
             activeID: model.activeTab?.id,
-            label: { TabBarLabel(icon: Ph.sparkle.regular, title: model.title(of: $0), isPinned: $0.isPinned) },
+            label: { TabBarLabel(icon: Ph.sparkle, title: model.title(of: $0), isPinned: $0.isPinned) },
             select: { model.select($0) },
             close: { model.close($0) },
             move: { model.move($0, to: $1) },
@@ -21,7 +20,7 @@ struct AgentHeader: View {
             openTab: startAnother
         ) {
             AgentStartMenu(catalog: model.catalog, start: { agent in Task { await model.startSession(agent) } }) {
-                HoverIconLabel(icon: Ph.plus.regular)
+                HoverIconLabel(icon: Ph.plus)
             }
             .disabled(model.workspace == nil)
         }
