@@ -137,6 +137,18 @@ private nonisolated struct Snapshot: Codable, Sendable, Equatable {
         #expect(files[0].hasSuffix(".json"))
     }
 
+    @Test func aRepositorysHistoryGoesUnderHistory() async throws {
+        let store = makeStore()
+        let key = SessionHistorySnapshot.persistenceKey(for: PathKey(canonical: "/code/api"))
+
+        try await store.save(SessionHistorySnapshot(), forKey: key)
+
+        let files = try FileManager.default.contentsOfDirectory(atPath: root.appending(path: "history").path)
+        #expect(files.count == 1)
+        #expect(files[0].hasPrefix("api-"))
+        #expect(try await store.load(SessionHistorySnapshot.self, forKey: key) == SessionHistorySnapshot())
+    }
+
     @Test func aWindowSnapshotGoesUnderWindows() async throws {
         let store = makeStore()
         let id = UUID()

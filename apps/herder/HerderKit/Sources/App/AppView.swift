@@ -136,6 +136,7 @@ private struct WindowView: View {
         // here, rather than reaching for a window they cannot see.
         .modifier(WindowActions(window: window, agents: environment.agents))
         .environment(window.agentPanel.openSessions)
+        .environment(environment.sessionHistory)
         // Switching workspaces is this, and only this: the id changed, so open
         // what it names. Nothing else is torn down.
         .task(id: window.activeWorkspaceID) { await window.showActiveWorkspace() }
@@ -279,6 +280,7 @@ private struct WindowActions: ViewModifier {
             .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
             .environment(\.startAgentSession, StartAgentSessionAction { window.startAgentSession(in: $0, agent: $1) })
             .environment(\.showAgentSession, ShowAgentSessionAction { window.showAgentSession($0) })
+            .environment(\.resumeAgentSession, ResumeAgentSessionAction { window.resumeAgentSession($0) })
             // What the sidebar offers when it starts a session.
             .environment(agents)
     }

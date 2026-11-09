@@ -16,6 +16,11 @@ struct RepositorySection: View {
     @Environment(\.openWorkspace) private var openWorkspace
 
     @Environment(OpenAgentSessions.self) private var openSessions: OpenAgentSessions?
+    @Environment(SessionHistory.self) private var history: SessionHistory?
+
+    private func historyKey(of worktrees: [GitWorktree]) -> PathKey {
+        SessionHistory.repositoryKey(for: worktrees, fallback: PathKey(repository.url))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -32,6 +37,15 @@ struct RepositorySection: View {
                             ) { openWorkspace(WorkspaceID(worktree.path)) }
 
                             WorktreeAgentSessions(workspace: WorkspaceID(worktree.path))
+                        }
+
+                        if let history {
+                            RepositoryHistory(
+                                ended: history.ended(in: historyKey(of: worktrees)),
+                                worktrees: worktrees
+                            )
+                            // Read when the repository is listed, once.
+                            .task(id: historyKey(of: worktrees)) { await history.load(historyKey(of: worktrees)) }
                         }
                     case .unreadable:
                         Text("Couldn't read worktrees")

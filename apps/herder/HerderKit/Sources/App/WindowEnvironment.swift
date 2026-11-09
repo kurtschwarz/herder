@@ -166,6 +166,13 @@ final class WindowEnvironment {
         activate(session.workspace)
     }
 
+    /// Picks a session from the history up again, in the worktree it ran in.
+    /// The panel is told first, for the same reason as above.
+    func resumeAgentSession(_ record: SessionHistoryRecord) {
+        agentPanel.requestResume(record)
+        activate(record.worktree)
+    }
+
     func startAgentSession(in id: WorkspaceID, agent: Agent?) {
         agentPanel.requestSession(in: id, agent: agent)
         activate(id)
