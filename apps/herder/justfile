@@ -13,7 +13,7 @@ crate := "../../packages/herder-syntax-highlighter"
 vendor := kit + "/Vendor"
 
 # libghostty-vt, which the terminal component links the same way.
-ghostty_pkg := "../../packages/ghostty-vt"
+ghostty_pkg := "../../packages/herder-ghostty-vt"
 
 # `platform=macOS` alone matches both arm64 and x86_64, which makes xcodebuild warn
 # that it picked one. Naming this machine's arch keeps the output clean.

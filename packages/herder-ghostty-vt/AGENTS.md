@@ -1,4 +1,4 @@
-# ghostty-vt
+# herder-ghostty-vt
 
 Builds libghostty-vt, the terminal-state half of Ghostty, into an XCFramework for
 `apps/herder`. It holds no Ghostty source: `GHOSTTY_COMMIT` is the one commit it

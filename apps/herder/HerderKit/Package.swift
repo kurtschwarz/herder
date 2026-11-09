@@ -63,7 +63,7 @@ let package = Package(
         .binaryTarget(name: "HerderSyntaxFFI", path: "Vendor/HerderSyntaxFFI.xcframework"),
 
         // libghostty-vt, the terminal emulation under `TerminalUI`. Built from
-        // the commit pinned in `packages/ghostty-vt` by `just ghostty`, and
+        // the commit pinned in `packages/herder-ghostty-vt` by `just ghostty`, and
         // like the one above a build artifact a fresh clone has to make first.
         // Its API is not stable, so only `TerminalUI` may import it.
         .binaryTarget(name: "GhosttyVt", path: "Vendor/GhosttyVt.xcframework"),

@@ -1,7 +1,7 @@
 set shell := ["zsh", "-cu"]
 
 # Recipes for the libghostty-vt build. Callable from here, or from the repo
-# root as `just <recipe> packages/ghostty-vt`.
+# root as `just <recipe> packages/herder-ghostty-vt`.
 #
 # This package holds no source: only the commit of Ghostty to build, in
 # GHOSTTY_COMMIT, and the recipe that builds it. Moving to a newer Ghostty is

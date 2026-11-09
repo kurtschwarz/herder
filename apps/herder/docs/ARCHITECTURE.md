@@ -7,7 +7,7 @@ This is the target architecture for Herder and the rulebook for anyone (human or
 - Swift 6 language mode, `swift-tools-version: 6.2`, macOS 26 and later
 - SwiftUI for the app shell and panels; AppKit (`NSTextView` with TextKit 2) for the editor surface
 - Rust for performance-sensitive work, starting with the syntax highlighter in `packages/herder-syntax-highlighter`. That package stays where it is and keeps its own build and binding setup.
-- Zig, only to build libghostty-vt (the terminal emulation under the terminal panel) from a pinned Ghostty commit: `packages/ghostty-vt`. Zig 0.17.x, `brew install zig`. We write no Zig.
+- Zig, only to build libghostty-vt (the terminal emulation under the terminal panel) from a pinned Ghostty commit: `packages/herder-ghostty-vt`. Zig 0.17.x, `brew install zig`. We write no Zig.
 - Distributed with Developer ID signing and notarization. No App Sandbox, because Herder spawns processes and opens arbitrary folders.
 
 ## Layers
@@ -128,8 +128,8 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   └── ...                              # other apps: not Herder's business
 │
 └── packages/
-    ├── herder-syntax-highlighter/ # Rust highlighter: stays here, owns its own build
-    ├── ghostty-vt/                      # a pinned Ghostty commit and the recipe that builds libghostty-vt
+    ├── herder-syntax-highlighter/       # Rust highlighter: stays here, owns its own build
+    ├── herder-ghostty-vt/               # a pinned Ghostty commit and the recipe that builds libghostty-vt
     ├── opencode-theme/                  # the `herder` opencode theme the agent panel asks for; `just install`
     ├── opencode-plugin-osc-7501/        # opencode plugin that reports session status with OSC 7501; `just install`
     └── ...                              # other shared packages
@@ -523,7 +523,7 @@ Run from `apps/herder/`.
 ```
 just bootstrap # syntax + ghostty + project. Needed once in a fresh clone, and needs Rust and Zig toolchains.
 just syntax    # runs packages/herder-syntax-highlighter's own build, then copies the XCFramework into Vendor/
-just ghostty   # builds libghostty-vt at the commit in packages/ghostty-vt/GHOSTTY_COMMIT (needs Zig 0.17.x), copies it into Vendor/
+just ghostty   # builds libghostty-vt at the commit in packages/herder-ghostty-vt/GHOSTTY_COMMIT (needs Zig 0.17.x), copies it into Vendor/
 just project   # xcodegen generate. Needed after changing Herder/ or UITests/, not HerderKit.
 just build     # project + syntax, then xcodebuild
 just test      # the Swift Testing suites, via xcodebuild

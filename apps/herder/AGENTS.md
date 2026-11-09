@@ -39,7 +39,7 @@ rationale.
 | Something the app persists about itself | nothing new — add a field to a snapshot, decoded with `decodeIfPresent`, and put it through `StateStore`. No schema, no migration. |
 | A key the app stores state under | a `static let persistenceKey` beside the snapshot. **Never rename one** — it is a file name on the user's disk, so a rename is a migration. |
 | Live state two features both read | `Core/Workspace/`, on the `Workspace`, not whichever feature needed it first |
-| A different libghostty-vt version | `../../packages/ghostty-vt/GHOSTTY_COMMIT`, then fix what `TerminalUI` breaks |
+| A different libghostty-vt version | `../../packages/herder-ghostty-vt/GHOSTTY_COMMIT`, then fix what `TerminalUI` breaks |
 | A language for the editor to highlight | `../../packages/herder-syntax-highlighter`, not here. See its `AGENTS.md`. |
 
 Organise by feature, not by type: a feature's view, model and subviews sit together.
