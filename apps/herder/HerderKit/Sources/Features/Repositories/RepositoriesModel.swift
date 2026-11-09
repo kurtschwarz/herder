@@ -58,6 +58,38 @@ public final class RepositoriesModel {
     /// The repositories this window lists, in its order.
     var repositories: [Repository] { list.repositories }
 
+    /// The ones the workspace selector has left on the sidebar.
+    var shownRepositories: [Repository] { list.shown }
+
+    func isShown(_ repository: Repository) -> Bool {
+        list.isShown(repository)
+    }
+
+    /// Whether unticking this one in the selector would do anything. The last
+    /// one showing stays, so the sidebar is never empty while it lists any.
+    func canHide(_ repository: Repository) -> Bool {
+        list.shown.map(\.id) != [repository.id]
+    }
+
+    func setShown(_ repository: Repository, _ isShown: Bool) {
+        list.setShown(repository, isShown)
+    }
+
+    func showAll() {
+        list.showAll()
+    }
+
+    /// What the selector's button says: the one name when one is showing.
+    var selectionTitle: String {
+        let shown = shownRepositories
+        switch shown.count {
+        case 0: return "Workspaces"
+        case 1: return shown[0].name
+        case repositories.count: return "All workspaces"
+        default: return "\(shown.count) workspaces"
+        }
+    }
+
     /// What the repository holding the worktree at `path` is called.
     ///
     /// For a pane that wants to say what it is showing: a worktree's own folder

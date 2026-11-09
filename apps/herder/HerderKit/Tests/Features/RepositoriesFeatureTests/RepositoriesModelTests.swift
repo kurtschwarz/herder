@@ -201,6 +201,40 @@ import Testing
         #expect(model.adding?.refusal == .notARepository)
     }
 
+    // MARK: - Workspace selector
+
+    @Test func theSelectorIsNamedAfterWhatIsShowing() async throws {
+        let api = try await addRepository("/code/api")
+        #expect(model.selectionTitle == "api")
+
+        _ = try await addRepository("/code/web")
+        #expect(model.selectionTitle == "All workspaces")
+
+        _ = try await addRepository("/code/infra")
+        model.setShown(api, false)
+        #expect(model.selectionTitle == "2 workspaces")
+    }
+
+    @Test func theLastOneShowingCannotBeUnticked() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+
+        model.setShown(api, false)
+
+        #expect(!model.canHide(web))
+        #expect(model.shownRepositories.map(\.name) == ["web"])
+    }
+
+    @Test func selectingAllShowsEveryRepository() async throws {
+        let api = try await addRepository("/code/api")
+        _ = try await addRepository("/code/web")
+        model.setShown(api, false)
+
+        model.showAll()
+
+        #expect(model.shownRepositories.map(\.name) == ["api", "web"])
+    }
+
     // MARK: - New session
 
     @Test func aNewSessionOpensForAnAvailableRepository() async throws {
