@@ -132,6 +132,37 @@ import Testing
         #expect(await session.waitForExit() == 129)
     }
 
+    /// Waits for `ready`, so the traps are set before the hang-up.
+    func spawnReady(_ script: String) async throws -> any PTYSession {
+        let session = try await spawn(["-c", "\(script); echo ready; while :; do sleep 0.05; done"])
+        var output = ""
+        for await chunk in session.output {
+            output += String(decoding: chunk, as: UTF8.self)
+            if output.contains("ready") { break }
+        }
+        return session
+    }
+
+    @Test func aProcessThatIgnoresTheHangUpIsTerminated() async throws {
+        let session = try await spawnReady("trap '' HUP")
+        session.terminate()
+        #expect(await session.waitForExit() == 143)
+    }
+
+    @Test func aProcessThatIgnoresTerminationIsKilled() async throws {
+        let session = try await spawnReady("trap '' HUP TERM")
+        session.terminate()
+        #expect(await session.waitForExit() == 137)
+    }
+
+    @Test func terminatingNowDoesNotWaitToAskHarder() async throws {
+        let session = try await spawnReady("trap '' HUP")
+        let start = ContinuousClock.now
+        session.terminateNow()
+        #expect(await session.waitForExit() == 143)
+        #expect(ContinuousClock.now - start < .seconds(1))
+    }
+
     @Test func aFailedStartIsAnError() async throws {
         await #expect(throws: PTYClientError.self) {
             _ = try await client.spawn(PTYSpec(

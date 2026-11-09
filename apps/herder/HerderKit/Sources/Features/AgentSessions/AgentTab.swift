@@ -208,4 +208,12 @@ final class AgentTab: Identifiable {
         process?.terminate()
         process = nil
     }
+
+    /// For the app quitting: see ``PTYSession/terminateNow()``.
+    func terminateNow() {
+        watching?.cancel()
+        watching = nil
+        process?.terminateNow()
+        process = nil
+    }
 }

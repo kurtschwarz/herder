@@ -68,6 +68,10 @@ public final class StubPTYSession: PTYSession {
         exit(with: 129)
     }
 
+    public func terminateNow() {
+        terminate()
+    }
+
     // MARK: What a test does and sees
 
     /// Everything written to the process, in order, as one string.

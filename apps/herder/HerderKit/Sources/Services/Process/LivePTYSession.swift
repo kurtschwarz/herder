@@ -95,16 +95,20 @@ final class LivePTYSession: PTYSession {
     }
 
     private func reap() {
-        var raw: Int32 = 0
-        while waitpid(pid, &raw, 0) < 0 && errno == EINTR {}
-        // The macros `WIFEXITED` and friends are not imported: this is what
-        // they expand to.
-        let signal = raw & 0x7f
-        let status = signal == 0 ? (raw >> 8) & 0xff : 128 + signal
-        let waiters = exit.withLock { state -> [CheckedContinuation<Int32, Never>] in
+        // Waits without reaping, then reaps under the lock `send` takes, so a
+        // signal is never sent to a pid that has been reaped and reused.
+        var info = siginfo_t()
+        while waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT) < 0 && errno == EINTR {}
+        let (status, waiters) = exit.withLock { state in
+            var raw: Int32 = 0
+            while waitpid(pid, &raw, 0) < 0 && errno == EINTR {}
+            // The macros `WIFEXITED` and friends are not imported: this is
+            // what they expand to.
+            let signal = raw & 0x7f
+            let status = signal == 0 ? (raw >> 8) & 0xff : 128 + signal
             state.status = status
             defer { state.waiters = [] }
-            return state.waiters
+            return (status, state.waiters)
         }
         for waiter in waiters { waiter.resume(returning: status) }
     }
@@ -168,9 +172,40 @@ final class LivePTYSession: PTYSession {
         }
     }
 
+    /// How long a process is given to go before it is asked harder.
+    static let grace: DispatchTimeInterval = .seconds(2)
+
+    /// A hang-up is not always enough: opencode ignores SIGHUP and, once
+    /// it is idle, does not notice its terminal going either, and was left
+    /// running with no window. So a process still here after ``grace`` is
+    /// sent SIGTERM, and SIGKILL after another.
     func terminate() {
-        if !hasExited { killpg(pid, SIGHUP) }
+        let wasRunning = send(SIGHUP)
         Self.stop(source, buffer)
+        guard wasRunning else { return }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Self.grace) { [self] in
+            guard send(SIGTERM) else { return }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Self.grace) { [self] in
+                send(SIGKILL)
+            }
+        }
+    }
+
+    func terminateNow() {
+        send(SIGHUP)
+        send(SIGTERM)
+        Self.stop(source, buffer)
+    }
+
+    /// Signals the process's group, unless the process has been reaped.
+    /// Whether it was sent.
+    @discardableResult
+    private func send(_ signal: Int32) -> Bool {
+        exit.withLock { state in
+            guard state.status == nil else { return false }
+            killpg(pid, signal)
+            return true
+        }
     }
 
     /// Cancels reading. A source paused for backpressure is let go as well,

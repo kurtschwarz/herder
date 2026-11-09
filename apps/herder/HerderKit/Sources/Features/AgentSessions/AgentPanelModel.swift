@@ -442,6 +442,12 @@ public final class AgentPanelModel {
         publish()
     }
 
+    /// Ends every session and keeps the tabs, which come back on the next
+    /// launch: the app is quitting.
+    public func terminateForQuit() {
+        for tab in tabsByWorkspace.values.joined() { tab.terminateNow() }
+    }
+
     // MARK: Telling the sidebar
 
     /// Looks at every session once a ``sampleInterval`` for as long as any is

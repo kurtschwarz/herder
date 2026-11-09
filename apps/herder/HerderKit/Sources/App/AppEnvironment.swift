@@ -277,7 +277,11 @@ public final class AppEnvironment {
     /// Synchronous because `willTerminate` is. Nothing here writes: the
     /// repository list is saved on every change, and workspace snapshots are
     /// saved as their UI state settles.
+    ///
+    /// Agents are ended here rather than left to the terminal closing with
+    /// the app, which some do not notice.
     public func stop() {
+        for window in openWindows.values { window.agentPanel.terminateForQuit() }
         worktrees.stop()
         repositories.access.endAll()
     }

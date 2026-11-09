@@ -29,7 +29,11 @@ public protocol PTYSession: AnyObject, Sendable {
     /// or 128 plus the signal that ended it.
     func waitForExit() async -> Int32
 
-    /// Hangs up on the terminal. Does not wait for the process to go: await
-    /// ``waitForExit()`` for that.
+    /// Hangs up on the terminal, then asks harder if the process stays. Does
+    /// not wait for the process to go: await ``waitForExit()`` for that.
     func terminate()
+
+    /// Hangs up and asks the process to end, both at once, for the app
+    /// quitting: nothing is left running afterwards to ask harder.
+    func terminateNow()
 }
