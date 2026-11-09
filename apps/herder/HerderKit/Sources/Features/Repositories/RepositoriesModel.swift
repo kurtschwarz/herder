@@ -5,15 +5,18 @@ import Observation
 /// Everything about the repository list that is not the list itself.
 ///
 /// The list itself comes from ``WindowRepositories``, which this never caches:
-/// the repositories this window lists, in its order, with its own fold state.
+/// the repositories this window lists, in its order, and which are on show.
 /// What this holds is derived or ephemeral: each repository's worktrees as last
-/// read, and which row is being renamed.
+/// read, and which one is being renamed.
+///
+/// The sidebar does not list repositories or worktrees as rows: it lists the
+/// sessions in those on show, each labelled with its worktree, and the
+/// repositories themselves are picked, named and removed in the workspace
+/// selector.
 ///
 /// **Not** which worktree is active. That is the window's, in `WindowEnvironment`,
 /// because two windows can show different checkouts and a model held once per
-/// app cannot answer for both. Rows learn whether they are the active one from
-/// the `Workspace` in the environment, and ask for a change through
-/// ``OpenWorkspaceAction``.
+/// app cannot answer for both.
 @Observable
 public final class RepositoriesModel {
     /// What reading a repository's worktrees came to. A failed read is its own
@@ -28,6 +31,14 @@ public final class RepositoriesModel {
     private let picker: any FolderPickerClient
 
     private(set) var listings: [UUID: Listing] = [:]
+
+    /// Where a repository's session history is kept, and the worktrees it has
+    /// now, which is how a session whose worktree has gone is known.
+    struct HistorySource: Equatable {
+        var name: String
+        var key: PathKey
+        var worktrees: Set<WorkspaceID>
+    }
 
     /// The repository whose name is being edited in place.
     var renaming: UUID?
@@ -151,20 +162,8 @@ public final class RepositoriesModel {
         return WorkspaceID(path)
     }
 
-    func isExpanded(_ repository: Repository) -> Bool {
-        // Read off the list, not off the copy the caller is holding: the list
-        // is the one place that knows, and it is what gets persisted.
-        repository.isAvailable && !list.isCollapsed(repository)
-    }
-
-    func toggle(_ repository: Repository) async {
-        // Showing becomes folding, and folding becomes showing.
-        list.setCollapsed(repository, isExpanded(repository))
-        await refresh(repository)
-    }
-
-    /// Re-reads the worktrees of every repository that is showing them. A
-    /// collapsed or unavailable repository costs nothing: nobody is looking.
+    /// Re-reads the worktrees of every repository given, which is the ones on
+    /// show. An unavailable one costs nothing: there is nothing to read.
     func refresh(_ repositories: [Repository]) async {
         for repository in repositories {
             await refresh(repository)
@@ -172,7 +171,7 @@ public final class RepositoriesModel {
     }
 
     func refresh(_ repository: Repository) async {
-        guard isExpanded(repository) else { return }
+        guard repository.isAvailable else { return }
         let id = repository.id
 
         do {
@@ -196,5 +195,37 @@ public final class RepositoriesModel {
     func remove(_ repository: Repository) {
         list.remove(repository)
         listings[repository.id] = nil
+    }
+
+    // MARK: - Sessions
+
+    /// What a session in each worktree of `repositories` is labelled with:
+    /// its branch, and its repository's name in front when there is more than
+    /// one to tell apart. A worktree not in here belongs to none of them.
+    func worktreeLabels(of repositories: [Repository]) -> [WorkspaceID: String] {
+        var labels: [WorkspaceID: String] = [:]
+        for repository in repositories {
+            guard case .loaded(let worktrees)? = listings[repository.id] else { continue }
+            for worktree in worktrees {
+                let branch = NewSessionModel.label(of: worktree)
+                labels[WorkspaceID(worktree.path)] = repositories.count > 1 ? "\(repository.name)/\(branch)" : branch
+            }
+        }
+        return labels
+    }
+
+    /// Where the history of each of `repositories` is kept, and the worktrees
+    /// it has now. One whose worktrees have not been read is keyed by its own
+    /// folder, which is its main working tree unless it is bare, and has no
+    /// worktree its sessions could be resumed in.
+    func historySources(of repositories: [Repository]) -> [HistorySource] {
+        repositories.filter(\.isAvailable).map { repository in
+            let worktrees = if case .loaded(let listed)? = listings[repository.id] { listed } else { [GitWorktree]() }
+            return HistorySource(
+                name: repository.name,
+                key: SessionHistory.repositoryKey(for: worktrees, fallback: PathKey(repository.url)),
+                worktrees: Set(worktrees.map { WorkspaceID($0.path) })
+            )
+        }
     }
 }

@@ -2,31 +2,64 @@ import Core
 import DesignSystem
 import SwiftUI
 
-/// What a repository's sessions that have ended look like under its
-/// worktrees: the latest few, by the day they ended, and how many there are
-/// in all.
-struct RepositoryHistory: View {
-    let ended: [SessionHistoryRecord]
+/// The sessions that have ended in every repository the workspace selector
+/// has on show, together: the latest few, by the day they ended, and how many
+/// there are in all.
+struct SessionHistorySection: View {
+    /// Where each shown repository's history is kept, and its worktrees now.
+    let sources: [RepositoriesModel.HistorySource]
 
-    /// The worktrees the repository has now, which is how a session whose
-    /// worktree has gone is known.
-    let worktrees: [GitWorktree]
+    @Environment(SessionHistory.self) private var history: SessionHistory?
+
+    private var keys: [PathKey] { sources.map(\.key) }
+
+    /// Every ended session in the shown repositories, latest end first, and
+    /// which repository each is from when there is more than one to tell
+    /// apart.
+    private var ended: (records: [SessionHistoryRecord], repositories: [UUID: String]) {
+        guard let history else { return ([], [:]) }
+        var records: [SessionHistoryRecord] = []
+        var repositories: [UUID: String] = [:]
+        var seen: Set<PathKey> = []
+        for source in sources where seen.insert(source.key).inserted {
+            for record in history.ended(in: source.key) {
+                records.append(record)
+                if sources.count > 1 { repositories[record.id] = source.name }
+            }
+        }
+        records.sort { ($0.endedAt ?? .distantPast) > ($1.endedAt ?? .distantPast) }
+        return (records, repositories)
+    }
+
+    /// The worktrees that are still there, across them all.
+    private var worktrees: Set<WorkspaceID> {
+        sources.reduce(into: []) { $0.formUnion($1.worktrees) }
+    }
 
     var body: some View {
-        let digest = SessionHistoryDigest(ended: ended)
-        // A stack even when empty, so what the section attaches to it, like
-        // reading the history, still runs while there is nothing to show.
+        let ended = ended
+        let digest = SessionHistoryDigest(ended: ended.records)
+        // A stack even when empty, so reading the history, attached to it,
+        // still runs while there is nothing to show.
         VStack(alignment: .leading, spacing: 0) {
             if !digest.isEmpty {
-                group("Today", digest.today)
-                group("Yesterday", digest.yesterday)
+                group("Today", digest.today, repositories: ended.repositories)
+                group("Yesterday", digest.yesterday, repositories: ended.repositories)
                 AllHistoryRow(count: digest.total)
             }
+        }
+        .task(id: keys) {
+            guard let history else { return }
+            for key in keys { await history.load(key) }
         }
     }
 
     @ViewBuilder
-    private func group(_ title: String, _ records: [SessionHistoryRecord]) -> some View {
+    private func group(
+        _ title: String,
+        _ records: [SessionHistoryRecord],
+        repositories: [UUID: String]
+    ) -> some View {
         if !records.isEmpty {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold))
@@ -34,7 +67,11 @@ struct RepositoryHistory: View {
                 .padding(.top, Theme.Spacing.normal)
                 .padding(.horizontal, Theme.Spacing.normal + 2)
             ForEach(records) { record in
-                HistoryRow(record: record, worktreeExists: worktrees.contains { WorkspaceID($0.path) == record.worktree })
+                HistoryRow(
+                    record: record,
+                    repository: repositories[record.id],
+                    worktreeExists: worktrees.contains(record.worktree)
+                )
             }
         }
     }
@@ -44,6 +81,10 @@ struct RepositoryHistory: View {
 /// long since it ended. Click to pick it up again.
 private struct HistoryRow: View {
     let record: SessionHistoryRecord
+
+    /// The repository it ran in, when more than one is on show.
+    let repository: String?
+
     let worktreeExists: Bool
 
     @Environment(AgentCatalog.self) private var catalog: AgentCatalog?
@@ -104,10 +145,14 @@ private struct HistoryRow: View {
         .help(reason ?? "Resume in \(record.agentName)")
     }
 
-    /// The branch it was on, and how long since it ended.
+    /// The repository when that needs saying, the branch it was on, and how
+    /// long since it ended.
     private var detail: String {
+        let branch = record.branch ?? record.worktree.root.name
         let age = record.endedAt.map { RelativeAge.short(from: $0) }
-        return [record.branch ?? record.worktree.root.name, age].compactMap { $0 }.joined(separator: " \u{00B7} ")
+        return [repository.map { "\($0)/\(branch)" } ?? branch, age]
+            .compactMap { $0 }
+            .joined(separator: " \u{00B7} ")
     }
 }
 

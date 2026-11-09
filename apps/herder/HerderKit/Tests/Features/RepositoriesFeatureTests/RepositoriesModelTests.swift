@@ -46,72 +46,24 @@ import Testing
         #expect(model.listings[repository.id] == .unreadable)
     }
 
-    @Test func anUnavailableRepositoryIsNeitherReadNorExpanded() async throws {
+    @Test func anUnavailableRepositoryIsNotRead() async throws {
         var repository = try await addRepository("/code/api")
         repository.isAvailable = false
 
         await model.refresh([repository])
 
         #expect(model.listings[repository.id] == nil)
-        #expect(!model.isExpanded(repository))
     }
 
-    @Test func workspacesStartExpanded() async throws {
+    /// Nothing folds any more, so a repository folded by an earlier build is
+    /// read like any other.
+    @Test func aRepositoryFoldedBeforeIsStillRead() async throws {
         let repository = try await addRepository("/code/api")
-        #expect(model.isExpanded(repository))
-    }
+        list.setCollapsed(repository, true)
 
-    @Test func aCollapsedRepositoryIsNotRead() async throws {
-        let repository = try await addRepository("/code/api")
-
-        await model.toggle(repository)
         await model.refresh([repository])
 
-        #expect(!model.isExpanded(repository))
-        #expect(model.listings[repository.id] == nil)
-    }
-
-    @Test func expandingAgainReadsTheWorktrees() async throws {
-        let repository = try await addRepository("/code/api")
-
-        await model.toggle(repository)
-        await model.toggle(repository)
-
-        #expect(model.isExpanded(repository))
         #expect(model.listings[repository.id] != nil)
-    }
-
-    /// Folding is the user's arrangement of this window, so it is in the
-    /// window's list and comes back with it rather than being redone every
-    /// launch.
-    @Test func collapsingSurvivesALaunch() async throws {
-        let repository = try await addRepository("/code/api")
-        await model.toggle(repository)
-
-        let relaunched = RepositoryStore(bookmarks: bookmarks, git: git, state: state)
-        await relaunched.load()
-        let next = RepositoriesModel(
-            repositories: WindowRepositories(store: relaunched, members: list.members),
-            git: git,
-            picker: picker
-        )
-
-        #expect(!next.isExpanded(try #require(relaunched.repositories.first)))
-    }
-
-    /// Folding in one window is not folding in another.
-    @Test func collapsingIsPerWindow() async throws {
-        let repository = try await addRepository("/code/api")
-        let other = RepositoriesModel(
-            repositories: WindowRepositories(store: store, members: [RepositoryMembership(repositoryID: repository.id)]),
-            git: git,
-            picker: picker
-        )
-
-        await model.toggle(repository)
-
-        #expect(!model.isExpanded(repository))
-        #expect(other.isExpanded(repository))
     }
 
     /// Removing takes it out of this window and nothing else: the record and
@@ -364,5 +316,80 @@ import Testing
         await model.commitRename(repository, to: "API")
 
         #expect(model.nameOfRepository(holding: URL(filePath: "/code/api")) == "API")
+    }
+
+    // MARK: Sessions
+
+    @Test func aSessionIsLabelledWithItsBranch() async throws {
+        let repository = try await addRepository("/code/api")
+        await model.refresh([repository])
+
+        #expect(model.worktreeLabels(of: [repository]) == [WorkspaceID(URL(filePath: "/code/api")): "main"])
+    }
+
+    /// Two repositories can each have a `main`, so with more than one on show
+    /// a label says whose.
+    @Test func withMoreThanOneOnShowALabelSaysWhichRepository() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        await model.refresh([api, web])
+
+        let labels = model.worktreeLabels(of: [api, web])
+
+        #expect(labels[WorkspaceID(URL(filePath: "/code/api"))] == "api/main")
+        #expect(labels[WorkspaceID(URL(filePath: "/code/web"))] == "web/main")
+    }
+
+    @Test func aRepositoryNotOnShowLabelsNothing() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        await model.refresh([api, web])
+
+        #expect(model.worktreeLabels(of: [api]).keys.map(\.root.name) == ["api"])
+    }
+
+    // MARK: History
+
+    @Test func theHistoryOfEveryRepositoryOnShowIsFound() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        await model.refresh([api, web])
+
+        let sources = model.historySources(of: [api, web])
+
+        #expect(sources.map(\.key) == [PathKey(URL(filePath: "/code/api")), PathKey(URL(filePath: "/code/web"))])
+        #expect(sources.first?.worktrees == [WorkspaceID(URL(filePath: "/code/api"))])
+    }
+
+    @Test func aLinkedWorktreesHistoryIsItsRepositorys() async throws {
+        let repository = try await addRepository("/code/api")
+        git.seed(worktrees: [
+            GitWorktree(path: URL(filePath: "/code/api-feature"), checkout: .branch("feature"), isMainWorkingTree: false),
+            GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
+        ], at: URL(filePath: "/code/api"))
+        await model.refresh([repository])
+
+        let source = try #require(model.historySources(of: [repository]).first)
+
+        #expect(source.key == PathKey(URL(filePath: "/code/api")))
+        #expect(source.worktrees.count == 2)
+    }
+
+    /// Before its worktrees are read, a repository's history is still found
+    /// under its own folder; nothing in it can be resumed yet.
+    @Test func aRepositoryNotYetReadIsKeyedByItsFolder() async throws {
+        let repository = try await addRepository("/code/api")
+
+        let source = try #require(model.historySources(of: [repository]).first)
+
+        #expect(source.key == PathKey(URL(filePath: "/code/api")))
+        #expect(source.worktrees.isEmpty)
+    }
+
+    @Test func anUnavailableRepositoryHasNoHistoryOnShow() async throws {
+        var repository = try await addRepository("/code/api")
+        repository.isAvailable = false
+
+        #expect(model.historySources(of: [repository]).isEmpty)
     }
 }

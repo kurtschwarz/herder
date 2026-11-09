@@ -4,8 +4,9 @@ import DesignSystem
 import SwiftUI
 import TestSupport
 
-/// The sidebar's repository list: a pinned header over a scrolling tree of
-/// repositories and their worktrees.
+/// The sidebar: the workspace selector pinned over the sessions open in the
+/// repositories it has on show, then the sessions that have ended in them.
+/// Repositories and worktrees are not rows: a session says where it runs.
 public struct RepositoriesView: View {
     private let model: RepositoriesModel
 
@@ -31,9 +32,8 @@ public struct RepositoriesView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(shown) { repository in
-                            RepositorySection(repository: repository, model: model)
-                        }
+                        OpenSessionsSection(model: model, repositories: shown)
+                        SessionHistorySection(sources: model.historySources(of: shown))
                     }
                     .padding(.horizontal, Theme.Spacing.tight)
                     .padding(.bottom, Theme.Spacing.loose)
