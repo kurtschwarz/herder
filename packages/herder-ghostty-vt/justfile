@@ -44,7 +44,12 @@ build:
     fi
 
     rm -rf {{ xcframework }}
-    (cd ${src} && zig build -Doptimize=ReleaseFast -Demit-lib-vt -Demit-xcframework=true)
+    # Ghostty's build asks git which tag it is at. The source is a tarball
+    # inside this repo, so git would answer with this repo's tag instead, and
+    # on a release commit that is `herder-v…`, which Ghostty panics over. The
+    # ceiling stops git looking above `target`, so Ghostty finds no repository
+    # and builds as a dev version, as it does from any tarball.
+    (cd ${src} && GIT_CEILING_DIRECTORIES=${PWD:h} zig build -Doptimize=ReleaseFast -Demit-lib-vt -Demit-xcframework=true)
     cp -R ${src}/zig-out/lib/ghostty-vt.xcframework {{ xcframework }}
 
     # Ghostty puts `module.modulemap` at the top of each slice's headers, and
