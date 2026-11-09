@@ -143,6 +143,9 @@ public struct TabBar<Tab: Identifiable, Menu: View, NewTab: View, Trailing: View
                 .onGeometryChange(for: CGFloat.self, of: \.size.width) { tabsWidth = $0 }
             }
             .scrollIndicators(.hidden)
+            // Tabs scrolled past an edge fade out rather than being cut off
+            // at the pane's border, where the corner rounds through them.
+            .mask { edgeFade }
             // The bar scrolls itself while a tab is held, at the edges.
             .scrollDisabled(drag != nil)
             .onGeometryChange(for: CGSize.self) { $0.size } action: { viewport = $0 }
@@ -162,6 +165,21 @@ public struct TabBar<Tab: Identifiable, Menu: View, NewTab: View, Trailing: View
             }
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var edgeFade: some View {
+        let width = Theme.Spacing.section
+        let hidesLeading = scrollX > 0.5
+        let hidesTrailing = scrollX + viewport.width < tabsWidth - 0.5
+        return HStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                .frame(width: hidesLeading ? width : 0)
+            Color.black
+            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: hidesTrailing ? width : 0)
+        }
+        .animation(.easeOut(duration: 0.15), value: hidesLeading)
+        .animation(.easeOut(duration: 0.15), value: hidesTrailing)
     }
 
     /// Empty space is a place to double-click for another tab, as it is in a
