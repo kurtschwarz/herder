@@ -336,12 +336,13 @@ public final class AgentPanelModel {
         // nobody found, so that one starts afresh.
         let resuming = tab.hasStarted && !tab.isMissingSessionID
         let line = tab.agent.commandLine(session: tab.sessionName, resuming: resuming)
-        let spec = ShellLaunch.command(
+        var spec = ShellLaunch.command(
             "exec \(line)",
             environment: environment(for: tab.agent),
             directory: workspace.id.url,
             size: PTYSize(columns: 100, rows: 30)
         )
+        spec.pidVariable = AgentMark.variable
         await tab.attach(using: pty, spec: spec)
     }
 

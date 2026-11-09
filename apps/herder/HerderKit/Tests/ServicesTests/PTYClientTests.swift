@@ -163,6 +163,19 @@ import Testing
         #expect(ContinuousClock.now - start < .seconds(1))
     }
 
+    @Test func thePidVariableIsTheProcesssOwnPid() async throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let session = try await client.spawn(PTYSpec(
+            executable: "/bin/sh", arguments: ["sh", "-c", "echo \"$MARK:$$\""],
+            environment: ["PATH": "/usr/bin:/bin"], workingDirectory: directory,
+            size: PTYSize(columns: 80, rows: 24), pidVariable: "MARK"
+        ))
+        let line = await everything(from: session).trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = line.split(separator: ":")
+        #expect(parts.count == 2)
+        #expect(parts.first == parts.last)
+    }
+
     @Test func aFailedStartIsAnError() async throws {
         await #expect(throws: PTYClientError.self) {
             _ = try await client.spawn(PTYSpec(
@@ -327,5 +340,19 @@ import Testing
     @Test func readsItsOwnArguments() throws {
         let own = try #require(ProcessArguments.of(getpid()))
         #expect(!own.isEmpty)
+    }
+
+    /// The kernel's strings after the empty one are not the environment.
+    @Test func readsTheEnvironmentUpToTheEmptyString() {
+        let bytes = layout(
+            argc: 2, path: "/bin/echo", padding: 3,
+            arguments: ["echo", "a=b"], environment: ["HOME=/Users/x", "EMPTY=", "", "executable_path=/bin/echo"]
+        )
+        #expect(ProcessArguments.parseEnvironment(bytes) == ["HOME": "/Users/x", "EMPTY": ""])
+    }
+
+    @Test func readsItsOwnEnvironment() throws {
+        let own = try #require(ProcessArguments.environment(of: getpid()))
+        #expect(own["PATH"] == ProcessInfo.processInfo.environment["PATH"])
     }
 }

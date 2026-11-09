@@ -19,14 +19,29 @@
 // `posix_spawn` with `POSIX_SPAWN_SETEXEC`, which replaces the child in place
 // and does the descriptors, the directory and the signals in one call. Between
 // the fork and that call the child makes system calls and nothing else, since
-// another thread of the parent may have held a lock when it forked.
+// another thread of the parent may have held a lock when it forked. Writing
+// its pid into `pid_slot` is plain stores into memory the parent allocated.
+static void write_pid(char *slot, size_t size, pid_t pid) {
+    char digits[16];
+    size_t count = 0;
+    do {
+        digits[count++] = (char)('0' + pid % 10);
+        pid /= 10;
+    } while (pid > 0 && count < sizeof digits);
+    if (count + 1 > size) return;
+    for (size_t i = 0; i < count; i++) slot[i] = digits[count - 1 - i];
+    slot[count] = '\0';
+}
+
 int herder_pty_spawn(
     pid_t *pid,
     const char *path,
     char *const argv[],
     char *const envp[],
     const char *directory,
-    int slave
+    int slave,
+    char *pid_slot,
+    size_t pid_slot_size
 ) {
     posix_spawn_file_actions_t actions;
     int error = posix_spawn_file_actions_init(&actions);
@@ -75,6 +90,7 @@ int herder_pty_spawn(
 
     pid_t child = fork();
     if (child == 0) {
+        if (pid_slot != NULL) write_pid(pid_slot, pid_slot_size, getpid());
         int status;
         // Cleared because a spawn that execs in place will not copy a
         // close-on-exec descriptor. CLOEXEC_DEFAULT still closes this one.

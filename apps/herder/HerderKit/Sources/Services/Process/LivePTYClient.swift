@@ -40,16 +40,28 @@ public struct LivePTYClient: PTYClient {
     }
 
     private static func start(_ spec: PTYSpec, slave: Int32) -> Result<pid_t, PTYClientError> {
+        var environment = spec.environment
+        // Room for any pid, which the child writes over the zeros.
+        let pidSlotSize = 16
+        if let name = spec.pidVariable {
+            environment[name] = String(repeating: "0", count: pidSlotSize - 1)
+        }
         let argv = spec.arguments.map { strdup($0) } + [nil]
-        let envp = spec.environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
+        let envp = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
         defer {
             argv.forEach { free($0) }
             envp.forEach { free($0) }
         }
+        let pidSlot = spec.pidVariable.flatMap { name -> UnsafeMutablePointer<CChar>? in
+            let prefix = "\(name)="
+            let entry = envp.lazy.compactMap { $0 }.first { String(cString: $0).hasPrefix(prefix) }
+            return entry.map { $0 + prefix.utf8.count }
+        }
 
         var pid: pid_t = 0
         let result = herder_pty_spawn(
-            &pid, spec.executable, argv, envp, spec.workingDirectory.path(percentEncoded: false), slave
+            &pid, spec.executable, argv, envp, spec.workingDirectory.path(percentEncoded: false), slave,
+            pidSlot, pidSlot == nil ? 0 : pidSlotSize
         )
         return result == 0 ? .success(pid) : .failure(.spawnFailed(result))
     }

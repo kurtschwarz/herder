@@ -69,6 +69,7 @@ public final class AppEnvironment {
     private let pty: any PTYClient
     private let commands: any CommandClient
     private let clock: any ClockClient
+    private let leftovers: (any LeftoverAgentClient)?
 
     /// The live app: every service is the real one.
     ///
@@ -112,7 +113,8 @@ public final class AppEnvironment {
             folderPicker: LiveFolderPickerClient(),
             watcher: LiveFileWatcherClient(),
             clock: LiveClockClient(),
-            persistence: persistence
+            persistence: persistence,
+            leftovers: LiveLeftoverAgentClient()
         )
     }
 
@@ -121,6 +123,9 @@ public final class AppEnvironment {
     ///
     /// `highlighter` is named here rather than defaulted inside the editor
     /// because this is the only module allowed to know a concrete service type.
+    ///
+    /// `leftovers` is `nil` unless asked for, so a test or a preview never
+    /// ends a real process the developer's own Herder left behind.
     public init(
         files: any FileClient,
         bookmarks: any BookmarkClient,
@@ -131,7 +136,8 @@ public final class AppEnvironment {
         persistence: PersistenceStack,
         highlighter: any SyntaxHighlighter = TreeSitterHighlighter(),
         pty: any PTYClient = LivePTYClient(),
-        commands: any CommandClient = LiveCommandClient()
+        commands: any CommandClient = LiveCommandClient(),
+        leftovers: (any LeftoverAgentClient)? = nil
     ) {
         self.persistence = persistence
         self.state = persistence.state
@@ -152,6 +158,7 @@ public final class AppEnvironment {
         self.pty = pty
         self.commands = commands
         self.clock = clock
+        self.leftovers = leftovers
     }
 
     /// A window's own state and the models behind its panes.
@@ -266,6 +273,9 @@ public final class AppEnvironment {
         // nothing waits on it, and a reader who opens a file before it finishes
         // simply gets the colour a moment later.
         Task.detached { await TreeSitterHighlighter.warmUp() }
+        // Agents a crash left running. Unawaited too: it waits two seconds
+        // for a stubborn one, and nothing here depends on it.
+        if let leftovers { Task { await leftovers.endLeftovers() } }
 
         await agents.load()
         await repositories.load()

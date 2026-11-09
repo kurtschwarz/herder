@@ -15,17 +15,23 @@ public struct PTYSpec: Sendable, Equatable {
     public var workingDirectory: URL
     public var size: PTYSize
 
+    /// A variable added to `environment`, set to the process's own pid, which
+    /// is not known until it has started. `nil` for none. See ``AgentMark``.
+    public var pidVariable: String?
+
     public init(
         executable: String,
         arguments: [String],
         environment: [String: String],
         workingDirectory: URL,
-        size: PTYSize
+        size: PTYSize,
+        pidVariable: String? = nil
     ) {
         self.executable = executable
         self.arguments = arguments
         self.environment = environment
         self.workingDirectory = workingDirectory
         self.size = size
+        self.pidVariable = pidVariable
     }
 }

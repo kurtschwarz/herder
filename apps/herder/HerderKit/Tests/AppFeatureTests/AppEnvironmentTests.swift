@@ -58,6 +58,25 @@ import Testing
         #expect(files.files.isEmpty)
     }
 
+    @Test func startingEndsLeftoverAgentsOnce() async throws {
+        let leftovers = StubLeftoverAgentClient()
+        let environment = AppEnvironment(
+            files: files,
+            bookmarks: bookmarks,
+            git: git,
+            folderPicker: StubFolderPickerClient(),
+            watcher: StubFileWatcherClient(),
+            clock: VirtualClockClient(),
+            persistence: persistence,
+            leftovers: leftovers
+        )
+        await environment.start()
+        await environment.start()
+        // Unawaited by `start`, so given a moment.
+        for _ in 0..<100 where leftovers.sweeps == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(leftovers.sweeps == 1)
+    }
+
     @Test func startsWithNoRepositories() async throws {
         await environment.start()
         #expect(environment.repositories.repositories.isEmpty)
