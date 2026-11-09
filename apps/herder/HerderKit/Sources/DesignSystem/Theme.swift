@@ -33,6 +33,12 @@ public enum Theme {
         public static let gripThickness: CGFloat = 4
         /// Header strip tall enough to clear the traffic lights.
         public static let titleBar: CGFloat = 48
+        /// The command bar over the panes beside the sidebar. A gap short of
+        /// the title bar, so the panes under it start where the sidebar's
+        /// header ends and their headers line up with its list.
+        public static var commandBar: CGFloat { titleBar - Spacing.paneGap }
+        /// The shortcut chip at the end of the command bar.
+        public static let keycap: CGFloat = 22
         public static let wolfMark = CGSize(width: 15, height: 19.5)
         /// Width of a centred modal card, measured off the add-workspace mockup.
         public static let modalWidth: CGFloat = 480

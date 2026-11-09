@@ -34,15 +34,12 @@ public struct EditorView: View {
     private var content: some View {
         if model.file != nil {
             VStack(spacing: 0) {
-                // The window's header strip, kept clear for the same reason
-                // the file tree keeps it clear — but here it is load-bearing
-                // rather than cosmetic. `WindowChrome` grows the title bar so
+                // Nothing goes higher than the pane's top, which is under the
+                // window's command bar. `WindowChrome` grows the title bar so
                 // the traffic lights can sit low, and AppKit backs the taller
-                // bar with a full-width view that swallows clicks. A tab drawn
+                // bar with a full-width view that swallows clicks: a tab drawn
                 // in that band is drawn but dead, which read as a tab you had
                 // to click three times.
-                Color.clear.frame(height: Theme.Size.titleBar)
-
                 EditorTabBar(model: model)
                 Breadcrumb(components: breadcrumb, isDeleted: model.isDeleted)
                 Rectangle().fill(Theme.Palette.hairline).frame(height: 1)

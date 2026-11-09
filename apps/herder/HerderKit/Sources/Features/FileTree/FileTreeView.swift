@@ -31,9 +31,9 @@ public struct FileTreeView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // The sidebar's header strip, so both titles sit on one line.
-            Color.clear.frame(height: Theme.Size.titleBar)
-
+            // At the pane's top, which is under the window's command bar and
+            // level with the end of the sidebar's header, so the two titles
+            // sit on one line.
             FileTreeHeader(canCollapse: model.canCollapse) { model.collapseAll() }
 
             if let root = model.root {

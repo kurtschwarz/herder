@@ -117,6 +117,68 @@ private struct WindowView: View {
                 onReset: { reset(.leading) }
             )
 
+            // The sidebar runs the window's height; the bar spans the rest.
+            VStack(spacing: Theme.Spacing.paneGap) {
+                CommandBar()
+                workspaceColumns(widths: widths)
+            }
+        }
+        // Read, not laid out by: a `GeometryReader` here would become the root
+        // of the layout and change how the panes size themselves.
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width - 2 * Theme.Spacing.paneGap
+        } action: {
+            availableWidth = $0
+        }
+        // Features read the workspace; they never ask which one is active.
+        .environment(window.activeWorkspace)
+        // And they ask for a different one, or for a session in one, through
+        // here, rather than reaching for a window they cannot see.
+        .modifier(WindowActions(window: window, agents: environment.agents))
+        .environment(window.agentPanel.openSessions)
+        // Switching workspaces is this, and only this: the id changed, so open
+        // what it names. Nothing else is torn down.
+        .task(id: window.activeWorkspaceID) { await window.showActiveWorkspace() }
+        // Tells the registry what this window is showing, which is what
+        // decides whether that workspace drains. Idempotent, so saying it
+        // again on every change is the whole protocol.
+        .onChange(of: window.activeWorkspaceID, initial: true) { _, id in
+            environment.worktrees.display(id, from: window)
+        }
+        .onDisappear {
+            environment.worktrees.stopDisplaying(from: window)
+        }
+        // A worktree removed in a terminal takes its window's selection with
+        // it, and the workspace with it: there is nothing left to keep open.
+        // The workspace marks itself unavailable when its folder goes, so this
+        // is the one place that has to notice.
+        .onChange(of: window.activeWorkspace?.isAvailable) { _, isAvailable in
+            guard isAvailable == false, let id = window.activeWorkspaceID else { return }
+            Task { await window.forget(id) }
+        }
+        .task(id: window.fileTree.selected) { await window.openSelectedFile() }
+        .onChange(of: window.editor.file) { _, _ in window.followShownFile() }
+        // The modal's scrim swallows clicks; this stops the keyboard reaching
+        // what it covers.
+        .disabled(window.repositoryList.isModalPresented)
+        .padding(Theme.Spacing.windowPadding)
+        // The window draws no title bar, but SwiftUI still reserves a safe area
+        // the height of one. Without this the panes start below the traffic
+        // lights instead of around them.
+        .ignoresSafeArea()
+        // After the safe area is ignored, so the scrim covers the whole window,
+        // title bar included.
+        .overlay { AddRepositoryOverlay(model: window.repositoryList) }
+        .overlay { NewSessionOverlay(model: window.repositoryList) }
+        // Where ⇧⌘N finds the window it should open the modal in.
+        .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
+        .modifier(TabCommandValues(editor: window.editor, terminal: window.terminal, agents: window.agentPanel))
+        .modifier(AgentCommandValues(agents: window.agentPanel))
+    }
+
+    /// The agent panel, the editor over the terminal, and the file tree.
+    private func workspaceColumns(widths: (leading: CGFloat, trailing: CGFloat)) -> some View {
+        HStack(spacing: 0) {
             AgentPanel(model: window.agentPanel)
                 .frame(width: agentWidth)
                 .glassPaneBackground()
@@ -175,57 +237,6 @@ private struct WindowView: View {
                 .frame(width: widths.trailing)
                 .glassPaneBackground()
         }
-        // Read, not laid out by: a `GeometryReader` here would become the root
-        // of the layout and change how the panes size themselves.
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.width - 2 * Theme.Spacing.paneGap
-        } action: {
-            availableWidth = $0
-        }
-        // Features read the workspace; they never ask which one is active.
-        .environment(window.activeWorkspace)
-        // And they ask for a different one, or for a session in one, through
-        // here, rather than reaching for a window they cannot see.
-        .modifier(WindowActions(window: window, agents: environment.agents))
-        .environment(window.agentPanel.openSessions)
-        // Switching workspaces is this, and only this: the id changed, so open
-        // what it names. Nothing else is torn down.
-        .task(id: window.activeWorkspaceID) { await window.showActiveWorkspace() }
-        // Tells the registry what this window is showing, which is what
-        // decides whether that workspace drains. Idempotent, so saying it
-        // again on every change is the whole protocol.
-        .onChange(of: window.activeWorkspaceID, initial: true) { _, id in
-            environment.worktrees.display(id, from: window)
-        }
-        .onDisappear {
-            environment.worktrees.stopDisplaying(from: window)
-        }
-        // A worktree removed in a terminal takes its window's selection with
-        // it, and the workspace with it: there is nothing left to keep open.
-        // The workspace marks itself unavailable when its folder goes, so this
-        // is the one place that has to notice.
-        .onChange(of: window.activeWorkspace?.isAvailable) { _, isAvailable in
-            guard isAvailable == false, let id = window.activeWorkspaceID else { return }
-            Task { await window.forget(id) }
-        }
-        .task(id: window.fileTree.selected) { await window.openSelectedFile() }
-        .onChange(of: window.editor.file) { _, _ in window.followShownFile() }
-        // The modal's scrim swallows clicks; this stops the keyboard reaching
-        // what it covers.
-        .disabled(window.repositoryList.isModalPresented)
-        .padding(Theme.Spacing.windowPadding)
-        // The window draws no title bar, but SwiftUI still reserves a safe area
-        // the height of one. Without this the panes start below the traffic
-        // lights instead of around them.
-        .ignoresSafeArea()
-        // After the safe area is ignored, so the scrim covers the whole window,
-        // title bar included.
-        .overlay { AddRepositoryOverlay(model: window.repositoryList) }
-        .overlay { NewSessionOverlay(model: window.repositoryList) }
-        // Where ⇧⌘N finds the window it should open the modal in.
-        .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
-        .modifier(TabCommandValues(editor: window.editor, terminal: window.terminal, agents: window.agentPanel))
-        .modifier(AgentCommandValues(agents: window.agentPanel))
     }
 
     private func resize(_ side: PaneWidths.Side, to proposed: CGFloat) {
