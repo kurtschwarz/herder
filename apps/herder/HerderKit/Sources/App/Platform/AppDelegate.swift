@@ -1,6 +1,7 @@
 import AppKit
 
-/// Asks before the app quits with unsaved edits.
+/// Asks before the app quits with unsaved edits, and offers to move a copy
+/// running from its disk image into Applications.
 ///
 /// SwiftUI has no spelling for this: the only hook is
 /// `applicationShouldTerminate`, which is also what makes a quit able to wait
@@ -9,6 +10,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Handed over by the app once it has built it, because the system makes
     /// this object, not the app.
     public var environment: AppEnvironment?
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
+        ApplicationMover.offerIfNeeded()
+    }
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let environment else { return .terminateNow }

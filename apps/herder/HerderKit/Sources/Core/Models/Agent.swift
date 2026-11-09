@@ -78,11 +78,11 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     ///
     /// opencode is told to use the `herder` theme, which leaves its background
     /// clear so the pane shows through, as Herder's own terminals do. The
-    /// theme is `packages/opencode-theme`, which `just install` there puts in
-    /// `~/.config/opencode/themes/`; without it opencode falls back to a theme
-    /// of its own. What it is doing reaches the sidebar through
-    /// `packages/opencode-plugin-osc-7501`, installed the same way; without
-    /// it the session reads as idle.
+    /// theme is `packages/opencode-theme`; without it opencode falls back to a
+    /// theme of its own. What it is doing reaches the sidebar through
+    /// `packages/opencode-plugin-osc-7501`; without it the session reads as
+    /// idle. The app carries both and links them into opencode's config
+    /// folder at launch: see ``OpencodeIntegration``.
     public static let presets: [Agent] = [
         Agent(
             id: "claude-code",

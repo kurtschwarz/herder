@@ -45,6 +45,27 @@ targets:
     platform: macOS
     sources:
       - path: Herder
+      # The opencode theme and plugin, under Resources/opencode in the same
+      # layout as opencode's config folder, which the app links them into.
+      # Only the plugin's code: its tests and docs stay in the repo.
+      - path: ../../packages/opencode-theme/herder.json
+        group: opencode
+        buildPhase:
+          copyFiles:
+            destination: resources
+            subpath: opencode/themes
+      - path: ../../packages/opencode-plugin-osc-7501/tui.ts
+        group: opencode
+        buildPhase:
+          copyFiles:
+            destination: resources
+            subpath: opencode/plugins/osc-7501
+      - path: ../../packages/opencode-plugin-osc-7501/status.ts
+        group: opencode
+        buildPhase:
+          copyFiles:
+            destination: resources
+            subpath: opencode/plugins/osc-7501
     dependencies:
       # One product. AppEnvironment in HerderKit builds the live services, so
       # this target has nothing concrete to link and nothing to inject.

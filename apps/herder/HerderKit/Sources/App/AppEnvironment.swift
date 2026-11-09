@@ -70,6 +70,11 @@ public final class AppEnvironment {
     private let commands: any CommandClient
     private let clock: any ClockClient
     private let leftovers: (any LeftoverAgentClient)?
+    private let opencode: (any OpencodeIntegrationClient)?
+
+    /// Where this copy of the app is running from. Nothing outside the
+    /// bundle is pointed at it until it is `.settled`.
+    let location: AppLocation
 
     /// The live app: every service is the real one.
     ///
@@ -106,6 +111,15 @@ public final class AppEnvironment {
             )
         }
 
+        let opencode = Bundle.main.resourceURL.map { resources in
+            LiveOpencodeIntegrationClient(
+                resources: resources.appending(path: "opencode", directoryHint: .isDirectory),
+                config: LiveOpencodeIntegrationClient.configDirectory(
+                    environment: ProcessInfo.processInfo.environment, home: .homeDirectory
+                )
+            )
+        }
+
         self.init(
             files: LiveFileClient(),
             bookmarks: LiveBookmarkClient(),
@@ -114,7 +128,8 @@ public final class AppEnvironment {
             watcher: LiveFileWatcherClient(),
             clock: LiveClockClient(),
             persistence: persistence,
-            leftovers: LiveLeftoverAgentClient()
+            leftovers: LiveLeftoverAgentClient(),
+            opencode: opencode
         )
     }
 
@@ -125,7 +140,10 @@ public final class AppEnvironment {
     /// because this is the only module allowed to know a concrete service type.
     ///
     /// `leftovers` is `nil` unless asked for, so a test or a preview never
-    /// ends a real process the developer's own Herder left behind.
+    /// ends a real process the developer's own Herder left behind. `opencode`
+    /// is `nil` for the same reason: a test must not link into the
+    /// developer's own opencode config. `bundle` is where the app is running
+    /// from, which decides whether `opencode` is asked at all.
     public init(
         files: any FileClient,
         bookmarks: any BookmarkClient,
@@ -137,7 +155,9 @@ public final class AppEnvironment {
         highlighter: any SyntaxHighlighter = TreeSitterHighlighter(),
         pty: any PTYClient = LivePTYClient(),
         commands: any CommandClient = LiveCommandClient(),
-        leftovers: (any LeftoverAgentClient)? = nil
+        leftovers: (any LeftoverAgentClient)? = nil,
+        opencode: (any OpencodeIntegrationClient)? = nil,
+        bundle: URL = Bundle.main.bundleURL
     ) {
         self.persistence = persistence
         self.state = persistence.state
@@ -159,6 +179,8 @@ public final class AppEnvironment {
         self.commands = commands
         self.clock = clock
         self.leftovers = leftovers
+        self.opencode = opencode
+        self.location = AppLocation(bundle: bundle)
     }
 
     /// A window's own state and the models behind its panes.
@@ -276,6 +298,10 @@ public final class AppEnvironment {
         // Agents a crash left running. Unawaited too: it waits two seconds
         // for a stubborn one, and nothing here depends on it.
         if let leftovers { Task { await leftovers.endLeftovers() } }
+        // The theme and plugin opencode needs, linked from the bundle. Not
+        // from a disk image or a translocated copy, whose links would dangle
+        // by the next launch: `AppDelegate` offers to move the app instead.
+        if let opencode, location == .settled { await opencode.install() }
 
         await agents.load()
         await repositories.load()

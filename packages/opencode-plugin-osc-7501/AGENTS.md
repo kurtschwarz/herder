@@ -5,9 +5,13 @@ doing, with the program status protocol (OSC 7501). It is how Herder's sidebar
 knows an opencode session is working or waiting: Herder reads nothing else.
 The protocol is at <https://www.superlogical.com/rex/docs/build/program-status>.
 
-`just install` links this folder into `~/.config/opencode/plugins/osc-7501`,
-where opencode finds plugins. A link, so an edit here reaches the next opencode
-started. It only reports when `TERM_PROGRAM` is `Herder`, which Herder sets for
+Herder's app bundle carries `tui.ts` and `status.ts` under
+`Contents/Resources/opencode/plugins/osc-7501`. At launch the app links that
+folder into `~/.config/opencode/plugins/osc-7501`, where opencode finds
+plugins. A file added here that the plugin needs has to be added to the
+app's `project.yml` too. `just install` links this folder there instead, so
+an edit here reaches the next opencode started. The app leaves a link it did
+not make alone. It only reports when `TERM_PROGRAM` is `Herder`, which Herder sets for
 everything it runs; the `always` option turns that check off.
 
 ## What it reports

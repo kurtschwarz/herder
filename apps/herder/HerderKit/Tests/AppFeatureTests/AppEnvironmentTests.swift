@@ -77,6 +77,34 @@ import Testing
         #expect(leftovers.sweeps == 1)
     }
 
+    private func environment(opencode: StubOpencodeIntegrationClient, bundle: String) -> AppEnvironment {
+        AppEnvironment(
+            files: files,
+            bookmarks: bookmarks,
+            git: git,
+            folderPicker: StubFolderPickerClient(),
+            watcher: StubFileWatcherClient(),
+            clock: VirtualClockClient(),
+            persistence: persistence,
+            opencode: opencode,
+            bundle: URL(filePath: bundle, directoryHint: .isDirectory)
+        )
+    }
+
+    @Test func startingFromApplicationsSetsUpOpencodeOnce() async {
+        let opencode = StubOpencodeIntegrationClient()
+        let environment = environment(opencode: opencode, bundle: "/Applications/Herder.app")
+        await environment.start()
+        await environment.start()
+        #expect(opencode.installs == 1)
+    }
+
+    @Test func startingFromTheDiskImageLeavesOpencodeAlone() async {
+        let opencode = StubOpencodeIntegrationClient()
+        await environment(opencode: opencode, bundle: "/Volumes/Herder/Herder.app").start()
+        #expect(opencode.installs == 0)
+    }
+
     @Test func startsWithNoRepositories() async throws {
         await environment.start()
         #expect(environment.repositories.repositories.isEmpty)

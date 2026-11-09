@@ -5,8 +5,10 @@ like the rest of the window. `herder.json` is the theme: opencode names a theme
 after its file, and the opencode preset in `apps/herder` asks for `herder` by
 setting `OPENCODE_CLI_CONFIG_CONTENT` for its sessions alone.
 
-`just install` links it into `~/.config/opencode/themes/`, where opencode looks
-for themes. A link, so an edit here reaches the next opencode started. Without
+Herder's app bundle carries it, and at launch the app links it into
+`~/.config/opencode/themes/`, where opencode looks for themes. `just install`
+links this file there instead, so an edit here reaches the next opencode
+started. The app leaves a link it did not make alone. Without
 it opencode falls back to a theme of its own, and nothing breaks.
 
 ## What it follows
