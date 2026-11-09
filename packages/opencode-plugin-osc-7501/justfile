@@ -1,0 +1,29 @@
+set shell := ["zsh", "-cu"]
+
+# Recipes for the opencode OSC 7501 plugin. Callable from here, or from the
+# repo root as `just <recipe> packages/opencode-plugin-osc-7501`.
+
+name := "osc-7501"
+plugins := env("XDG_CONFIG_HOME", env("HOME") + "/.config") + "/opencode/plugins"
+
+# Show available recipes
+default:
+    @just --list --unsorted
+
+# Link the plugin into opencode's plugins folder
+install: test
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    mkdir -p "{{ plugins }}"
+    ln -sfn "$PWD" "{{ plugins }}/{{ name }}"
+    print -r -- "Linked {{ plugins }}/{{ name }}"
+
+# Run the tests for what the plugin reports
+test:
+    node --test --experimental-strip-types --no-warnings status.test.ts
+
+# Remove the link install made
+clean:
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    if [[ -L "{{ plugins }}/{{ name }}" ]]; then rm "{{ plugins }}/{{ name }}"; fi
