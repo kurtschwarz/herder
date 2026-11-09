@@ -75,9 +75,8 @@ jobs:
           zig version
           rustup show active-toolchain
 
-      - name: Run tests
-        timeout-minutes: 25
-        run: just test apps/herder
+      # No tests here: the tag is on the release PR's merge commit, which Herder
+      # CI tested on the PR and tests again on the push to main.
 
       - name: Import Developer ID certificate
         env:
