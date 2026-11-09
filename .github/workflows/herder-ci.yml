@@ -2,12 +2,18 @@ name: Herder CI
 
 on:
   pull_request:
-    paths:
+    paths: &paths
       - apps/herder/**
       - packages/herder-ghostty-vt/**
       - packages/herder-syntax-highlighter/**
       - justfile
       - .github/workflows/herder-ci.yml
+  # Caches are scoped to the ref that saved them, and only main's are visible to
+  # pull requests and release tags. Without a run here every run starts cold.
+  push:
+    branches:
+      - main
+    paths: *paths
 
 concurrency:
   group: herder-ci-${{ github.ref }}
@@ -21,15 +27,39 @@ jobs:
     name: Test and build macOS app
     runs-on: macos-26
     timeout-minutes: 45
+    env:
+      ZIG_VERSION: 0.17.0
 
     steps:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
+      # Zig's own cache is only used when libghostty-vt misses below, and saving
+      # it costs ~180 MB of cache quota per run.
       - name: Set up Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.17.0
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      # Building libghostty-vt is ~5 minutes, and the recipe skips it when the
+      # stamp on disk names the pinned commit.
+      - name: Cache libghostty-vt
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            packages/herder-ghostty-vt/target/GhosttyVt.xcframework
+            packages/herder-ghostty-vt/target/built-commit
+          key: ghostty-vt-${{ runner.os }}-${{ runner.arch }}-zig-${{ env.ZIG_VERSION }}-${{ hashFiles('packages/herder-ghostty-vt/GHOSTTY_COMMIT', 'packages/herder-ghostty-vt/justfile') }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: packages/herder-syntax-highlighter -> target
+          # Otherwise the key names the job, and Herder Package's job is another.
+          shared-key: herder-syntax-highlighter
+          # Only main's cache is visible to other refs.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install tools
         run: brew install just xcodegen ripgrep
