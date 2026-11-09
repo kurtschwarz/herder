@@ -21,6 +21,10 @@ if [[ -n "${VERSION:-}" ]]; then
 fi
 
 # Signing happens below, so the build itself is unsigned.
+#
+# The scheme gathers coverage for its tests, and xcodebuild applies that to a
+# plain build too: without turning it off here, the shipped app is instrumented
+# and writes a default.profraw into whatever directory it runs from.
 xcodebuild \
     -project "$ROOT/Herder.xcodeproj" \
     -scheme Herder \
@@ -29,6 +33,8 @@ xcodebuild \
     -derivedDataPath "$DERIVED" \
     CODE_SIGNING_ALLOWED=NO \
     ONLY_ACTIVE_ARCH=YES \
+    ENABLE_CODE_COVERAGE=NO \
+    CLANG_COVERAGE_MAPPING=NO \
     ${settings[@]+"${settings[@]}"} \
     -quiet \
     build
