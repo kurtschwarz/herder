@@ -14,20 +14,24 @@ public struct RepositoriesView: View {
     /// longer knows what backs it.
     private var repositories: [Repository] { model.repositories }
 
+    /// The part of it the workspace selector has left on screen. Only these
+    /// are read: a hidden repository's worktrees are nobody's business.
+    private var shown: [Repository] { model.shownRepositories }
+
     public init(model: RepositoriesModel) {
         self.model = model
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            RepositoriesHeader { model.beginAdding() }
+            RepositoriesHeader(model: model)
 
             if repositories.isEmpty {
                 EmptyRepositories { model.beginAdding() }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(repositories) { repository in
+                        ForEach(shown) { repository in
                             RepositorySection(repository: repository, model: model)
                         }
                     }
@@ -39,23 +43,27 @@ public struct RepositoriesView: View {
         }
         // Worktrees are made and removed in a terminal, so coming back to the
         // app is the moment they may have changed.
-        .task(id: repositories.map(\.id)) { await model.refresh(repositories) }
+        .task(id: shown.map(\.id)) { await model.refresh(shown) }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            Task { await model.refresh(repositories) }
+            Task { await model.refresh(shown) }
         }
     }
 }
 
 private struct RepositoriesHeader: View {
-    let add: () -> Void
+    let model: RepositoriesModel
 
     var body: some View {
-        HStack {
-            Text("Workspaces")
-                .font(.headline)
-                .foregroundStyle(Theme.Palette.text)
-            Spacer(minLength: 0)
-            Button(action: add) {
+        HStack(spacing: Theme.Spacing.normal) {
+            if model.repositories.isEmpty {
+                Text("Workspaces")
+                    .font(.headline)
+                    .foregroundStyle(Theme.Palette.text)
+                Spacer(minLength: 0)
+            } else {
+                WorkspaceSelector(model: model)
+            }
+            Button { model.beginAdding() } label: {
                 PhIcon(Ph.folderSimplePlus, size: 18)
             }
             .buttonStyle(.icon)
@@ -64,9 +72,14 @@ private struct RepositoriesHeader: View {
             // pane inset: the plate is wider than the mark, so it overhangs.
             .padding(.trailing, -(Theme.Size.iconButton - Theme.Size.wolfMark.width) / 2)
         }
-        .padding(.horizontal, Theme.Spacing.paneInset)
-        // Matched by the file tree's header, so the two titles stay level.
-        .padding(.top, Theme.Spacing.normal + Theme.Spacing.tight)
+        // The selector is a plate of its own, so it sits off the pane's edge
+        // by the same gap the pane sits off the window's.
+        .padding(.leading, model.repositories.isEmpty ? Theme.Spacing.paneInset : Theme.Spacing.windowPadding)
+        .padding(.trailing, Theme.Spacing.paneInset)
+        // The plain title is matched by the file tree's header, so the two
+        // stay level. The selector is taller, and tucks up under the traffic
+        // lights instead.
+        .padding(.top, model.repositories.isEmpty ? Theme.Spacing.normal + Theme.Spacing.tight : 0)
         .padding(.bottom, Theme.Spacing.normal)
     }
 }

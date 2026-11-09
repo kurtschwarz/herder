@@ -15,17 +15,24 @@ public struct RepositoryMembership: Codable, Sendable, Equatable, Identifiable {
     /// added later — starts open.
     public var isCollapsed: Bool
 
+    /// Whether the sidebar's workspace selector has left this repository out.
+    /// Hidden rather than shown, for the same reason as ``isCollapsed``: one
+    /// added later starts on screen.
+    public var isHidden: Bool
+
     public var id: UUID { repositoryID }
 
-    public init(repositoryID: UUID, isCollapsed: Bool = false) {
+    public init(repositoryID: UUID, isCollapsed: Bool = false, isHidden: Bool = false) {
         self.repositoryID = repositoryID
         self.isCollapsed = isCollapsed
+        self.isHidden = isHidden
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         repositoryID = try container.decode(UUID.self, forKey: .repositoryID)
         isCollapsed = try container.decodeIfPresent(Bool.self, forKey: .isCollapsed) ?? false
+        isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
     }
 }
 
@@ -82,6 +89,26 @@ public final class WindowRepositories {
         members.first { $0.repositoryID == repository.id }?.isCollapsed ?? false
     }
 
+    /// The repositories the sidebar shows: the ones the selector has not left
+    /// out, in this window's order.
+    ///
+    /// Never empty while anything is listed. Hiding refuses to hide the last
+    /// one, but removing can take away the only one showing, and a sidebar
+    /// with workspaces and nothing on it would look like it had none.
+    public var shown: [Repository] {
+        let listed = repositories
+        let visible = listed.filter { !isHidden($0) }
+        return visible.isEmpty ? listed : visible
+    }
+
+    public func isShown(_ repository: Repository) -> Bool {
+        shown.contains { $0.id == repository.id }
+    }
+
+    private func isHidden(_ repository: Repository) -> Bool {
+        members.first { $0.repositoryID == repository.id }?.isHidden ?? false
+    }
+
     // MARK: - Changing
 
     /// Whether a folder could be added to this window, without adding it.
@@ -124,6 +151,35 @@ public final class WindowRepositories {
         guard let index = members.firstIndex(where: { $0.repositoryID == repository.id }) else { return }
         guard members[index].isCollapsed != isCollapsed else { return }
         members[index].isCollapsed = isCollapsed
+        onChange?()
+    }
+
+    /// Shows this repository in the sidebar, or leaves it out. Leaving out the
+    /// last one showing is refused: see ``shown``.
+    ///
+    /// Persisted, like folding, because it is the user's arrangement.
+    public func setShown(_ repository: Repository, _ isShown: Bool) {
+        guard let index = members.firstIndex(where: { $0.repositoryID == repository.id }) else { return }
+        if !isShown, shown.map(\.id) == [repository.id] { return }
+        // From what is on screen, not from the flags: while the fallback is
+        // showing everything, the flags say everything is hidden.
+        var next = Set(shown.map(\.id))
+        if isShown { next.insert(repository.id) } else { next.remove(repository.id) }
+        apply(shown: next)
+    }
+
+    /// Shows every repository this window lists.
+    public func showAll() {
+        apply(shown: Set(members.map(\.repositoryID)))
+    }
+
+    private func apply(shown ids: Set<UUID>) {
+        var updated = members
+        for index in updated.indices {
+            updated[index].isHidden = !ids.contains(updated[index].repositoryID)
+        }
+        guard updated != members else { return }
+        members = updated
         onChange?()
     }
 

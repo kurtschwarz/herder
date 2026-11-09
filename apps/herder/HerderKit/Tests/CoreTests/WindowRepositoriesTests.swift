@@ -183,6 +183,118 @@ import Testing
         #expect(!first.isCollapsed(added))
     }
 
+    // MARK: - Showing
+
+    @Test func everythingListedStartsShown() async throws {
+        for name in ["api", "web"] { try await first.add(url: repository("/code/\(name)")) }
+
+        #expect(first.shown.map(\.name) == ["api", "web"])
+    }
+
+    @Test func aHiddenRepositoryIsListedButNotShown() async throws {
+        let api = try await first.add(url: repository("/code/api"))
+        try await first.add(url: repository("/code/web"))
+
+        first.setShown(api, false)
+
+        #expect(names(first) == ["api", "web"])
+        #expect(first.shown.map(\.name) == ["web"])
+        #expect(!first.isShown(api))
+    }
+
+    /// A sidebar with workspaces and nothing on it would look like it had none.
+    @Test func theLastOneShowingCannotBeHidden() async throws {
+        let api = try await first.add(url: repository("/code/api"))
+        let web = try await first.add(url: repository("/code/web"))
+
+        first.setShown(api, false)
+        first.setShown(web, false)
+
+        #expect(first.shown.map(\.name) == ["web"])
+    }
+
+    @Test func removingTheOnlyOneShowingShowsTheRest() async throws {
+        let api = try await first.add(url: repository("/code/api"))
+        let web = try await first.add(url: repository("/code/web"))
+        first.setShown(api, false)
+
+        first.remove(web)
+
+        #expect(first.shown.map(\.name) == ["api"])
+    }
+
+    /// Ticking one while the fallback shows everything must not hide the rest.
+    @Test func showingOneWhileAllAreHiddenKeepsTheOthersShowing() async throws {
+        let api = try await first.add(url: repository("/code/api"))
+        let web = try await first.add(url: repository("/code/web"))
+        let infra = try await first.add(url: repository("/code/infra"))
+        first.setShown(api, false)
+        first.setShown(web, false)
+        first.remove(infra)
+
+        first.setShown(web, true)
+
+        #expect(first.shown.map(\.name) == ["api", "web"])
+    }
+
+    @Test func showingAllUndoesEveryHide() async throws {
+        let api = try await first.add(url: repository("/code/api"))
+        let web = try await first.add(url: repository("/code/web"))
+        try await first.add(url: repository("/code/infra"))
+        first.setShown(api, false)
+        first.setShown(web, false)
+
+        first.showAll()
+
+        #expect(first.shown.map(\.name) == ["api", "web", "infra"])
+    }
+
+    @Test func aRepositoryAddedLaterIsShown() async throws {
+        let api = try await first.add(url: repository("/code/api"))
+        try await first.add(url: repository("/code/web"))
+        first.setShown(api, false)
+
+        try await first.add(url: repository("/code/infra"))
+
+        #expect(first.shown.map(\.name) == ["web", "infra"])
+    }
+
+    @Test func showingIsPerWindow() async throws {
+        let url = repository("/code/api")
+        let api = try await first.add(url: url)
+        try await first.add(url: repository("/code/web"))
+        try await second.add(url: url)
+        try await second.add(url: repository("/code/web"))
+
+        first.setShown(api, false)
+
+        #expect(second.isShown(api))
+    }
+
+    @Test func aHiddenRepositoryStaysHiddenAcrossALaunch() async throws {
+        let api = try await first.add(url: repository("/code/api"))
+        try await first.add(url: repository("/code/web"))
+        first.setShown(api, false)
+
+        let restored = WindowRepositories(store: store, members: first.members)
+
+        #expect(restored.shown.map(\.name) == ["web"])
+    }
+
+    @Test func hidingIsReportedAndARefusedHideIsNot() async throws {
+        let api = try await first.add(url: repository("/code/api"))
+        let web = try await first.add(url: repository("/code/web"))
+        var changes = 0
+        first.onChange = { changes += 1 }
+
+        first.setShown(api, false)
+        first.setShown(web, false)
+        first.showAll()
+        first.showAll()
+
+        #expect(changes == 2)
+    }
+
     // MARK: - Reordering
 
     @Test func reorderingMovesOnlyThisWindow() async throws {
@@ -253,5 +365,12 @@ import Testing
             from: Data(#"{"repositoryID":"\#(id.uuidString)"}"#.utf8)
         )
         #expect(decoded == RepositoryMembership(repositoryID: id))
+        #expect(!decoded.isHidden)
+    }
+
+    @Test func aHiddenMembershipSurvivesARoundTrip() throws {
+        let member = RepositoryMembership(repositoryID: UUID(), isHidden: true)
+        let decoded = try JSONDecoder().decode(RepositoryMembership.self, from: try JSONEncoder().encode(member))
+        #expect(decoded == member)
     }
 }
