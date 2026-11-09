@@ -162,7 +162,7 @@ private struct Breadcrumb: View {
         }
         .frame(minHeight: Theme.Size.iconButton)
         .padding(.horizontal, Theme.Spacing.paneInset)
-        .padding(.vertical, Theme.Spacing.normal)
+        .padding(.top, Theme.Spacing.normal)
     }
 }
 
