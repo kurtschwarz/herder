@@ -66,6 +66,8 @@ private struct RepositoriesHeader: View {
             .padding(.trailing, -(Theme.Size.iconButton - Theme.Size.wolfMark.width) / 2)
         }
         .padding(.horizontal, Theme.Spacing.paneInset)
+        // Matched by the file tree's header, so the two titles stay level.
+        .padding(.top, Theme.Spacing.normal + Theme.Spacing.tight)
         .padding(.bottom, Theme.Spacing.normal)
     }
 }

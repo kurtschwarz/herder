@@ -121,6 +121,8 @@ private struct FileTreeHeader: View {
         // Holds the header's height when the button is absent.
         .frame(minHeight: Theme.Size.iconButton)
         .padding(.horizontal, Theme.Spacing.paneInset)
+        // Matched by the sidebar's header, so the two titles stay level.
+        .padding(.top, Theme.Spacing.normal + Theme.Spacing.tight)
         .padding(.bottom, Theme.Spacing.normal)
     }
 }
