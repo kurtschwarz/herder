@@ -1,0 +1,87 @@
+name: Herder Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # A GitHub App token is required: tags pushed with GITHUB_TOKEN do not trigger the release workflows.
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RELEASE_PLEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+
+      - name: Create releases
+        id: release-please
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
+
+      # release-please cuts draft releases, and a draft carries no Git tag. Push the
+      # tag here: it starts the release workflows, which attach their artifacts while
+      # the release is still a draft and publish it afterwards.
+      - name: Push release tags
+        if: steps.release-please.outputs.releases_created == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PATHS_RELEASED: ${{ steps.release-please.outputs.paths_released }}
+          RELEASE_OUTPUTS: ${{ toJSON(steps.release-please.outputs) }}
+        run: |
+          # Outputs for the root package are unprefixed; every other path is "<path>--<key>".
+          releases="$(
+            jq -nr --argjson outputs "$RELEASE_OUTPUTS" --argjson paths "$PATHS_RELEASED" '
+              $paths[]
+              | if . == "." then "" else "\(.)--" end
+              | "\($outputs["\(.)tag_name"]) \($outputs["\(.)sha"])"
+            '
+          )"
+
+          if [ -z "$releases" ]; then
+            printf 'release-please created releases but reported no paths\n' >&2
+            exit 1
+          fi
+
+          while read -r tag sha; do
+            if [ -z "$tag" ] || [ -z "$sha" ] || [ "$tag" = null ] || [ "$sha" = null ]; then
+              printf 'Release is missing a tag or a commit: %s %s\n' "$tag" "$sha" >&2
+              exit 1
+            fi
+
+            printf 'Tagging %s at %s\n' "$tag" "$sha"
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+              --method POST \
+              --field "ref=refs/tags/$tag" \
+              --field "sha=$sha" \
+              --silent
+          done <<EOF
+          $releases
+          EOF
+
+      # Kept out of the run above because release-please ignores draft releases when it
+      # looks for the last one: a release PR built in the same run as a release compares
+      # against nothing and proposes the whole history as the next version. The next push
+      # to main builds it instead, which is also the first point it has anything to say.
+      - name: Update release pull requests
+        if: steps.release-please.outputs.releases_created != 'true'
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-release: true

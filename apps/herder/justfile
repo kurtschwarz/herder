@@ -119,6 +119,11 @@ dev: build
     fi
     exit ${code}
 
+# Build a Release Herder.dmg in build/. Set VERSION to stamp it, and
+# CODESIGN_IDENTITY to sign it with a Developer ID instead of ad-hoc.
+package: project syntax ghostty
+    @scripts/package.sh
+
 # Run the XCTest UI suite (slow, launches the app)
 uitest: project
     @{{ xcodebuild }} -configuration Debug test
@@ -138,4 +143,5 @@ clean:
     rm -rf {{ kit }}/.build {{ vendor }} 2>/dev/null || true
     just --justfile {{ crate }}/justfile --working-directory {{ crate }} clean
     just --justfile {{ ghostty_pkg }}/justfile --working-directory {{ ghostty_pkg }} clean
+    rm -rf build
     {{ xcodebuild }} clean >/dev/null 2>&1 || true

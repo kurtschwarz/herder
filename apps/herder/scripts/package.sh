@@ -1,0 +1,69 @@
+#!/bin/bash
+# Builds a Release Herder.app and wraps it in a DMG. Run through `just package`,
+# which generates the project and builds the frameworks first.
+#
+# VERSION            sets the marketing version and, with the commit count, the build number.
+# CODESIGN_IDENTITY  signs with a Developer ID; unset, the app and DMG are ad-hoc signed.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BUILD="$ROOT/build"
+DERIVED="$BUILD/DerivedData"
+APP="$BUILD/Herder.app"
+DMG="$BUILD/Herder.dmg"
+STAGE="$BUILD/dmg"
+ENTITLEMENTS="$ROOT/Herder/Herder.entitlements"
+ARCH="$(uname -m)"
+
+settings=()
+if [[ -n "${VERSION:-}" ]]; then
+    settings+=("MARKETING_VERSION=$VERSION" "CURRENT_PROJECT_VERSION=$(git -C "$ROOT" rev-list --count HEAD)")
+fi
+
+# Signing happens below, so the build itself is unsigned.
+xcodebuild \
+    -project "$ROOT/Herder.xcodeproj" \
+    -scheme Herder \
+    -configuration Release \
+    -destination "platform=macOS,arch=$ARCH" \
+    -derivedDataPath "$DERIVED" \
+    CODE_SIGNING_ALLOWED=NO \
+    ONLY_ACTIVE_ARCH=YES \
+    ${settings[@]+"${settings[@]}"} \
+    -quiet \
+    build
+
+rm -rf "$APP"
+# ditto rather than cp, to keep the bundle intact.
+ditto "$DERIVED/Build/Products/Release/Herder.app" "$APP"
+
+if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+    codesign --force --deep --sign "$CODESIGN_IDENTITY" --timestamp --options runtime \
+        --entitlements "$ENTITLEMENTS" "$APP"
+else
+    codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "$APP"
+fi
+codesign --verify --deep --strict --verbose=2 "$APP"
+
+rm -rf "$STAGE"
+rm -f "$DMG"
+mkdir -p "$STAGE"
+ditto "$APP" "$STAGE/Herder.app"
+ln -s /Applications "$STAGE/Applications"
+
+hdiutil create \
+    -volname Herder \
+    -srcfolder "$STAGE" \
+    -fs HFS+ \
+    -format UDZO \
+    -ov \
+    "$DMG"
+
+rm -rf "$STAGE"
+
+if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+    codesign --force --sign "$CODESIGN_IDENTITY" --timestamp "$DMG"
+    codesign --verify --strict --verbose=2 "$DMG"
+fi
+
+printf 'Packaged %s\n' "$DMG"
