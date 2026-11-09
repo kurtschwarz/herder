@@ -52,12 +52,18 @@ final class TerminalEmulator {
     /// The program named itself (OSC 0 or 2). Empty when it cleared the name.
     var onTitle: ((String) -> Void)?
 
-    /// The program asked for a desktop notification (OSC 9 or 777), with its
-    /// title, which may be empty, and its body.
-    var onNotification: ((String, String) -> Void)?
+    /// What a program status report (OSC 7501) asks of the records kept for
+    /// it. The library checks and decodes the report, and keeps nothing.
+    enum ProgramStatusReport: Equatable {
+        /// Replace the record with this one's id.
+        case put(ProgramStatus)
+        /// Remove the record with this id and every record beneath it.
+        case clear(String)
+    }
 
-    /// The program started or stopped reporting progress (OSC 9;4).
-    var onProgress: ((Bool) -> Void)?
+    /// The program reported its status (OSC 7501). Also called with a clear of
+    /// everything on a full reset.
+    var onProgramStatus: ((ProgramStatusReport) -> Void)?
 
     // CONCURRENCY: C handles, which are not `Sendable`. They are made in `init`
     // and used only on the main actor; `nonisolated(unsafe)` is for `deinit`,
@@ -177,27 +183,18 @@ final class TerminalEmulator {
         }
         ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, unsafeBitCast(title, to: UnsafeRawPointer.self))
 
-        let notification: GhosttyTerminalDesktopNotificationFn = { _, userdata, notification in
-            guard let userdata, let notification else { return }
-            let title = TerminalEmulator.text(notification.pointee.title)
-            let body = TerminalEmulator.text(notification.pointee.body)
-            MainActor.assumeIsolated {
-                Unmanaged<TerminalEmulator>.fromOpaque(userdata).takeUnretainedValue().onNotification?(title, body)
-            }
-        }
-        ghostty_terminal_set(
-            terminal, GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, unsafeBitCast(notification, to: UnsafeRawPointer.self)
-        )
-
-        let progress: GhosttyTerminalProgressReportFn = { _, userdata, report in
+        // Installing it is also what makes the library answer a program that
+        // asks whether reports are understood (OSC 7501 ; ?), through
+        // `writePty` above.
+        let programStatus: GhosttyTerminalProgramStatusFn = { _, userdata, report in
             guard let userdata, let report else { return }
-            let isActive = report.pointee.state != GHOSTTY_TERMINAL_PROGRESS_STATE_REMOVE
+            let parsed = TerminalEmulator.programStatus(report.pointee)
             MainActor.assumeIsolated {
-                Unmanaged<TerminalEmulator>.fromOpaque(userdata).takeUnretainedValue().onProgress?(isActive)
+                Unmanaged<TerminalEmulator>.fromOpaque(userdata).takeUnretainedValue().onProgramStatus?(parsed)
             }
         }
         ghostty_terminal_set(
-            terminal, GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT, unsafeBitCast(progress, to: UnsafeRawPointer.self)
+            terminal, GHOSTTY_TERMINAL_OPT_PROGRAM_STATUS, unsafeBitCast(programStatus, to: UnsafeRawPointer.self)
         )
 
         let clipboard: GhosttyTerminalClipboardWriteFn = { _, userdata, write in
@@ -409,6 +406,47 @@ final class TerminalEmulator {
     private nonisolated static func text(_ string: GhosttyString) -> String {
         guard string.len > 0, let pointer = string.ptr else { return "" }
         return String(decoding: UnsafeBufferPointer(start: pointer, count: string.len), as: UTF8.self)
+    }
+
+    /// A report, copied out of the library's memory. Its text is shown
+    /// outside the terminal, so invisible formatting such as a direction
+    /// override is taken out of it.
+    private nonisolated static func programStatus(_ report: GhosttyTerminalProgramStatus) -> ProgramStatusReport {
+        let id = text(report.id)
+        let state: ProgramStatus.State
+        switch report.state {
+        case GHOSTTY_PROGRAM_STATUS_STATE_CLEAR: return .clear(id)
+        case GHOSTTY_PROGRAM_STATUS_STATE_WORKING: state = .working
+        case GHOSTTY_PROGRAM_STATUS_STATE_DONE: state = .done
+        case GHOSTTY_PROGRAM_STATUS_STATE_BLOCKED: state = .blocked
+        case GHOSTTY_PROGRAM_STATUS_STATE_ERROR: state = .error
+        default: state = .idle
+        }
+        let need: ProgramStatus.Need? = switch report.kind {
+        case GHOSTTY_PROGRAM_STATUS_KIND_PERMISSION: .permission
+        case GHOSTTY_PROGRAM_STATUS_KIND_QUESTION: .question
+        case GHOSTTY_PROGRAM_STATUS_KIND_AUTH: .auth
+        default: nil
+        }
+        return .put(ProgramStatus(
+            id: id,
+            state: state,
+            need: need,
+            progress: report.progress < 0 ? nil : Int(report.progress),
+            app: text(report.app),
+            title: visible(text(report.title)),
+            message: visible(text(report.message))
+        ))
+    }
+
+    /// Without format characters, but for the joiners, which emoji are made
+    /// with.
+    private nonisolated static func visible(_ text: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        scalars.append(contentsOf: text.unicodeScalars.filter {
+            $0.properties.generalCategory != .format || $0.value == 0x200C || $0.value == 0x200D
+        })
+        return String(scalars)
     }
 
     private func reportedWorkingDirectory() -> URL? {

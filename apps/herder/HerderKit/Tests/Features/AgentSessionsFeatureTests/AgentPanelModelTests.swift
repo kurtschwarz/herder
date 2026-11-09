@@ -308,18 +308,36 @@ import Testing
         withExtendedLifetime(model) {}
     }
 
-    @Test func aNotificationNeedsInputUntilSomethingIsTyped() async throws {
+    @Test func onlyAReportedStatusIsBelieved() async throws {
         let (model, workspace, _) = try await shown(sessions: 1)
 
-        pty.sessions[0].emit("\u{1b}]9;Claude needs your permission\u{07}")
+        // Output, a bell, a notification and progress say nothing.
+        pty.sessions[0].emit("thinking\u{07}\u{1b}]9;Claude needs your permission\u{07}\u{1b}]9;4;3\u{07}")
+        try await eventually("it is written") { model.activeTab?.screen?.outputCount ?? 0 > 0 }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(open.sessions(in: workspace.id).first?.state == .idle)
+
+        pty.sessions[0].emit("\u{1b}]7501;state=working\u{07}")
+        try await eventually("it works") { open.sessions(in: workspace.id).first?.state == .working }
+    }
+
+    @Test func aReportedStatusIsBelievedOverTheOutput() async throws {
+        let (model, workspace, _) = try await shown(sessions: 1)
+        let message = Data("Edit main.swift?".utf8).base64EncodedString()
+
+        pty.sessions[0].emit("\u{1b}]7501;state=blocked:kind=permission:msg=\(message)\u{07}")
         try await eventually("it asks") {
-            open.sessions(in: workspace.id).first?.state == .needsInput("Claude needs your permission")
+            open.sessions(in: workspace.id).first?.state == .needsInput("Edit main.swift?")
         }
 
+        // Typing does not answer it: only the program can say it has moved on.
         model.activeTab?.screen?.send(text: "y")
-        try await eventually("the answer clears it") {
-            open.sessions(in: workspace.id).first?.state != .needsInput("Claude needs your permission")
-        }
+        pty.sessions[0].emit("\u{1b}]7501;state=working\u{07}")
+        try await eventually("it works") { open.sessions(in: workspace.id).first?.state == .working }
+
+        // Idle while it redraws, because it says so.
+        pty.sessions[0].emit("\u{1b}]7501;state=idle\u{07}redrawn")
+        try await eventually("it rests") { open.sessions(in: workspace.id).first?.state == .idle }
     }
 
     @Test func aCrashIsListedWithItsStatus() async throws {

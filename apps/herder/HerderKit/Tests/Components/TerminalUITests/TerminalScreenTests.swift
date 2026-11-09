@@ -113,6 +113,71 @@ import Testing
         #expect(screen.emulator.scroll.isAtBottom)
     }
 
+    // MARK: Program status (OSC 7501)
+
+    func status(_ fields: String) -> String { "\u{1b}]7501;\(fields)\u{7}" }
+
+    func base64(_ text: String) -> String { Data(text.utf8).base64EncodedString() }
+
+    @Test func aProgramStatusIsKeptDecoded() async throws {
+        let (screen, session) = make()
+        session.emit(status("state=blocked:kind=permission:app=opencode:msg=\(base64("Edit main.swift?"))"))
+        try await eventually("the record") { !screen.programStatuses.isEmpty }
+        #expect(screen.programStatuses == [
+            ProgramStatus(state: .blocked, need: .permission, app: "opencode", message: "Edit main.swift?"),
+        ])
+    }
+
+    @Test func aReportReplacesItsRecordWhole() async throws {
+        let (screen, session) = make()
+        session.emit(status("state=working:app=opencode:msg=\(base64("Thinking"))"))
+        session.emit(status("state=idle"))
+        try await eventually("the second report") { screen.programStatuses.first?.state == .idle }
+        #expect(screen.programStatuses == [ProgramStatus(state: .idle)])
+    }
+
+    @Test func aRecordTakesItsAppFromAboveAndAClearTakesWhatIsBeneath() async throws {
+        let (screen, session) = make()
+        session.emit(status("state=working:app=deploy"))
+        session.emit(status("state=working:id=us-east"))
+        session.emit(status("state=working:id=us-east/db"))
+        session.emit(status("state=working:id=eu-west"))
+        try await eventually("every record") { screen.programStatuses.count == 4 }
+        #expect(screen.programStatuses.map(\.app) == ["deploy", "deploy", "deploy", "deploy"])
+
+        session.emit(status("state=clear:id=us-east"))
+        try await eventually("the clear") { screen.programStatuses.count == 2 }
+        #expect(screen.programStatuses.map(\.id) == ["", "eu-west"])
+
+        session.emit(status("state=clear"))
+        try await eventually("the clear of everything") { screen.programStatuses.isEmpty }
+    }
+
+    @Test func invisibleFormattingIsTakenOutOfAStatus() async throws {
+        let (screen, session) = make()
+        session.emit(status("state=blocked:msg=\(base64("Approve\u{202E}txt.exe"))"))
+        try await eventually("the record") { !screen.programStatuses.isEmpty }
+        #expect(screen.programStatuses.first?.message == "Approvetxt.exe")
+    }
+
+    @Test func aProgramThatAsksIsToldStatusIsUnderstood() async throws {
+        let (screen, session) = make()
+        _ = screen
+        session.emit(status("?"))
+        try await eventually("the reply") { session.input.hasPrefix("\u{1b}]7501;?") }
+    }
+
+    @Test func whatWasWorkingOrWaitingGoesWhenTheProgramEnds() async throws {
+        let (screen, session) = make()
+        session.emit(status("state=working:id=build"))
+        session.emit(status("state=blocked:id=deploy"))
+        session.emit(status("state=done:id=test"))
+        try await eventually("the records") { screen.programStatuses.count == 3 }
+        session.exit(with: 0)
+        try await eventually("the end") { screen.hasEnded }
+        #expect(screen.programStatuses.map(\.id) == ["test"])
+    }
+
     @Test func aShellsDirectoryIsKept() async throws {
         let (screen, session) = make()
         session.emit("\u{1b}]7;file://host/tmp/work\u{7}")

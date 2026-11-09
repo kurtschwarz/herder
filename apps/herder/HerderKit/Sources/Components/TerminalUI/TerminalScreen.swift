@@ -22,18 +22,30 @@ public final class TerminalScreen {
     /// What the program last called itself (OSC 0 or 2), if it ever has.
     public private(set) var title: String?
 
-    /// The last desktop notification the program asked for (OSC 9 or 777), and
-    /// how much had been typed when it did: a notification is news until the
-    /// person types something after it.
-    public private(set) var notification: (text: String, inputCount: Int)?
+    /// What the program says it is doing (OSC 7501), a record per id, the
+    /// one updated longest ago first. Empty when it has said nothing. A
+    /// record without an app has its nearest ancestor's.
+    public var programStatuses: [ProgramStatus] {
+        statusRecords.map { record in
+            guard record.app.isEmpty else { return record }
+            var resolved = record
+            var parent = record.id
+            while !parent.isEmpty, resolved.app.isEmpty {
+                parent = parent.lastIndex(of: "/").map { String(parent[..<$0]) } ?? ""
+                resolved.app = statusRecords.first { $0.id == parent }?.app ?? ""
+            }
+            return resolved
+        }
+    }
 
-    /// The program is reporting progress (OSC 9;4).
-    public private(set) var isReportingProgress = false
+    /// The most records kept. The spec asks for at least 64 and at most 256.
+    static let statusRecordLimit = 256
 
-    /// How many times the person has typed or pasted, and how many chunks of
-    /// output have arrived. Counts rather than times, so a watcher can tell
-    /// "something happened since I last looked" against whatever clock it has.
-    @ObservationIgnored public private(set) var inputCount = 0
+    private var statusRecords: [ProgramStatus] = []
+
+    /// How many chunks of output have arrived. A count rather than a time, so
+    /// a watcher can tell "something happened since I last looked" against
+    /// whatever clock it has.
     @ObservationIgnored public private(set) var outputCount = 0
 
     /// The process ended and its output has all been drawn.
@@ -70,12 +82,7 @@ public final class TerminalScreen {
         emulator.onBell = { [weak self] in self?.bellCount += 1 }
         emulator.onWorkingDirectory = { [weak self] in self?.reportedDirectory = $0 }
         emulator.onTitle = { [weak self] in self?.title = $0.isEmpty ? nil : $0 }
-        emulator.onNotification = { [weak self] title, body in
-            guard let self else { return }
-            let text = body.isEmpty ? title : body
-            notification = (text, inputCount)
-        }
-        emulator.onProgress = { [weak self] in self?.isReportingProgress = $0 }
+        emulator.onProgramStatus = { [weak self] in self?.record($0) }
         emulator.onClipboardWrite = { text in
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
@@ -127,7 +134,22 @@ public final class TerminalScreen {
 
     private func finish() {
         refresh()
+        // Nothing is working or waiting once the program is gone. What it
+        // finished, or failed at, is still news.
+        statusRecords.removeAll { $0.state == .working || $0.state == .blocked }
         hasEnded = true
+    }
+
+    /// A report replaces its record whole, so what it leaves out is gone.
+    private func record(_ report: TerminalEmulator.ProgramStatusReport) {
+        switch report {
+        case .put(let status):
+            statusRecords.removeAll { $0.id == status.id }
+            statusRecords.append(status)
+            if statusRecords.count > Self.statusRecordLimit { statusRecords.removeFirst() }
+        case .clear(let id):
+            statusRecords.removeAll { $0.isWithin(id) }
+        }
     }
 
     /// Prints a line of Herder's own after what the process wrote. Not sent to
@@ -141,7 +163,6 @@ public final class TerminalScreen {
 
     func send(_ data: Data) {
         guard !data.isEmpty else { return }
-        inputCount += 1
         // Typing goes to the bottom of the scrollback, as in every terminal.
         if !emulator.scroll.isAtBottom {
             emulator.scrollToBottom()

@@ -1,11 +1,10 @@
 import Foundation
 
 /// One agent session open in a window, as a list beside the agent panel
-/// shows it: what it is called, where it runs, and what it seems to be doing.
+/// shows it: what it is called, where it runs, and what it is doing.
 ///
-/// "Seems", because Herder does not talk to agents. What it knows is what any
-/// terminal knows: the title the program gave itself, whether it is writing,
-/// whether it asked for a notification since the person last typed, and
+/// Herder does not talk to agents. What it knows is what any terminal knows:
+/// the title the program gave itself, the status it reports (OSC 7501), and
 /// whether it has exited.
 public struct AgentSessionSummary: Sendable, Equatable, Identifiable {
     public enum State: Sendable, Equatable {
@@ -13,11 +12,11 @@ public struct AgentSessionSummary: Sendable, Equatable, Identifiable {
         /// when its tab is shown.
         case paused
         case starting
-        /// Writing to its terminal, or reporting progress.
+        /// Reported working.
         case working
-        /// Asked for attention, with what it said, and has not been answered.
+        /// Reported blocked on the person, with what it said.
         case needsInput(String?)
-        /// Quiet: waiting for the next prompt, as far as can be told.
+        /// Reported nothing that needs anyone, or nothing at all.
         case idle
         /// The terminal UI exited with this status.
         case exited(Int32)

@@ -61,22 +61,12 @@ final class AgentTab: Identifiable {
     private(set) var screen: TerminalScreen?
     private(set) var generation = 0
 
-    /// Whether it wrote anything in the last sample that typing did not
-    /// explain, or is reporting progress. See ``sample(now:)``.
-    private(set) var isWorking = false
-
     /// When it last wrote anything, or was opened.
     private(set) var lastActivity = Date()
 
     /// Whether the last sample saw output of any kind, typed or not.
     @ObservationIgnored private var wroteLastSample = false
     @ObservationIgnored private var seenOutput = 0
-    @ObservationIgnored private var seenInput = 0
-    @ObservationIgnored private var seenBells = 0
-
-    /// How much had been typed when it last rang the bell, as
-    /// ``TerminalScreen/notification`` keeps for a notification.
-    private var bellInputCount: Int?
 
     /// Told when the process exits, with how.
     @ObservationIgnored var onExit: ((AgentTab, Int32) -> Void)?
@@ -120,9 +110,6 @@ final class AgentTab: Identifiable {
             if startedAt == nil { startedAt = Date() }
             wroteLastSample = false
             seenOutput = 0
-            seenInput = 0
-            seenBells = 0
-            bellInputCount = nil
             lastActivity = Date()
             generation += 1
             phase = .running
@@ -144,42 +131,22 @@ final class AgentTab: Identifiable {
     // MARK: What it seems to be doing
 
     /// Looks at what the terminal did since the last look. Run about once a
-    /// second: output in that time is work, unless it was the echo of typing.
-    /// Says whether it just went quiet after writing anything, which is when
-    /// a turn has most likely ended. Anything, not only work: a short reply
-    /// lands in the same sample as the Enter that asked for it, and reads as
-    /// the echo of typing.
+    /// second. Says whether it just went quiet after writing anything, which
+    /// is when a turn has most likely ended.
     @discardableResult
     func sample(now: Date) -> Bool {
         guard let screen else { return false }
         let output = screen.outputCount
-        let input = screen.inputCount
         let wrote = output != seenOutput
-        let typed = input != seenInput
         seenOutput = output
-        seenInput = input
         if wrote { lastActivity = now }
-        if screen.bellCount != seenBells {
-            seenBells = screen.bellCount
-            bellInputCount = input
-        }
-        let working = screen.isReportingProgress || (wrote && !typed)
-        if isWorking != working { isWorking = working }
         let wentQuiet = wroteLastSample && !wrote
         wroteLastSample = wrote
         return wentQuiet
     }
 
-    /// A bell or a notification that nothing has been typed since.
-    private var attention: String?? {
-        guard let screen else { return nil }
-        if let notification = screen.notification, notification.inputCount == screen.inputCount {
-            return .some(notification.text.isEmpty ? nil : notification.text)
-        }
-        if bellInputCount == screen.inputCount { return .some(nil) }
-        return nil
-    }
-
+    /// While it runs, only what the program says it is doing (OSC 7501):
+    /// one that says nothing is idle, whatever it writes.
     var state: AgentSessionSummary.State {
         switch phase {
         case .waiting: return .paused
@@ -187,8 +154,11 @@ final class AgentTab: Identifiable {
         case .failed: return .failed
         case .exited(let code): return .exited(code)
         case .running:
-            if let attention { return .needsInput(attention) }
-            return isWorking ? .working : .idle
+            let reported = screen?.programStatuses ?? []
+            if let blocked = reported.last(where: { $0.state == .blocked }) {
+                return .needsInput(blocked.message.isEmpty ? nil : blocked.message)
+            }
+            return reported.contains { $0.state == .working } ? .working : .idle
         }
     }
 
