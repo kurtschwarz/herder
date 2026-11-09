@@ -239,6 +239,16 @@ public final class AgentSessions {
         }
     }
 
+    /// Takes an ended session out of the history, and its file. What was said
+    /// in it stays with its agent. One still open is left alone: its tab
+    /// would only write it down again.
+    public func delete(_ id: UUID) {
+        guard let key = repositoryOfSession[id], sessions[id]?.isEnded == true else { return }
+        sessions[id] = nil
+        repositoryOfSession[id] = nil
+        scheduleSave(key)
+    }
+
     /// Ends the open sessions in `workspace` that no tab is left for: Herder
     /// stopped before it wrote down that they were closed. Each is dated by
     /// the last time it was seen. Sessions seen since this launch began, or

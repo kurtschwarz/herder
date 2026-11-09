@@ -290,6 +290,35 @@ import TestSupport
         #expect(relaunched.session(open.id)?.endReason == .exited)
     }
 
+    @Test func aDeletedSessionIsGoneAfterARelaunch() async {
+        let sessions = makeSessions()
+        let deleted = session()
+        let kept = session()
+        await sessions.begin(deleted)
+        await sessions.begin(kept)
+        sessions.end(deleted.id, because: .closed, at: launch.addingTimeInterval(100))
+        sessions.end(kept.id, because: .closed, at: launch.addingTimeInterval(100))
+        await sessions.flushSaves()
+
+        sessions.delete(deleted.id)
+        await sessions.flushSaves()
+
+        #expect(sessions.session(deleted.id) == nil)
+        let relaunched = makeSessions(launchedAt: launch.addingTimeInterval(1000))
+        await relaunched.load(repository)
+        #expect(relaunched.recorded(in: repository).map(\.id) == [kept.id])
+    }
+
+    @Test func anOpenSessionIsNotDeleted() async {
+        let sessions = makeSessions()
+        let open = session()
+        await sessions.begin(open)
+
+        sessions.delete(open.id)
+
+        #expect(sessions.session(open.id) != nil)
+    }
+
     @Test func aSessionWrittenDownWhileTheFileIsReadingIsNotLost() async {
         let first = makeSessions()
         let old = session()

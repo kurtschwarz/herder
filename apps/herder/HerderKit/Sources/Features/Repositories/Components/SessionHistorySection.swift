@@ -71,14 +71,14 @@ struct SessionHistorySection: View {
                     record: record,
                     repository: repositories[record.id],
                     worktreeExists: worktrees.contains(record.worktree)
-                )
+                ) { history?.delete(record.id) }
             }
         }
     }
 }
 
 /// One ended session: what it was called, and under that where it ran and how
-/// long since it ended. Click to pick it up again.
+/// long since it ended. Click to pick it up again; right click to delete it.
 private struct HistoryRow: View {
     let record: AgentSession
 
@@ -86,6 +86,7 @@ private struct HistoryRow: View {
     let repository: String?
 
     let worktreeExists: Bool
+    let delete: () -> Void
 
     @Environment(AgentCatalog.self) private var catalog: AgentCatalog?
     @Environment(\.resumeAgentSession) private var resume
@@ -143,6 +144,9 @@ private struct HistoryRow: View {
         .onTapGesture { if reason == nil { resume(record) } }
         .pointerStyle(reason == nil ? .link : nil)
         .help(reason ?? "Resume in \(record.agentName)")
+        .contextMenu {
+            Button("Delete", role: .destructive, action: delete)
+        }
     }
 
     /// The repository when that needs saying, the branch it was on, and how
