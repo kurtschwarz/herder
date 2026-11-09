@@ -7,12 +7,12 @@ import AppKit
 /// the window does not, so a field being edited in place ends its edit with
 /// this instead.
 @MainActor
-public final class ClickMonitor {
+final class ClickMonitor {
     private var token: Any?
 
-    public init() {}
+    init() {}
 
-    public func start(onOutsideClick: @escaping () -> Void) {
+    func start(onOutsideClick: @escaping () -> Void) {
         stop()
         token = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
             MainActor.assumeIsolated {
@@ -29,7 +29,7 @@ public final class ClickMonitor {
         }
     }
 
-    public func stop() {
+    func stop() {
         if let token { NSEvent.removeMonitor(token) }
         token = nil
     }

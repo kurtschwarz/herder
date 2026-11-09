@@ -21,6 +21,8 @@ final class AgentPanelUIState: PersistedWorkspaceUIState {
         var number: Int
         /// What the person named the tab, if anything.
         var name: String?
+        /// `nil` rather than `false` for one that is not, which is most.
+        var pinned: Bool?
         /// The agent's own id for the session, once looked up.
         var session: String?
         var started: Date?

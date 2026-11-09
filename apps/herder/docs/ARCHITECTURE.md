@@ -512,6 +512,7 @@ shows it.
 - Views stay dumb: layout and bindings. Logic goes in the feature model, or in a small action type (`OpenFileAction`) when the model gets heavy.
 - **Observe models directly.** `@Observable` classes read straight from views, injected through `init` or `@Environment`. Reach for a separate ViewModel layer only when direct observation has actually failed.
 - **Reference `Theme` instead of literals** for spacing, colour, radius and size.
+- **Every strip of tabs is `DesignSystem`'s `TabBar`**, so the editor, the terminal panel and the agent panel look and behave alike: pinning, dragging to reorder, the close button and the unsaved dot. A pane passes its tabs, a `TabBarLabel` for each, and what it does differently (naming, a new-tab control, items on the right). The order rules, pinned tabs first and a move kept to its own side of them, are `Core`'s `TabOrder`, which each model calls; the drag is `TabDragState`. A tab that is pinned or named somewhere tabs come back after a relaunch is remembered with it.
 - No singletons.
 
 ## Commands

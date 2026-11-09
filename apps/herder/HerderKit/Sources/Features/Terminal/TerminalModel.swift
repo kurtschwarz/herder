@@ -200,16 +200,25 @@ public final class TerminalModel {
     /// order they were pinned; the rest keep their order behind them. The tab
     /// showing stays the one showing.
     func togglePin(_ tab: TerminalTab) {
-        guard let id = tabsByWorkspace.first(where: { $0.value.contains { $0.id == tab.id } })?.key else { return }
-        var tabs = tabsByWorkspace[id] ?? []
-        guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
-        tabs.remove(at: index)
-        let pinnedCount = tabs.prefix { $0.isPinned }.count
-        // Pinning goes to the end of the pinned run; unpinning to the start of
-        // the rest, which is where it was most likely taken from.
+        guard let id = workspace(holding: tab), var tabs = tabsByWorkspace[id],
+              let index = tabs.firstIndex(where: { $0.id == tab.id })
+        else { return }
         tab.setPinned(!tab.isPinned)
-        tabs.insert(tab, at: pinnedCount)
+        TabOrder.repin(&tabs, at: index, isPinned: \.isPinned)
         tabsByWorkspace[id] = tabs
+    }
+
+    /// Puts a tab at `index`, on its own side of the pinned tabs. The tab
+    /// showing stays the one showing.
+    func move(_ tab: TerminalTab, to index: Int) {
+        guard let id = workspace(holding: tab), var tabs = tabsByWorkspace[id],
+              let from = tabs.firstIndex(where: { $0.id == tab.id })
+        else { return }
+        if TabOrder.move(&tabs, from: from, to: index, isPinned: \.isPinned) { tabsByWorkspace[id] = tabs }
+    }
+
+    private func workspace(holding tab: TerminalTab) -> WorkspaceID? {
+        tabsByWorkspace.first { $0.value.contains { $0.id == tab.id } }?.key
     }
 
     public func selectNextTab() { cycle(by: 1) }
@@ -253,7 +262,7 @@ public final class TerminalModel {
     /// Ends a shell and takes its tab away. The one beside it comes forward,
     /// and the panel goes when it was the last.
     func close(_ tab: TerminalTab) {
-        guard let id = tabsByWorkspace.first(where: { $0.value.contains { $0.id == tab.id } })?.key else { return }
+        guard let id = workspace(holding: tab) else { return }
         tab.terminate()
         remove(tab, from: id)
     }

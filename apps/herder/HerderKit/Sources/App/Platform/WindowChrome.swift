@@ -138,9 +138,17 @@ struct WindowChrome: NSViewRepresentable {
     }
 
     /// Whether the click lands on a view that answers a double-click itself.
+    /// By where they are rather than by hit testing: some only mark a SwiftUI
+    /// view in front of them, and take no clicks of their own.
     private static func isHandled(_ event: NSEvent, in window: NSWindow) -> Bool {
-        guard let content = window.contentView, let frame = content.superview else { return false }
-        return content.hitTest(frame.convert(event.locationInWindow, from: nil)) is HandlesDoubleClick
+        guard let content = window.contentView else { return false }
+        return claims(event.locationInWindow, in: content)
+    }
+
+    private static func claims(_ point: NSPoint, in view: NSView) -> Bool {
+        guard !view.isHidden else { return false }
+        if view is HandlesDoubleClick, view.convert(view.bounds, to: nil).contains(point) { return true }
+        return view.subviews.contains { claims(point, in: $0) }
     }
 
     /// Height of the strip along the window's top edge that acts as the title bar.

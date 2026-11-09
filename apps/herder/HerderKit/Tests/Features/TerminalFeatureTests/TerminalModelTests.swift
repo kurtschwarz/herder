@@ -224,6 +224,29 @@ import Testing
         #expect(model.tabs.count == 1)
     }
 
+    // MARK: Moving a tab
+
+    @Test func aTabMovesWhereItIsPut() async throws {
+        let (model, _, _) = try await shown(tabs: 3)
+        let ids = model.tabs.map(\.id)
+        let active = model.activeTab?.id
+
+        model.move(model.tabs[0], to: 2)
+
+        #expect(model.tabs.map(\.id) == [ids[1], ids[2], ids[0]])
+        #expect(model.activeTab?.id == active)
+    }
+
+    @Test func aMoveStaysOnItsSideOfThePinnedTabs() async throws {
+        let (model, _, _) = try await shown(tabs: 3)
+        model.togglePin(model.tabs[0])
+        let ids = model.tabs.map(\.id)
+
+        model.move(model.tabs[2], to: 0)
+
+        #expect(model.tabs.map(\.id) == [ids[0], ids[2], ids[1]])
+    }
+
     // MARK: Naming a tab
 
     @Test func aNameReplacesWhatIsRunningInTheTitle() async throws {

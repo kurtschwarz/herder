@@ -26,6 +26,9 @@ final class EditorUIState: PersistedWorkspaceUIState {
     /// Which of ``files`` was showing.
     var active: PathKey?
 
+    /// Which of ``files`` are pinned. They are the first of them.
+    var pinned: [PathKey] = []
+
     init() {}
 
     /// A struct rather than a bare path, so more than one file can arrive as a
@@ -36,10 +39,12 @@ final class EditorUIState: PersistedWorkspaceUIState {
         var file: String?
         var files: [String]?
         var active: String?
+        var pinned: [String]?
 
-        init(files: [String], active: String?) {
+        init(files: [String], active: String?, pinned: [String]) {
             self.files = files
             self.active = active
+            self.pinned = pinned.isEmpty ? nil : pinned
         }
 
         init(from decoder: any Decoder) throws {
@@ -47,6 +52,7 @@ final class EditorUIState: PersistedWorkspaceUIState {
             file = try container.decodeIfPresent(String.self, forKey: .file)
             files = try container.decodeIfPresent([String].self, forKey: .files)
             active = try container.decodeIfPresent(String.self, forKey: .active)
+            pinned = try container.decodeIfPresent([String].self, forKey: .pinned)
         }
     }
 
@@ -54,7 +60,7 @@ final class EditorUIState: PersistedWorkspaceUIState {
     /// is not `Codable`. Canonical when written, so they come back through
     /// `init(canonical:)`.
     func encode() throws -> Data {
-        try JSONEncoder().encode(Stored(files: files.map(\.path), active: active?.path))
+        try JSONEncoder().encode(Stored(files: files.map(\.path), active: active?.path, pinned: pinned.map(\.path)))
     }
 
     func restore(from data: Data) throws {
@@ -62,6 +68,7 @@ final class EditorUIState: PersistedWorkspaceUIState {
         if let list = stored.files {
             files = list.map(PathKey.init(canonical:))
             active = stored.active.map(PathKey.init(canonical:))
+            pinned = (stored.pinned ?? []).map(PathKey.init(canonical:))
         } else {
             // Written before there were tabs: the one file is the one tab.
             files = stored.file.map { [PathKey(canonical: $0)] } ?? []

@@ -485,6 +485,54 @@ import Testing
         #expect(reopened.activeTab.map { reopened.title(of: $0) } == "Fix the build")
     }
 
+    // MARK: Pinning and moving
+
+    @Test func aPinnedTabGoesToTheFrontAndTheSidebarFollows() async throws {
+        let (model, _, _) = try await shown(sessions: 3)
+        let ids = model.tabs.map(\.id)
+        let active = model.activeTab?.id
+
+        model.togglePin(model.tabs[2])
+
+        #expect(model.tabs.map(\.id) == [ids[2], ids[0], ids[1]])
+        #expect(model.tabs.map(\.isPinned) == [true, false, false])
+        #expect(open.sessions.map(\.id) == [ids[2], ids[0], ids[1]])
+        #expect(model.activeTab?.id == active)
+    }
+
+    @Test func aMoveStaysOnItsSideOfThePinnedTabs() async throws {
+        let (model, _, _) = try await shown(sessions: 3)
+        model.togglePin(model.tabs[0])
+        let ids = model.tabs.map(\.id)
+
+        model.move(model.tabs[2], to: 0)
+        #expect(model.tabs.map(\.id) == [ids[0], ids[2], ids[1]])
+
+        model.move(model.tabs[0], to: 2)
+        #expect(model.tabs.map(\.id) == [ids[0], ids[2], ids[1]])
+    }
+
+    @Test func aPinAndAnOrderAreRememberedWithTheTabs() async throws {
+        let registry = makeRegistry()
+        let model = makeModel()
+        let workspace = try await workspace(root, in: registry)
+        await model.show(workspace)
+        await model.startSession()
+        await model.startSession()
+        await model.startSession()
+        let ids = model.tabs.map(\.id)
+        model.togglePin(model.tabs[1])
+        model.move(model.tabs[2], to: 1)
+        model.terminateAll()
+        await workspace.saveSnapshot()
+
+        let reopened = makeModel()
+        await reopened.show(try await self.workspace(root, in: makeRegistry()))
+
+        #expect(reopened.tabs.map(\.id) == [ids[1], ids[2], ids[0]])
+        #expect(reopened.tabs.map(\.isPinned) == [true, false, false])
+    }
+
     // MARK: Agents that name their own sessions
 
     /// What opencode's lookup prints for sessions in `root`, made now.

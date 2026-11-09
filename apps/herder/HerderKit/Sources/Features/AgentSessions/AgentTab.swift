@@ -45,6 +45,12 @@ final class AgentTab: Identifiable {
         customName = trimmed.isEmpty ? nil : String(trimmed.prefix(Self.maxNameLength))
     }
 
+    /// Kept at the front of the bar, and with no close button, so it is not
+    /// closed by a stray click. Kept across launches, like the tab.
+    private(set) var isPinned: Bool
+
+    func setPinned(_ pinned: Bool) { isPinned = pinned }
+
     private(set) var phase: Phase
 
     /// Whether its agent has been started before, here or before a relaunch:
@@ -94,6 +100,7 @@ final class AgentTab: Identifiable {
         agent: Agent,
         number: Int,
         name: String? = nil,
+        pinned: Bool = false,
         restored: Bool = false,
         sessionID: String? = nil,
         startedAt: Date? = nil
@@ -102,6 +109,7 @@ final class AgentTab: Identifiable {
         self.agent = agent
         self.number = number
         self.customName = name
+        self.isPinned = pinned
         self.sessionID = sessionID
         self.startedAt = startedAt
         self.hasStarted = restored

@@ -1,20 +1,19 @@
-import Core
 import Foundation
 import Testing
 
-@testable import EditorFeature
+@testable import Core
 
 /// Where a dragged tab would land, and what the others do to make room. Tabs
 /// are `a` 100 wide, `b` 60, `c` 140, with 4 between: they start at 0, 104 and
 /// 168, and their middles are at 50, 134 and 238.
 @Suite struct TabDragStateTests {
-    let a = PathKey(canonical: "/code/a.txt")
-    let b = PathKey(canonical: "/code/b.txt")
-    let c = PathKey(canonical: "/code/c.txt")
+    let a = "a"
+    let b = "b"
+    let c = "c"
 
-    func drag(_ key: PathKey, by translation: CGFloat) throws -> TabDragState {
+    func drag(_ key: String, by translation: CGFloat, within run: ClosedRange<Int>? = nil) throws -> TabDragState<String> {
         var state = try #require(
-            TabDragState(dragging: key, in: [a, b, c], widths: [a: 100, b: 60, c: 140], spacing: 4)
+            TabDragState(dragging: key, in: [a, b, c], widths: [a: 100, b: 60, c: 140], spacing: 4, within: run)
         )
         state.translation = translation
         return state
@@ -68,20 +67,28 @@ import Testing
     }
 
     @Test func aTabWithNoPlaceInTheStripIsNotDragged() {
-        let stranger = PathKey(canonical: "/code/z.txt")
+        #expect(TabDragState(dragging: "z", in: [a, b, c], widths: [:], spacing: 4) == nil)
+    }
 
-        #expect(TabDragState(dragging: stranger, in: [a, b, c], widths: [:], spacing: 4) == nil)
+    /// `a` pinned: `b` and `c` may only trade places with each other.
+    @Test func aTabStaysInItsRun() throws {
+        #expect(try drag(b, by: -500, within: 1...2).targetIndex == 1)
+        #expect(try drag(b, by: -500, within: 1...2).offset(for: b) == 0)
+        #expect(try drag(b, by: -500, within: 1...2).offset(for: a) == 0)
+        #expect(try drag(b, by: 500, within: 1...2).targetIndex == 2)
+        #expect(try drag(a, by: 500, within: 0...0).targetIndex == 0)
+        #expect(try drag(a, by: 500, within: 0...0).offset(for: a) == 0)
     }
 
     @Test func theEdgesScrollTowardsTheNextSlot() throws {
         let state = try drag(b, by: 0)
 
         let left = try #require(state.edgeScrollTarget(pointerX: 10, viewport: 400))
-        #expect(left.key == a)
+        #expect(left.id == a)
         #expect(left.leading)
 
         let right = try #require(state.edgeScrollTarget(pointerX: 390, viewport: 400))
-        #expect(right.key == c)
+        #expect(right.id == c)
         #expect(!right.leading)
 
         #expect(state.edgeScrollTarget(pointerX: 200, viewport: 400) == nil)

@@ -208,6 +208,77 @@ import Testing
         #expect(reopened.activeTab == key("c.txt"))
     }
 
+    // MARK: - Pinning
+
+    @Test func aPinnedTabGoesToTheFrontAndUnpinningSendsItBack() async throws {
+        let (model, _) = await open(["a.txt", "b.txt", "c.txt"])
+
+        model.togglePin(key("c.txt"))
+        #expect(model.tabs == [key("c.txt"), key("a.txt"), key("b.txt")])
+        #expect(model.openTabs.map(\.isPinned) == [true, false, false])
+
+        model.togglePin(key("c.txt"))
+        #expect(model.tabs == [key("c.txt"), key("a.txt"), key("b.txt")])
+        #expect(model.openTabs.allSatisfy { !$0.isPinned })
+        #expect(model.activeTab == key("c.txt"))
+    }
+
+    @Test func aMoveStaysOnItsSideOfThePinnedTabs() async throws {
+        let (model, _) = await open(["a.txt", "b.txt", "c.txt"])
+        model.togglePin(key("a.txt"))
+
+        model.move(key("c.txt"), to: 0)
+        #expect(model.tabs == [key("a.txt"), key("c.txt"), key("b.txt")])
+
+        model.move(key("a.txt"), to: 2)
+        #expect(model.tabs == [key("a.txt"), key("c.txt"), key("b.txt")])
+    }
+
+    @Test func theActiveTabCannotBeMovedAcrossThePinnedTabs() async throws {
+        let (model, _) = await open(["a.txt", "b.txt"])
+        model.togglePin(key("a.txt"))
+        await model.activate(key("b.txt"))
+
+        #expect(!model.canMoveActiveTab(by: -1))
+    }
+
+    @Test func aPinOutlivesTheWindow() async throws {
+        let (model, registry) = await open(["a.txt", "b.txt"])
+        let workspace = try #require(registry.workspace(for: WorkspaceID(root)))
+
+        model.togglePin(key("b.txt"))
+
+        let stored = EditorUIState()
+        try stored.restore(from: try workspace.uiState(EditorUIState.self).encode())
+        #expect(stored.pinned == [key("b.txt")])
+
+        let reopened = EditorModel(store: registry, files: files, highlighter: NoSyntaxHighlighter())
+        await reopened.restore(in: workspace)
+        #expect(reopened.tabs == [key("b.txt"), key("a.txt")])
+        #expect(reopened.openTabs.map(\.isPinned) == [true, false])
+    }
+
+    @Test func closingAPinnedTabForgetsThePin() async throws {
+        let (model, _) = await open(["a.txt", "b.txt"])
+        model.togglePin(key("a.txt"))
+
+        await model.close(tab: key("a.txt"))
+        await model.open(root.appending(path: "a.txt"))
+
+        #expect(model.openTabs.allSatisfy { !$0.isPinned })
+    }
+
+    @Test func aRenameKeepsThePin() async throws {
+        let (model, registry) = await open(["a.txt", "b.txt"])
+        let workspace = try #require(registry.workspace(for: WorkspaceID(root)))
+        model.togglePin(key("a.txt"))
+
+        try await workspace.move(root.appending(path: "a.txt"), to: root.appending(path: "z.txt"))
+
+        #expect(model.tabs == [key("z.txt"), key("b.txt")])
+        #expect(model.openTabs.map(\.isPinned) == [true, false])
+    }
+
     // MARK: - Renames
 
     @Test func aRenameCarriesEveryTabAlong() async throws {

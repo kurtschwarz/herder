@@ -154,7 +154,7 @@ public final class AgentPanelModel {
         let tabs = state.tabs.map {
             AgentTab(
                 id: $0.id, agent: $0.agent, number: $0.number, name: $0.name,
-                restored: true, sessionID: $0.session, startedAt: $0.started
+                pinned: $0.pinned ?? false, restored: true, sessionID: $0.session, startedAt: $0.started
             )
         }
         for tab in tabs {
@@ -245,11 +245,41 @@ public final class AgentPanelModel {
     /// Names a tab, or with a blank name gives it back the agent's. Hands the
     /// keyboard back to the terminal UI: the name was typed over it.
     func rename(_ tab: AgentTab, to name: String) {
-        guard let id = tabsByWorkspace.first(where: { $0.value.contains { $0.id == tab.id } })?.key else { return }
+        guard let id = workspace(holding: tab) else { return }
         tab.rename(to: name)
         remember(id)
         publish()
         select(tab)
+    }
+
+    /// Pins a tab or lets it go. Pinned tabs sit together at the front, in the
+    /// order they were pinned; the rest keep their order behind them. The tab
+    /// showing stays the one showing.
+    func togglePin(_ tab: AgentTab) {
+        guard let id = workspace(holding: tab), var tabs = tabsByWorkspace[id],
+              let index = tabs.firstIndex(where: { $0.id == tab.id })
+        else { return }
+        tab.setPinned(!tab.isPinned)
+        TabOrder.repin(&tabs, at: index, isPinned: \.isPinned)
+        tabsByWorkspace[id] = tabs
+        remember(id)
+        publish()
+    }
+
+    /// Puts a tab at `index`, on its own side of the pinned tabs. The tab
+    /// showing stays the one showing.
+    func move(_ tab: AgentTab, to index: Int) {
+        guard let id = workspace(holding: tab), var tabs = tabsByWorkspace[id],
+              let from = tabs.firstIndex(where: { $0.id == tab.id }),
+              TabOrder.move(&tabs, from: from, to: index, isPinned: \.isPinned)
+        else { return }
+        tabsByWorkspace[id] = tabs
+        remember(id)
+        publish()
+    }
+
+    private func workspace(holding tab: AgentTab) -> WorkspaceID? {
+        tabsByWorkspace.first { $0.value.contains { $0.id == tab.id } }?.key
     }
 
     public func selectNextTab() { cycle(by: 1) }
@@ -269,7 +299,7 @@ public final class AgentPanelModel {
 
     /// Ends a session's terminal UI and takes its tab away.
     func close(_ tab: AgentTab) {
-        guard let id = tabsByWorkspace.first(where: { $0.value.contains { $0.id == tab.id } })?.key else { return }
+        guard let id = workspace(holding: tab) else { return }
         tab.terminate()
         remove(tab, from: id)
     }
@@ -378,7 +408,7 @@ public final class AgentPanelModel {
         let tabs = (tabsByWorkspace[id] ?? []).map {
             AgentPanelUIState.Tab(
                 id: $0.id, agent: $0.agent, number: $0.number, name: $0.customName,
-                session: $0.sessionID, started: $0.startedAt
+                pinned: $0.isPinned ? true : nil, session: $0.sessionID, started: $0.startedAt
             )
         }
         let active = activeByWorkspace[id]

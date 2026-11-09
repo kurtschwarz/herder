@@ -53,6 +53,10 @@ public final class EditorModel {
     /// until ``move(_:to:)`` puts one elsewhere; there is no cap.
     public private(set) var tabs: [PathKey] = []
 
+    /// The tabs that are pinned, which are the first of ``tabs``: see
+    /// ``TabOrder``. Remembered with them.
+    private(set) var pinned: Set<PathKey> = []
+
     /// The file showing, or `nil` when none is.
     public private(set) var file: URL?
 
@@ -134,7 +138,8 @@ public final class EditorModel {
             EditorTab(
                 key: key,
                 name: key.name,
-                folder: counts[key.name, default: 0] > 1 ? key.parent?.name : nil
+                folder: counts[key.name, default: 0] > 1 ? key.parent?.name : nil,
+                isPinned: pinned.contains(key)
             )
         }
     }
@@ -174,6 +179,7 @@ public final class EditorModel {
         guard let workspace else { return }
         let state = workspace.uiState(EditorUIState.self)
         tabs = state.files
+        pinned = Set(state.pinned).intersection(tabs)
         guard let active = state.active ?? state.files.first else { return }
         await open(active, remembering: false)
     }
@@ -187,6 +193,7 @@ public final class EditorModel {
     public func close(tab key: PathKey) async {
         guard let index = tabs.firstIndex(of: key) else { return }
         tabs.remove(at: index)
+        pinned.remove(key)
         discard(documentsAt: key)
 
         guard key == fileKey else {
@@ -218,6 +225,7 @@ public final class EditorModel {
     public func close() {
         clear()
         tabs = []
+        pinned = []
         for document in documents.documents where !document.isDirty { discard(document) }
     }
 
@@ -242,15 +250,23 @@ public final class EditorModel {
 
     // MARK: - Reordering
 
-    /// Puts the tab for `key` at `index`, clamped to the strip. Nothing for a
-    /// path with no tab. Which tab is showing is not touched: moving a tab is
-    /// not looking at it.
+    /// Puts the tab for `key` at `index`, clamped to its own side of the
+    /// pinned tabs. Nothing for a path with no tab. Which tab is showing is
+    /// not touched: moving a tab is not looking at it.
     func move(_ key: PathKey, to index: Int) {
-        guard let from = tabs.firstIndex(of: key) else { return }
-        let to = min(max(index, 0), tabs.count - 1)
-        guard to != from else { return }
-        tabs.remove(at: from)
-        tabs.insert(key, at: to)
+        guard let from = tabs.firstIndex(of: key),
+              TabOrder.move(&tabs, from: from, to: index, isPinned: pinned.contains)
+        else { return }
+        worktree.map(remember(on:))
+    }
+
+    /// Pins the tab for `key` or lets it go. Pinned tabs sit together at the
+    /// front, in the order they were pinned; the rest keep their order behind
+    /// them.
+    func togglePin(_ key: PathKey) {
+        guard let index = tabs.firstIndex(of: key) else { return }
+        if pinned.remove(key) == nil { pinned.insert(key) }
+        TabOrder.repin(&tabs, at: index, isPinned: pinned.contains)
         worktree.map(remember(on:))
     }
 
@@ -268,7 +284,7 @@ public final class EditorModel {
     /// can read as unavailable at the end it cannot go past.
     public func canMoveActiveTab(by offset: Int) -> Bool {
         guard let fileKey, let index = tabs.firstIndex(of: fileKey) else { return false }
-        return tabs.indices.contains(index + offset) && offset != 0
+        return TabOrder.run(of: index, in: tabs, isPinned: pinned.contains).contains(index + offset) && offset != 0
     }
 
     private func open(_ key: PathKey, remembering: Bool) async {
@@ -329,6 +345,7 @@ public final class EditorModel {
         let ui = state.uiState(EditorUIState.self)
         ui.files = tabs
         ui.active = fileKey
+        ui.pinned = tabs.filter(pinned.contains)
         state.scheduleSnapshotSave()
     }
 
@@ -607,6 +624,7 @@ public final class EditorModel {
             if !moved.contains(next) { moved.append(next) }
         }
         tabs = moved
+        pinned = Set(pinned.map { Workspace.moved($0, from: old, to: new) })
 
         // The documents are re-keyed, not rebuilt: a rename costs no typing.
         let result = documents.move(from: old, to: new)
@@ -643,6 +661,8 @@ struct EditorTab: Identifiable, Equatable {
     /// name. Worked out from the tab list, never stored: the clash goes when
     /// either of the two closes.
     let folder: String?
+
+    var isPinned = false
 
     var id: PathKey { key }
 }
