@@ -178,10 +178,11 @@ struct WindowChrome: NSViewRepresentable {
         guard extra > 0 else { return }
 
         let accessory = NSTitlebarAccessoryViewController()
-        let spacer = NSView()
-        spacer.translatesAutoresizingMaskIntoConstraints = false
-        spacer.heightAnchor.constraint(equalToConstant: extra).isActive = true
-        accessory.view = spacer
+        // Sized by its frame and left at that size: AppKit otherwise pads an
+        // accessory to a toolbar's height, and the bar grows past the header
+        // and over the content below it.
+        accessory.automaticallyAdjustsSize = false
+        accessory.view = NSView(frame: NSRect(x: 0, y: 0, width: 0, height: extra))
         accessory.layoutAttribute = .bottom
         window.addTitlebarAccessoryViewController(accessory)
     }
