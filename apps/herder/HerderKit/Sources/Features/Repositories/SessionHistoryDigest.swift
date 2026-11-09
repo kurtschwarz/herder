@@ -8,8 +8,8 @@ struct SessionHistoryDigest: Equatable {
     /// How many rows the sidebar lists before "All history".
     static let rowLimit = 5
 
-    var today: [SessionHistoryRecord] = []
-    var yesterday: [SessionHistoryRecord] = []
+    var today: [AgentSession] = []
+    var yesterday: [AgentSession] = []
 
     /// Every ended session in the repository, however long ago.
     var total = 0
@@ -17,7 +17,7 @@ struct SessionHistoryDigest: Equatable {
     var isEmpty: Bool { total == 0 }
 
     /// `ended` is latest end first, as ``SessionHistory/ended(in:)`` gives it.
-    init(ended: [SessionHistoryRecord], now: Date = .now, calendar: Calendar = .current) {
+    init(ended: [AgentSession], now: Date = .now, calendar: Calendar = .current) {
         total = ended.count
         var room = Self.rowLimit
         for record in ended {

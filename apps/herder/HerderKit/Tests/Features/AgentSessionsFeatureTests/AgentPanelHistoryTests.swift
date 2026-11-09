@@ -15,11 +15,11 @@ import Testing
     let state = InMemoryStateStore()
     let pty = StubPTYClient()
     let catalog = AgentCatalog(state: InMemoryStateStore())
-    let history: SessionHistory
+    let sessions: AgentSessions
     let root = URL(filePath: "/code/api")
 
     init() {
-        history = SessionHistory(git: git, state: state, clock: clock)
+        sessions = AgentSessions(git: git, state: state, clock: clock)
     }
 
     var repository: PathKey { PathKey(root) }
@@ -28,7 +28,7 @@ import Testing
         let registry = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
         let model = AgentPanelModel(
             pty: pty, commands: StubCommandClient(), clock: VirtualClockClient(), catalog: catalog,
-            openSessions: OpenAgentSessions(), history: history,
+            sessions: WindowAgentSessions(store: sessions),
             environment: ["SHELL": "/bin/sh"], sampleInterval: .seconds(3600)
         )
         await model.show(try #require(await registry.open(WorkspaceID(root))))
@@ -43,12 +43,49 @@ import Testing
         Issue.record("never happened: \(what)")
     }
 
-    func started(_ agent: Agent? = nil) async throws -> (AgentPanelModel, SessionHistoryRecord) {
+    func started(_ agent: Agent? = nil) async throws -> (AgentPanelModel, AgentSession) {
         let model = try await shown()
         await model.startSession(agent)
         let id = try #require(model.activeTab?.id)
-        try await eventually("it is written down") { history.record(id) != nil }
-        return (model, try #require(history.record(id)))
+        try await eventually("it is written down") { sessions.recorded(in: repository).contains { $0.id == id } }
+        return (model, try #require(sessions.session(id)))
+    }
+
+    /// A tab remembered from before there was a history has no record. It
+    /// gets one the next time its agent runs, keeping when it first started.
+    @Test func aTabRestoredWithNoRecordIsWrittenDownWhenItResumes() async throws {
+        let registry = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
+        let workspace = try #require(await registry.open(WorkspaceID(root)))
+        let id = UUID()
+        let started = Date(timeIntervalSince1970: 1_000_000)
+        let claude = try #require(Agent.presets.first { $0.id == "claude-code" })
+        workspace.uiState(AgentPanelUIState.self).tabs = [
+            AgentPanelUIState.Tab(id: id, agent: claude, number: 1, started: started),
+        ]
+        let model = AgentPanelModel(
+            pty: pty, commands: StubCommandClient(), clock: VirtualClockClient(), catalog: catalog,
+            sessions: WindowAgentSessions(store: sessions), environment: ["SHELL": "/bin/sh"], sampleInterval: .seconds(3600)
+        )
+
+        await model.show(workspace)
+
+        try await eventually("it is written down") { sessions.recorded(in: repository).contains { $0.id == id } }
+        let session = try #require(sessions.session(id))
+        #expect(session.startedAt == started)
+        #expect(session.sessionID == id.uuidString.lowercased())
+        #expect(model.sessions.sessions.map(\.id) == [id])
+    }
+
+    @Test func aTabThatNeverStartedIsListedButNotWrittenDown() async throws {
+        let model = try await shown()
+        pty.failSpawns(with: .spawnFailed(2))
+
+        await model.startSession()
+
+        let id = try #require(model.activeTab?.id)
+        #expect(model.sessions.sessions.map(\.id) == [id])
+        #expect(model.sessions.sessions.first?.state == .failed)
+        #expect(sessions.session(id) == nil)
     }
 
     @Test func aSessionIsWrittenDownWhenItsAgentStarts() async throws {
@@ -75,8 +112,8 @@ import Testing
 
         model.closeActiveTab()
 
-        #expect(history.record(record.id)?.endReason == .closed)
-        #expect(history.ended(in: repository).map(\.id) == [record.id])
+        #expect(sessions.session(record.id)?.endReason == .closed)
+        #expect(sessions.ended(in: repository).map(\.id) == [record.id])
     }
 
     @Test func theAgentQuittingEndsIt() async throws {
@@ -84,7 +121,7 @@ import Testing
 
         pty.sessions[0].exit(with: 0)
 
-        try await eventually("it ends") { history.record(record.id)?.endReason == .exited }
+        try await eventually("it ends") { sessions.session(record.id)?.endReason == .exited }
         #expect(model.tabs.isEmpty)
     }
 
@@ -94,23 +131,23 @@ import Testing
         pty.sessions[0].exit(with: 1)
         try await eventually("the tab notices") { model.activeTab?.phase == .exited(1) }
 
-        #expect(history.record(record.id)?.endedAt == nil)
+        #expect(sessions.session(record.id)?.endedAt == nil)
     }
 
     @Test func aSessionPickedUpAgainIsTheSameRecordInANewTab() async throws {
         let (model, record) = try await started()
         model.closeActiveTab()
-        let ended = try #require(history.record(record.id))
+        let ended = try #require(sessions.session(record.id))
 
         await model.resume(ended)
 
         let tab = try #require(model.activeTab)
         #expect(tab.id == record.id)
         #expect(pty.specs.last?.arguments.last == "exec claude --resume \(record.id.uuidString.lowercased())")
-        let again = try #require(history.record(record.id))
+        let again = try #require(sessions.session(record.id))
         #expect(again.endedAt == nil)
         #expect(again.startedAt == record.startedAt)
-        #expect(history.repositories[repository]?.count == 1)
+        #expect(sessions.recorded(in: repository).count == 1)
     }
 
     @Test func aSessionWithNoIDIsNotPickedUp() async throws {
@@ -119,18 +156,18 @@ import Testing
         model.closeActiveTab()
         let specs = pty.specs.count
 
-        await model.resume(try #require(history.record(record.id)))
+        await model.resume(try #require(sessions.session(record.id)))
 
         // Not `codex resume --last`, which may be another session.
         #expect(pty.specs.count == specs)
         #expect(model.tabs.isEmpty)
-        #expect(history.record(record.id)?.endedAt != nil)
+        #expect(sessions.session(record.id)?.endedAt != nil)
     }
 
     @Test func aSessionOfAnAgentThatIsGoneIsNotPickedUp() async throws {
         let (model, record) = try await started()
         model.closeActiveTab()
-        var orphan = try #require(history.record(record.id))
+        var orphan = try #require(sessions.session(record.id))
         orphan.agentID = "custom-deleted"
 
         await model.resume(orphan)

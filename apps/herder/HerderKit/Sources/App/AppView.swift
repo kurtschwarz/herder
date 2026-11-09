@@ -135,8 +135,8 @@ private struct WindowView: View {
         // And they ask for a different one, or for a session in one, through
         // here, rather than reaching for a window they cannot see.
         .modifier(WindowActions(window: window, agents: environment.agents))
-        .environment(window.agentPanel.openSessions)
-        .environment(environment.sessionHistory)
+        .environment(window.agentPanel.sessions)
+        .environment(environment.sessions)
         // Switching workspaces is this, and only this: the id changed, so open
         // what it names. Nothing else is torn down.
         .task(id: window.activeWorkspaceID) { await window.showActiveWorkspace() }

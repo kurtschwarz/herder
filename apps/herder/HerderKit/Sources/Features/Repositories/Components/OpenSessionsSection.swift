@@ -11,15 +11,16 @@ struct OpenSessionsSection: View {
     /// The repositories the workspace selector has on show.
     let repositories: [Repository]
 
-    /// What the agent panel has open. Absent outside a window, which is what
+    /// What this window has open. Absent outside a window, which is what
     /// lets the previews render without one.
-    @Environment(OpenAgentSessions.self) private var open: OpenAgentSessions?
+    @Environment(WindowAgentSessions.self) private var open: WindowAgentSessions?
     @Environment(Workspace.self) private var active: Workspace?
     @Environment(\.showAgentSession) private var showAgentSession
 
     var body: some View {
         let labels = model.worktreeLabels(of: repositories)
-        let sessions = open?.sessions.filter { labels[$0.workspace] != nil } ?? []
+        let sessions = open?.sessions.filter { labels[$0.worktree] != nil } ?? []
+        let focused = open?.focused
         VStack(alignment: .leading, spacing: 0) {
             header(count: sessions.count)
 
@@ -33,8 +34,8 @@ struct OpenSessionsSection: View {
             ForEach(sessions) { session in
                 AgentSessionRow(
                     session: session,
-                    branch: labels[session.workspace] ?? session.workspace.root.name,
-                    isSelected: active?.id == session.workspace && open?.focused == session.id
+                    branch: labels[session.worktree] ?? session.worktree.root.name,
+                    isSelected: active?.id == session.worktree && focused == session.id
                 ) { showAgentSession(session) }
             }
 
@@ -116,7 +117,7 @@ struct OpenSessionsSection: View {
 /// One session: what it is called and how long since it last did anything,
 /// under that what it seems to be doing, and the worktree it is in.
 private struct AgentSessionRow: View {
-    let session: AgentSessionSummary
+    let session: AgentSession
     let branch: String
     let isSelected: Bool
     let show: () -> Void
@@ -141,7 +142,7 @@ private struct AgentSessionRow: View {
                     // Redrawn on its own every half minute, so "now"
                     // becomes "1m" without anything else changing.
                     TimelineView(.periodic(from: .now, by: 30)) { context in
-                        Text(RelativeAge.short(from: session.lastActivity, now: context.date))
+                        Text(RelativeAge.short(from: lastActivity, now: context.date))
                             .font(.system(size: 11))
                             .foregroundStyle(Theme.Palette.tertiaryText)
                     }
@@ -177,12 +178,18 @@ private struct AgentSessionRow: View {
         .help(session.agentName)
     }
 
+    /// Every session listed here has a tab open; paused is what one would
+    /// be if the store said nothing.
+    private var state: AgentSession.State { session.state ?? .paused }
+
+    private var lastActivity: Date { session.live?.lastActivity ?? session.lastSeenAt }
+
     private var isUrgent: Bool {
-        if case .needsInput = session.state { true } else { false }
+        if case .needsInput = state { true } else { false }
     }
 
     private var dotColor: Color {
-        switch session.state {
+        switch state {
         case .working: Theme.Palette.success
         case .needsInput: Theme.Palette.warning
         case .exited(let code) where code != 0: Theme.Palette.danger
@@ -193,7 +200,7 @@ private struct AgentSessionRow: View {
 
     /// The second line: the agent, and what it seems to be up to.
     private var summary: String {
-        switch session.state {
+        switch state {
         case .paused: "\(session.agentName) \u{00B7} Resumes when opened"
         case .starting: "\(session.agentName) \u{00B7} Starting"
         case .working: "\(session.agentName) \u{00B7} Working"

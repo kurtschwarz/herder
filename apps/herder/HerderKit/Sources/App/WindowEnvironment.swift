@@ -161,16 +161,16 @@ final class WindowEnvironment {
     /// can only start a session in the workspace it is showing.
     /// Brings an open session forward from the sidebar: its worktree shown,
     /// its tab in front. The panel is told first, for the same reason as below.
-    func showAgentSession(_ session: AgentSessionSummary) {
-        agentPanel.reveal(session.id, in: session.workspace)
-        activate(session.workspace)
+    func showAgentSession(_ session: AgentSession) {
+        agentPanel.reveal(session.id, in: session.worktree)
+        activate(session.worktree)
     }
 
     /// Picks a session from the history up again, in the worktree it ran in.
     /// The panel is told first, for the same reason as above.
-    func resumeAgentSession(_ record: SessionHistoryRecord) {
-        agentPanel.requestResume(record)
-        activate(record.worktree)
+    func resumeAgentSession(_ session: AgentSession) {
+        agentPanel.requestResume(session)
+        activate(session.worktree)
     }
 
     func startAgentSession(in id: WorkspaceID, agent: Agent?) {

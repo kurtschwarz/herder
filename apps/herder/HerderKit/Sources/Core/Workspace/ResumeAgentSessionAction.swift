@@ -7,13 +7,13 @@ import Foundation
 /// Shaped like ``ShowAgentSessionAction``, and carried the same way.
 @MainActor
 public struct ResumeAgentSessionAction {
-    private let handler: (SessionHistoryRecord) -> Void
+    private let handler: (AgentSession) -> Void
 
-    public init(_ handler: @escaping (SessionHistoryRecord) -> Void) {
+    public init(_ handler: @escaping (AgentSession) -> Void) {
         self.handler = handler
     }
 
-    public func callAsFunction(_ record: SessionHistoryRecord) {
+    public func callAsFunction(_ record: AgentSession) {
         handler(record)
     }
 }

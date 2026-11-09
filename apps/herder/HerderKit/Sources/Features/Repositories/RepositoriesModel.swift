@@ -223,7 +223,7 @@ public final class RepositoriesModel {
             let worktrees = if case .loaded(let listed)? = listings[repository.id] { listed } else { [GitWorktree]() }
             return HistorySource(
                 name: repository.name,
-                key: SessionHistory.repositoryKey(for: worktrees, fallback: PathKey(repository.url)),
+                key: AgentSessions.repositoryKey(for: worktrees, fallback: PathKey(repository.url)),
                 worktrees: Set(worktrees.map { WorkspaceID($0.path) })
             )
         }

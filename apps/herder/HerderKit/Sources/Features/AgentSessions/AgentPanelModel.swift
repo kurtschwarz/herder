@@ -32,8 +32,10 @@ public final class AgentPanelModel {
     /// work; a whole one without any is quiet.
     private let sampleInterval: Duration
 
-    /// What this window's sidebar lists. Written here, read there.
-    public let openSessions: OpenAgentSessions
+    /// What this window has open, for its sidebar to list. Written here, read
+    /// there. Its ``WindowAgentSessions/store`` is where each session is
+    /// written down as it starts and ends.
+    public let sessions: WindowAgentSessions
 
     @ObservationIgnored private var sampling: Task<Void, Never>?
 
@@ -47,13 +49,9 @@ public final class AgentPanelModel {
     /// The agents a session can be started with.
     public let catalog: AgentCatalog
 
-    /// Where every session is written down as it starts and ends. `nil` for a
-    /// panel that keeps no history.
-    private let history: SessionHistory?
-
     /// A session from the history to pick up once its worktree is the one
     /// showing. See ``requestResume(_:)``.
-    private var pendingResume: SessionHistoryRecord?
+    private var pendingResume: AgentSession?
 
     public private(set) var workspace: Workspace?
 
@@ -82,8 +80,7 @@ public final class AgentPanelModel {
         commands: any CommandClient,
         clock: any ClockClient,
         catalog: AgentCatalog,
-        openSessions: OpenAgentSessions,
-        history: SessionHistory? = nil,
+        sessions: WindowAgentSessions,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         sampleInterval: Duration = .seconds(1)
     ) {
@@ -92,8 +89,7 @@ public final class AgentPanelModel {
         self.clock = clock
         self.sampleInterval = sampleInterval
         self.catalog = catalog
-        self.openSessions = openSessions
-        self.history = history
+        self.sessions = sessions
         self.environment = environment
     }
 
@@ -165,10 +161,8 @@ public final class AgentPanelModel {
         guard tabsByWorkspace[id] == nil else { return }
         let state = workspace.uiState(AgentPanelUIState.self)
         // Even with no tabs: that is what ends a session whose tab was lost.
-        if let history {
-            let claimed = Set(state.tabs.map(\.id))
-            Task { await history.reconcile(id, claimed: claimed) }
-        }
+        let claimed = Set(state.tabs.map(\.id))
+        Task { [store = sessions.store] in await store.reconcile(id, claimed: claimed) }
         guard !state.tabs.isEmpty else { return }
         let tabs = state.tabs.map {
             AgentTab(
@@ -234,30 +228,29 @@ public final class AgentPanelModel {
 
         let tab = AgentTab(agent: agent, number: nextNumber(of: agent, in: workspace.id))
         await open(tab, in: workspace)
-        recordStart(of: tab, in: workspace)
     }
 
     /// Brings a session from the history back in a new tab of its own, in the
-    /// workspace showing, which must be the worktree it ran in. The record is
-    /// the same one again: it is open now, and still began when it did.
+    /// workspace showing, which must be the worktree it ran in. It is the
+    /// same session again: open now, and still begun when it was.
     ///
     /// Refused for one that cannot be picked up: its agent is gone, or gave
     /// no id to resume it by. The sidebar says so; the last session in the
     /// worktree is not a stand-in, because it may be another.
-    public func resume(_ record: SessionHistoryRecord) async {
-        guard let workspace, workspace.id == record.worktree,
-              let agent = catalog.agent(record.agentID), agent.isRunnable,
-              let sessionID = record.sessionID,
-              !(tabsByWorkspace[workspace.id] ?? []).contains(where: { $0.id == record.id })
+    public func resume(_ session: AgentSession) async {
+        guard let workspace, workspace.id == session.worktree,
+              let agent = catalog.agent(session.agentID), agent.isRunnable,
+              let sessionID = session.sessionID,
+              !(tabsByWorkspace[workspace.id] ?? []).contains(where: { $0.id == session.id })
         else { return }
         catalog.markUsed(agent)
-        history?.reopen(record.id)
+        sessions.store.reopen(session.id)
         let tab = AgentTab(
-            id: record.id, agent: agent, number: nextNumber(of: agent, in: workspace.id), restored: true,
+            id: session.id, agent: agent, number: nextNumber(of: agent, in: workspace.id), restored: true,
             // An agent that names its own sessions is told which; for one
-            // that is given an id, the tab's own is the record's.
+            // that is given an id, the tab's own is the session's.
             sessionID: agent.looksUpSessions ? sessionID : nil,
-            startedAt: record.startedAt
+            startedAt: session.startedAt
         )
         await open(tab, in: workspace)
     }
@@ -265,11 +258,11 @@ public final class AgentPanelModel {
     /// Asks for a session from the history to be picked up in its worktree.
     /// If that is the workspace showing it happens now; otherwise when the
     /// window gets there. See ``show(_:)``.
-    public func requestResume(_ record: SessionHistoryRecord) {
-        if workspace?.id == record.worktree {
-            Task { await resume(record) }
+    public func requestResume(_ session: AgentSession) {
+        if workspace?.id == session.worktree {
+            Task { await resume(session) }
         } else {
-            pendingResume = record
+            pendingResume = session
         }
     }
 
@@ -299,25 +292,27 @@ public final class AgentPanelModel {
 
     // MARK: History
 
-    /// Writes down a session whose agent has just started for the first time.
+    /// Writes down a session whose agent is now running: a new one, or one
+    /// restored from before that has none yet. One already written down is
+    /// left as it is.
     private func recordStart(of tab: AgentTab, in workspace: Workspace) {
-        guard let history, tab.phase == .running, let started = tab.startedAt else { return }
+        guard tab.phase == .running, let started = tab.startedAt else { return }
         let branch: String? = switch workspace.checkout {
         case .branch(let name): name
         case .detached(let sha): String(sha.prefix(7))
         case nil: nil
         }
-        let record = SessionHistoryRecord(
+        let session = AgentSession(
             id: tab.id,
             agentID: tab.agent.id,
             agentName: tab.agent.displayName,
-            sessionID: mintsSessionID(of: tab.agent) ? tab.sessionName : nil,
+            sessionID: mintsSessionID(of: tab.agent) ? tab.sessionName : tab.sessionID,
             worktree: workspace.id,
             branch: branch,
             title: historyTitle(of: tab),
             startedAt: started
         )
-        Task { await history.begin(record) }
+        Task { [store = sessions.store] in await store.begin(session) }
     }
 
     /// Whether Herder gives the agent the session's id, so it is known from
@@ -400,7 +395,7 @@ public final class AgentPanelModel {
     func close(_ tab: AgentTab) {
         guard let id = workspace(holding: tab) else { return }
         tab.terminate()
-        history?.end(tab.id, because: .closed)
+        sessions.store.end(tab.id, because: .closed)
         remove(tab, from: id)
     }
 
@@ -444,6 +439,7 @@ public final class AgentPanelModel {
         )
         spec.pidVariable = AgentMark.variable
         await tab.attach(using: pty, spec: spec)
+        recordStart(of: tab, in: workspace)
     }
 
     /// The app's environment with the agent's over it. A preset's comes from
@@ -461,7 +457,7 @@ public final class AgentPanelModel {
         tab.onExit = { [weak self] tab, code in
             guard let self else { return }
             if code == 0 {
-                history?.end(tab.id, because: .exited)
+                sessions.store.end(tab.id, because: .exited)
                 remove(tab, from: id)
             } else {
                 tab.screen?.announce("[Process exited with code \(code)]")
@@ -572,37 +568,30 @@ public final class AgentPanelModel {
         }
     }
 
-    /// Writes what is open into ``openSessions``, every workspace's, in the
-    /// order each was opened.
+    /// Tells ``sessions`` what this window has open, every workspace's, in
+    /// the order each was opened, and which is in front. Also how a session
+    /// that is written down learns its title and its agent's id: see
+    /// ``AgentSessions/note(_:window:at:)``.
     private func publish() {
-        let summaries = tabsByWorkspace
+        let reports = tabsByWorkspace
             .sorted { $0.key.root < $1.key.root }
             .flatMap { workspace, tabs in
                 tabs.map { tab in
-                    AgentSessionSummary(
+                    AgentSessions.Report(
                         id: tab.id,
-                        workspace: workspace,
-                        // The person's name over the program's.
-                        title: tab.customName ?? tab.programTitle ?? title(of: tab),
+                        worktree: workspace,
+                        agentID: tab.agent.id,
                         agentName: tab.agent.displayName,
+                        // The person's name over the program's. Neither, for a
+                        // paused tab, which keeps the title it had.
+                        title: tab.customName ?? tab.programTitle,
+                        fallbackTitle: title(of: tab),
+                        sessionID: tab.sessionID,
                         state: tab.state,
                         lastActivity: tab.lastActivity
                     )
                 }
             }
-        openSessions.update(summaries, focused: activeTab?.id)
-        keepHistory()
-    }
-
-    /// Tells the history what each running session is called now. Not a
-    /// paused one, which has said nothing since it was remembered and would
-    /// only put the agent's name over a better title. It writes only what
-    /// changed.
-    private func keepHistory() {
-        guard let history else { return }
-        let now = Date()
-        for tab in tabsByWorkspace.values.joined() where tab.phase == .running {
-            history.touch(tab.id, title: historyTitle(of: tab), sessionID: tab.sessionID, at: now)
-        }
+        sessions.publish(reports, focused: activeTab?.id)
     }
 }

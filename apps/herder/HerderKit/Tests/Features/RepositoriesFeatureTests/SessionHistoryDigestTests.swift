@@ -14,8 +14,8 @@ import Testing
     /// Noon on a Wednesday.
     let now = Date(timeIntervalSince1970: Double(1_700_000_000 - 1_700_000_000 % 86_400 + 12 * 3600))
 
-    func ended(hoursAgo hours: Double) -> SessionHistoryRecord {
-        SessionHistoryRecord(
+    func ended(hoursAgo hours: Double) -> AgentSession {
+        AgentSession(
             id: UUID(), agentID: "claude-code", agentName: "Claude Code",
             worktree: WorkspaceID(URL(filePath: "/code/api")), title: "t",
             startedAt: now.addingTimeInterval(-hours * 3600 - 60),

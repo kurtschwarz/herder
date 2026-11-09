@@ -15,7 +15,7 @@ import Testing
     let state = InMemoryStateStore()
     let pty = StubPTYClient()
     let catalog: AgentCatalog
-    let open = OpenAgentSessions()
+    let open: WindowAgentSessions
     let commands = StubCommandClient()
     static let lookup = "opencode session list --format json -n 20"
     let root = URL(filePath: "/code/api")
@@ -23,6 +23,7 @@ import Testing
 
     init() {
         catalog = AgentCatalog(state: InMemoryStateStore())
+        open = WindowAgentSessions(store: AgentSessions(git: git, state: state, clock: clock))
     }
 
     func makeRegistry() -> WorkspaceRegistry {
@@ -35,7 +36,7 @@ import Testing
             commands: commands,
             clock: SleepingClock(),
             catalog: catalog,
-            openSessions: open,
+            sessions: open,
             environment: ["SHELL": "/bin/sh"],
             sampleInterval: .milliseconds(10)
         )

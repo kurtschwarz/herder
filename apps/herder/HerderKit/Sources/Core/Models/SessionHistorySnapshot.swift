@@ -9,16 +9,16 @@ import Foundation
 public struct SessionHistorySnapshot: Codable, Sendable, Equatable {
     public var version = 1
 
-    public var records: [SessionHistoryRecord]
+    public var records: [AgentSession]
 
-    public init(records: [SessionHistoryRecord] = []) {
+    public init(records: [AgentSession] = []) {
         self.records = records
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
-        records = try container.decodeIfPresent([SessionHistoryRecord].self, forKey: .records) ?? []
+        records = try container.decodeIfPresent([AgentSession].self, forKey: .records) ?? []
     }
 
     /// What is on disk, so it is never renamed without a migration.

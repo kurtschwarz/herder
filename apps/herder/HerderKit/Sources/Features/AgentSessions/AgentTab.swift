@@ -170,7 +170,7 @@ final class AgentTab: Identifiable {
 
     /// While it runs, only what the program says it is doing (OSC 7501):
     /// one that says nothing is idle, whatever it writes.
-    var state: AgentSessionSummary.State {
+    var state: AgentSession.State {
         switch phase {
         case .waiting: return .paused
         case .starting: return .starting

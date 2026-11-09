@@ -9,16 +9,16 @@ struct SessionHistorySection: View {
     /// Where each shown repository's history is kept, and its worktrees now.
     let sources: [RepositoriesModel.HistorySource]
 
-    @Environment(SessionHistory.self) private var history: SessionHistory?
+    @Environment(AgentSessions.self) private var history: AgentSessions?
 
     private var keys: [PathKey] { sources.map(\.key) }
 
     /// Every ended session in the shown repositories, latest end first, and
     /// which repository each is from when there is more than one to tell
     /// apart.
-    private var ended: (records: [SessionHistoryRecord], repositories: [UUID: String]) {
+    private var ended: (records: [AgentSession], repositories: [UUID: String]) {
         guard let history else { return ([], [:]) }
-        var records: [SessionHistoryRecord] = []
+        var records: [AgentSession] = []
         var repositories: [UUID: String] = [:]
         var seen: Set<PathKey> = []
         for source in sources where seen.insert(source.key).inserted {
@@ -57,7 +57,7 @@ struct SessionHistorySection: View {
     @ViewBuilder
     private func group(
         _ title: String,
-        _ records: [SessionHistoryRecord],
+        _ records: [AgentSession],
         repositories: [UUID: String]
     ) -> some View {
         if !records.isEmpty {
@@ -80,7 +80,7 @@ struct SessionHistorySection: View {
 /// One ended session: what it was called, and under that where it ran and how
 /// long since it ended. Click to pick it up again.
 private struct HistoryRow: View {
-    let record: SessionHistoryRecord
+    let record: AgentSession
 
     /// The repository it ran in, when more than one is on show.
     let repository: String?
