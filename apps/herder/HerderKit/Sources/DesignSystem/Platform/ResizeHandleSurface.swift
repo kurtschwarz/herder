@@ -35,7 +35,7 @@ struct ResizeHandleSurface: NSViewRepresentable {
         view.onHover = onHover
     }
 
-    final class SurfaceView: NSView {
+    final class SurfaceView: NSView, HandlesDoubleClick {
         var axis: Axis = .horizontal {
             didSet { window?.invalidateCursorRects(for: self) }
         }

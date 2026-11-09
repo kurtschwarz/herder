@@ -116,7 +116,8 @@ struct WindowChrome: NSViewRepresentable {
 
         // The title bar accessory swallows clicks meant for SwiftUI content, and
         // there is no real title bar to double-click, so watch for the gesture
-        // directly and zoom the window like a standard title bar would.
+        // directly and zoom the window like a standard title bar would, except
+        // over a view that has a double-click of its own.
         if coordinator.doubleClickMonitor == nil {
             coordinator.doubleClickMonitor = NSEvent.addLocalMonitorForEvents(
                 matching: .leftMouseDown
@@ -124,7 +125,8 @@ struct WindowChrome: NSViewRepresentable {
                 guard let window,
                       event.window === window,
                       event.clickCount == 2,
-                      event.locationInWindow.y >= window.frame.height - Self.headerHeight
+                      event.locationInWindow.y >= window.frame.height - Self.headerHeight,
+                      !Self.isHandled(event, in: window)
                 else { return event }
                 window.zoom(nil)
                 return event
@@ -133,6 +135,12 @@ struct WindowChrome: NSViewRepresentable {
 
         Self.growTitleBar(in: window)
         Self.positionTrafficLights(in: window)
+    }
+
+    /// Whether the click lands on a view that answers a double-click itself.
+    private static func isHandled(_ event: NSEvent, in window: NSWindow) -> Bool {
+        guard let content = window.contentView, let frame = content.superview else { return false }
+        return content.hitTest(frame.convert(event.locationInWindow, from: nil)) is HandlesDoubleClick
     }
 
     /// Height of the strip along the window's top edge that acts as the title bar.

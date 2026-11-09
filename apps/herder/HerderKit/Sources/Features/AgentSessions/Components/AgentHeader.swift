@@ -8,6 +8,8 @@ import SwiftUI
 struct AgentHeader: View {
     let model: AgentPanelModel
 
+    @State private var tabsWidth: CGFloat = 0
+
     var body: some View {
         HStack(spacing: Theme.Spacing.tight) {
             // Scrolls rather than squeezing: the panel is narrow, and a tab
@@ -23,19 +25,35 @@ struct AgentHeader: View {
                         )
                     }
                 }
+                .onGeometryChange(for: CGFloat.self, of: \.size.width) { tabsWidth = $0 }
             }
             .scrollIndicators(.hidden)
             .fixedSize(horizontal: false, vertical: true)
+            // No wider than the tabs, so the space past them is the surface's
+            // below, and first to the room, so the tabs scroll only once that
+            // is down to its minimum.
+            .frame(maxWidth: tabsWidth)
+            .layoutPriority(1)
 
             AgentStartMenu(catalog: model.catalog, start: { agent in Task { await model.startSession(agent) } }) {
                 HoverIconLabel(icon: Ph.plus.regular)
             }
             .disabled(model.workspace == nil)
 
-            Spacer(minLength: 0)
+            // Empty space is a place to double-click for another session, as
+            // it is in a browser's tab strip.
+            DoubleClickSurface(action: startAnother)
+                .frame(minWidth: Theme.Spacing.loose, maxWidth: .infinity)
+                .frame(height: Theme.Size.iconButton)
         }
         .padding(.horizontal, Theme.Spacing.normal)
         .padding(.vertical, Theme.Spacing.tight)
+    }
+
+    /// Another session, with the agent used last.
+    private func startAnother() {
+        guard model.workspace != nil else { return }
+        Task { await model.startSession() }
     }
 }
 
