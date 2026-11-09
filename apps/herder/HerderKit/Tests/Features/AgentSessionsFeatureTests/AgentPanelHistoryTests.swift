@@ -47,13 +47,15 @@ import Testing
         let model = try await shown()
         await model.startSession(agent)
         let id = try #require(model.activeTab?.id)
+        model.activeTab?.screen?.send(text: "hello\r")
         try await eventually("it is written down") { sessions.recorded(in: repository).contains { $0.id == id } }
         return (model, try #require(sessions.session(id)))
     }
 
     /// A tab remembered from before there was a history has no record. It
-    /// gets one the next time its agent runs, keeping when it first started.
-    @Test func aTabRestoredWithNoRecordIsWrittenDownWhenItResumes() async throws {
+    /// gets one once it is said something to after it resumes, keeping when
+    /// it first started.
+    @Test func aTabRestoredWithNoRecordIsWrittenDownWhenItIsSaidSomethingTo() async throws {
         let registry = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
         let workspace = try #require(await registry.open(WorkspaceID(root)))
         let id = UUID()
@@ -68,6 +70,7 @@ import Testing
         )
 
         await model.show(workspace)
+        model.activeTab?.screen?.send(text: "hello\r")
 
         try await eventually("it is written down") { sessions.recorded(in: repository).contains { $0.id == id } }
         let session = try #require(sessions.session(id))
@@ -88,7 +91,30 @@ import Testing
         #expect(sessions.session(id) == nil)
     }
 
-    @Test func aSessionIsWrittenDownWhenItsAgentStarts() async throws {
+    @Test func aTabLeftAloneIsListedButNotWrittenDown() async throws {
+        let model = try await shown()
+
+        await model.startSession()
+        let id = try #require(model.activeTab?.id)
+        // Typing without Return is not saying anything yet.
+        model.activeTab?.screen?.send(text: "hel")
+        await sessions.flushSaves()
+
+        #expect(model.sessions.sessions.map(\.id) == [id])
+        #expect(sessions.session(id) == nil)
+    }
+
+    @Test func closingATabLeftAloneLeavesNoHistory() async throws {
+        let model = try await shown()
+        await model.startSession()
+
+        model.closeActiveTab()
+        await sessions.flushSaves()
+
+        #expect(sessions.recorded(in: repository).isEmpty)
+    }
+
+    @Test func aSessionIsWrittenDownWhenItIsFirstSaidSomethingTo() async throws {
         let (model, record) = try await started()
 
         #expect(record.id == model.activeTab?.id)

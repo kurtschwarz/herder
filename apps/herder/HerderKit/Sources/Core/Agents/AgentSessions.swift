@@ -11,9 +11,9 @@ import Observation
 /// second while an agent works, and kept here it would redraw every window's
 /// sidebar for one window's agent. This changes only when a record does.
 ///
-/// A session is written down once its agent first runs: a tab that never
-/// started is not history. It
-/// ends when the person closes the tab or the program quits by itself with
+/// A session is written down once its agent is running and the person has
+/// said something to it: a tab that never started, or was opened and left
+/// alone, is not history. It ends when the person closes the tab or the program quits by itself with
 /// status 0 — nothing else: a tab whose program failed stays up, and one
 /// remembered across a quit, or in a window that closed, is only paused. A
 /// session whose tab was lost without being closed, by a crash, is ended when

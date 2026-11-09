@@ -87,8 +87,16 @@ final class AgentTab: Identifiable {
     @ObservationIgnored private var wroteLastSample = false
     @ObservationIgnored private var seenOutput = 0
 
+    /// Whether the person has said anything to its agent since this launch
+    /// opened or restored the tab: pressed Return in it. A tab opened and
+    /// left alone is no conversation, and not worth a place in the history.
+    private(set) var hasConversed = false
+
     /// Told when the process exits, with how.
     @ObservationIgnored var onExit: ((AgentTab, Int32) -> Void)?
+
+    /// Told the first time the person says something to its agent.
+    @ObservationIgnored var onConverse: ((AgentTab) -> Void)?
 
     @ObservationIgnored private var process: (any PTYSession)?
     @ObservationIgnored private var watching: Task<Void, Never>?
@@ -128,7 +136,9 @@ final class AgentTab: Identifiable {
         do {
             let session = try await pty.spawn(spec)
             process = session
-            screen = TerminalScreen(session: session, size: spec.size)
+            let screen = TerminalScreen(session: session, size: spec.size)
+            screen.onSubmit = { [weak self] in self?.converse() }
+            self.screen = screen
             hasStarted = true
             if startedAt == nil { startedAt = Date() }
             wroteLastSample = false
@@ -192,6 +202,12 @@ final class AgentTab: Identifiable {
         let trimmed = title.drop { !$0.isLetter && !$0.isNumber }
             .trimmingCharacters(in: .whitespaces)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func converse() {
+        guard !hasConversed else { return }
+        hasConversed = true
+        onConverse?(self)
     }
 
     private func didExit(_ code: Int32) {

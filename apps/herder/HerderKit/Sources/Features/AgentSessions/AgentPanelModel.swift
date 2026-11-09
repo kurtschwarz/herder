@@ -292,11 +292,12 @@ public final class AgentPanelModel {
 
     // MARK: History
 
-    /// Writes down a session whose agent is now running: a new one, or one
-    /// restored from before that has none yet. One already written down is
-    /// left as it is.
+    /// Writes down a session whose agent is running and has been said
+    /// something to: a new one, or one restored from before that has none
+    /// yet. One already written down is left as it is. Called when either
+    /// becomes true, whichever is second.
     private func recordStart(of tab: AgentTab, in workspace: Workspace) {
-        guard tab.phase == .running, let started = tab.startedAt else { return }
+        guard tab.phase == .running, tab.hasConversed, let started = tab.startedAt else { return }
         let branch: String? = switch workspace.checkout {
         case .branch(let name): name
         case .detached(let sha): String(sha.prefix(7))
@@ -450,10 +451,15 @@ public final class AgentPanelModel {
         return environment.merging((preset ?? agent).environment ?? [:]) { $1 }
     }
 
-    /// The terminal UI stopped by itself. Quitting it ends the tab, as quitting
-    /// a shell does; anything else stays up with what it said, and a way to
-    /// start it again.
+    /// The person said something to the terminal UI, which is when its
+    /// session goes into the history. Or it stopped by itself: quitting it
+    /// ends the tab, as quitting a shell does; anything else stays up with
+    /// what it said, and a way to start it again.
     private func watch(_ tab: AgentTab, in id: WorkspaceID) {
+        tab.onConverse = { [weak self] tab in
+            guard let self, let workspace = workspaceObjects[id]?.workspace else { return }
+            recordStart(of: tab, in: workspace)
+        }
         tab.onExit = { [weak self] tab, code in
             guard let self else { return }
             if code == 0 {
