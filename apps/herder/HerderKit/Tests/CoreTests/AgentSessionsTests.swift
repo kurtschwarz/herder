@@ -309,6 +309,43 @@ import TestSupport
         #expect(relaunched.recorded(in: repository).map(\.id) == [kept.id])
     }
 
+    @Test func aRenamedSessionKeepsItsNameAfterARelaunch() async {
+        let sessions = makeSessions()
+        let ended = session()
+        await sessions.begin(ended)
+        sessions.end(ended.id, because: .closed, at: launch.addingTimeInterval(100))
+
+        sessions.rename(ended.id, to: "  Scroll fix  ")
+        await sessions.flushSaves()
+
+        let relaunched = makeSessions(launchedAt: launch.addingTimeInterval(1000))
+        await relaunched.load(repository)
+        #expect(relaunched.session(ended.id)?.title == "Scroll fix")
+        #expect(relaunched.session(ended.id)?.name == "Scroll fix")
+    }
+
+    @Test func aBlankNameChangesNothing() async {
+        let sessions = makeSessions()
+        let ended = session()
+        await sessions.begin(ended)
+        sessions.end(ended.id, because: .closed)
+
+        sessions.rename(ended.id, to: " ")
+
+        #expect(sessions.session(ended.id)?.title == ended.title)
+        #expect(sessions.session(ended.id)?.name == nil)
+    }
+
+    @Test func anOpenSessionIsNotRenamedHere() async {
+        let sessions = makeSessions()
+        let open = session()
+        await sessions.begin(open)
+
+        sessions.rename(open.id, to: "Scroll fix")
+
+        #expect(sessions.session(open.id)?.title == open.title)
+    }
+
     @Test func anOpenSessionIsNotDeleted() async {
         let sessions = makeSessions()
         let open = session()

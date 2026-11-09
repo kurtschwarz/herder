@@ -93,6 +93,10 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
     /// the agent's.
     public var title: String
 
+    /// The name the person gave it, if any: what its tab is called again
+    /// when it is resumed, where the program's title would not last.
+    public var name: String?
+
     public var startedAt: Date
 
     /// The last time anything here saw it running. What ``endedAt`` becomes
@@ -120,6 +124,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
         worktree: WorkspaceID,
         branch: String? = nil,
         title: String,
+        name: String? = nil,
         startedAt: Date,
         lastSeenAt: Date? = nil,
         endedAt: Date? = nil,
@@ -133,6 +138,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
         self.worktree = worktree
         self.branch = branch
         self.title = title
+        self.name = name
         self.startedAt = startedAt
         self.lastSeenAt = lastSeenAt ?? startedAt
         self.endedAt = endedAt
@@ -144,7 +150,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
     /// disk, under `history/`: renaming one is a migration. ``live`` is not
     /// among them.
     private enum CodingKeys: String, CodingKey {
-        case id, agentID, agentName, sessionID, worktree, branch, title
+        case id, agentID, agentName, sessionID, worktree, branch, title, name
         case startedAt, lastSeenAt, endedAt, endReason
     }
 
@@ -157,6 +163,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
         worktree = try container.decode(WorkspaceID.self, forKey: .worktree)
         branch = try container.decodeIfPresent(String.self, forKey: .branch)
         title = try container.decodeIfPresent(String.self, forKey: .title) ?? agentName
+        name = try container.decodeIfPresent(String.self, forKey: .name)
         startedAt = try container.decode(Date.self, forKey: .startedAt)
         lastSeenAt = try container.decodeIfPresent(Date.self, forKey: .lastSeenAt) ?? startedAt
         endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt)

@@ -246,7 +246,8 @@ public final class AgentPanelModel {
         catalog.markUsed(agent)
         sessions.store.reopen(session.id)
         let tab = AgentTab(
-            id: session.id, agent: agent, number: nextNumber(of: agent, in: workspace.id), restored: true,
+            id: session.id, agent: agent, number: nextNumber(of: agent, in: workspace.id), name: session.name,
+            restored: true,
             // An agent that names its own sessions is told which; for one
             // that is given an id, the tab's own is the session's.
             sessionID: agent.looksUpSessions ? sessionID : nil,
@@ -311,6 +312,7 @@ public final class AgentPanelModel {
             worktree: workspace.id,
             branch: branch,
             title: historyTitle(of: tab),
+            name: tab.customName,
             startedAt: started
         )
         Task { [store = sessions.store] in await store.begin(session) }
@@ -340,11 +342,24 @@ public final class AgentPanelModel {
     /// Names a tab, or with a blank name gives it back the agent's. Hands the
     /// keyboard back to the terminal UI: the name was typed over it.
     func rename(_ tab: AgentTab, to name: String) {
-        guard let id = workspace(holding: tab) else { return }
+        guard setName(of: tab, to: name) else { return }
+        select(tab)
+    }
+
+    /// Names the tab of session `id`, from outside the panel: the sidebar.
+    /// Leaves which tab is in front, and the keyboard, where they are.
+    public func rename(_ id: UUID, to name: String) {
+        guard let tab = tabsByWorkspace.values.joined().first(where: { $0.id == id }) else { return }
+        setName(of: tab, to: name)
+    }
+
+    @discardableResult
+    private func setName(of tab: AgentTab, to name: String) -> Bool {
+        guard let id = workspace(holding: tab) else { return false }
         tab.rename(to: name)
         remember(id)
         publish()
-        select(tab)
+        return true
     }
 
     /// Pins a tab or lets it go. Pinned tabs sit together at the front, in the
@@ -591,6 +606,7 @@ public final class AgentPanelModel {
                         // The person's name over the program's. Neither, for a
                         // paused tab, which keeps the title it had.
                         title: tab.customName ?? tab.programTitle,
+                        name: tab.customName,
                         fallbackTitle: title(of: tab),
                         sessionID: tab.sessionID,
                         state: tab.state,

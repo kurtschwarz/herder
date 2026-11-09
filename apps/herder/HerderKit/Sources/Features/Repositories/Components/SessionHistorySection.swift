@@ -70,15 +70,18 @@ struct SessionHistorySection: View {
                 HistoryRow(
                     record: record,
                     repository: repositories[record.id],
-                    worktreeExists: worktrees.contains(record.worktree)
-                ) { history?.delete(record.id) }
+                    worktreeExists: worktrees.contains(record.worktree),
+                    rename: { history?.rename(record.id, to: $0) },
+                    delete: { history?.delete(record.id) }
+                )
             }
         }
     }
 }
 
 /// One ended session: what it was called, and under that where it ran and how
-/// long since it ended. Click to pick it up again; right click to delete it.
+/// long since it ended. Click to pick it up again; right click to rename or
+/// delete it.
 private struct HistoryRow: View {
     let record: AgentSession
 
@@ -86,12 +89,14 @@ private struct HistoryRow: View {
     let repository: String?
 
     let worktreeExists: Bool
+    let rename: (String) -> Void
     let delete: () -> Void
 
     @Environment(AgentCatalog.self) private var catalog: AgentCatalog?
     @Environment(\.resumeAgentSession) private var resume
 
     @State private var isHovering = false
+    @State private var isRenaming = false
 
     /// Why it cannot be picked up again, or `nil` when it can. Never a
     /// stand-in: the last session in the worktree may be another.
@@ -113,11 +118,18 @@ private struct HistoryRow: View {
                 .padding(.top, 5)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(record.title)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.Palette.text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                if isRenaming {
+                    RenameField(name: record.title, weight: .regular) { name in
+                        isRenaming = false
+                        rename(name)
+                    }
+                } else {
+                    Text(record.title)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.Palette.text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
                 HStack(spacing: Theme.Spacing.tight) {
                     Ph.gitBranch
                         .resizable()
@@ -136,15 +148,19 @@ private struct HistoryRow: View {
         .padding(.vertical, Theme.Spacing.normal - 2)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .fill(isHovering && reason == nil ? Theme.Palette.control : .clear)
+                .fill(isHovering && reason == nil && !isRenaming ? Theme.Palette.control : .clear)
         }
-        .opacity(reason == nil ? 1 : 0.5)
+        .opacity(reason == nil || isRenaming ? 1 : 0.5)
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
-        .onTapGesture { if reason == nil { resume(record) } }
-        .pointerStyle(reason == nil ? .link : nil)
+        .onTapGesture { if reason == nil, !isRenaming { resume(record) } }
+        .pointerStyle(reason == nil && !isRenaming ? .link : nil)
         .help(reason ?? "Resume in \(record.agentName)")
         .contextMenu {
+            Button("Rename") { isRenaming = true }
+
+            Divider()
+
             Button("Delete", role: .destructive, action: delete)
         }
     }

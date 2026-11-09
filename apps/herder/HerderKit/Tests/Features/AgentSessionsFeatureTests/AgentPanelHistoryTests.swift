@@ -176,6 +176,40 @@ import Testing
         #expect(sessions.recorded(in: repository).count == 1)
     }
 
+    @Test func aSessionRenamedInTheHistoryKeepsItsNameWhenPickedUp() async throws {
+        let (model, record) = try await started()
+        model.closeActiveTab()
+        sessions.rename(record.id, to: "Scroll fix")
+
+        await model.resume(try #require(sessions.session(record.id)))
+
+        let tab = try #require(model.activeTab)
+        #expect(model.title(of: tab) == "Scroll fix")
+        #expect(sessions.session(record.id)?.name == "Scroll fix")
+    }
+
+    @Test func aTabsNameIsWrittenDown() async throws {
+        let (model, record) = try await started()
+
+        model.rename(try #require(model.activeTab), to: "Scroll fix")
+
+        #expect(sessions.session(record.id)?.name == "Scroll fix")
+        #expect(sessions.session(record.id)?.title == "Scroll fix")
+    }
+
+    @Test func aRunningSessionIsRenamedFromOutsideThePanel() async throws {
+        let (model, record) = try await started()
+        let focus = model.focusRequest
+
+        model.rename(record.id, to: "Scroll fix")
+
+        #expect(model.activeTab?.customName == "Scroll fix")
+        #expect(model.sessions.sessions.first?.title == "Scroll fix")
+        #expect(sessions.session(record.id)?.name == "Scroll fix")
+        // The sidebar asked: the keyboard stays where it is.
+        #expect(model.focusRequest == focus)
+    }
+
     @Test func aSessionWithNoIDIsNotPickedUp() async throws {
         let codex = try #require(Agent.presets.first { $0.id == "codex" })
         let (model, record) = try await started(codex)

@@ -35,6 +35,9 @@ public final class AgentSessions {
         /// `nil` when it has neither, as a paused tab does.
         public var title: String?
 
+        /// The person's name for it alone, without the program's.
+        public var name: String?
+
         /// What to call it when nothing better is known: the agent's name,
         /// and which of its sessions this is.
         public var fallbackTitle: String
@@ -49,6 +52,7 @@ public final class AgentSessions {
             agentID: Agent.ID,
             agentName: String,
             title: String?,
+            name: String? = nil,
             fallbackTitle: String,
             sessionID: String?,
             state: AgentSession.State,
@@ -59,6 +63,7 @@ public final class AgentSessions {
             self.agentID = agentID
             self.agentName = agentName
             self.title = title
+            self.name = name
             self.fallbackTitle = fallbackTitle
             self.sessionID = sessionID
             self.state = state
@@ -176,10 +181,11 @@ public final class AgentSessions {
     // MARK: - Open tabs
 
     /// Takes what `window`'s tabs say about the sessions written down: what
-    /// each is called now, its agent's id once found, and that it is still
-    /// running. Changes a record only when one of those changed, and its
-    /// last-seen time no oftener than ``seenGranularity``, so a panel
-    /// reporting every second costs nothing here. Also notes which sessions
+    /// each is called now, and by the person alone, its agent's id once
+    /// found, and that it is still running. Changes a record only when one of
+    /// those changed, and its last-seen time no oftener than
+    /// ``seenGranularity``, so a panel reporting every second costs nothing
+    /// here. Also notes which sessions
     /// the window has open, for ``reconcile(_:claimed:)``.
     public func note(_ reports: [Report], window: UUID, at now: Date = .now) {
         openByWindow[window] = reports.isEmpty ? nil : Set(reports.map(\.id))
@@ -190,6 +196,7 @@ public final class AgentSessions {
             guard let key = repositoryOfSession[report.id], var session = next[report.id] else { continue }
             let before = session
             if let title = report.title { session.title = title }
+            session.name = report.name
             if let sessionID = report.sessionID { session.sessionID = sessionID }
             if report.state.isRunning, now.timeIntervalSince(session.lastSeenAt) >= Self.seenGranularity {
                 session.lastSeenAt = now
@@ -235,6 +242,20 @@ public final class AgentSessions {
             session.endedAt = nil
             session.endReason = nil
             session.lastSeenAt = date
+            return true
+        }
+    }
+
+    /// Names an ended session, which is what it is listed as, and what its
+    /// tab is called if it is resumed. A blank name changes nothing. One
+    /// still open is named in its tab instead, which would undo this.
+    public func rename(_ id: UUID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        update(id) { session in
+            guard session.isEnded, session.name != trimmed || session.title != trimmed else { return false }
+            session.name = trimmed
+            session.title = trimmed
             return true
         }
     }

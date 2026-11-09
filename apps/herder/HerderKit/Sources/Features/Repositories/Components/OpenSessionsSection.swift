@@ -16,6 +16,7 @@ struct OpenSessionsSection: View {
     @Environment(WindowAgentSessions.self) private var open: WindowAgentSessions?
     @Environment(Workspace.self) private var active: Workspace?
     @Environment(\.showAgentSession) private var showAgentSession
+    @Environment(\.renameAgentSession) private var renameAgentSession
 
     var body: some View {
         let labels = model.worktreeLabels(of: repositories)
@@ -35,8 +36,10 @@ struct OpenSessionsSection: View {
                 AgentSessionRow(
                     session: session,
                     branch: labels[session.worktree] ?? session.worktree.root.name,
-                    isSelected: active?.id == session.worktree && focused == session.id
-                ) { showAgentSession(session) }
+                    isSelected: active?.id == session.worktree && focused == session.id,
+                    show: { showAgentSession(session) },
+                    rename: { renameAgentSession(session, to: $0) }
+                )
             }
 
             if sessions.isEmpty {
@@ -115,14 +118,17 @@ struct OpenSessionsSection: View {
 }
 
 /// One session: what it is called and how long since it last did anything,
-/// under that what it seems to be doing, and the worktree it is in.
+/// under that what it seems to be doing, and the worktree it is in. Right
+/// click to rename it.
 private struct AgentSessionRow: View {
     let session: AgentSession
     let branch: String
     let isSelected: Bool
     let show: () -> Void
+    let rename: (String) -> Void
 
     @State private var isHovering = false
+    @State private var isRenaming = false
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.normal + 2) {
@@ -133,11 +139,21 @@ private struct AgentSessionRow: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.normal) {
-                    Text(session.title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.Palette.text)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    if isRenaming {
+                        RenameField(name: session.title) { name in
+                            isRenaming = false
+                            // Escape and a cleared field both say blank:
+                            // neither is a name, and the panel would take
+                            // it as one to drop.
+                            if !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { rename(name) }
+                        }
+                    } else {
+                        Text(session.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.Palette.text)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                     Spacer(minLength: 0)
                     // Redrawn on its own every half minute, so "now"
                     // becomes "1m" without anything else changing.
@@ -173,9 +189,12 @@ private struct AgentSessionRow: View {
         .padding(.vertical, 1)
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
-        .onTapGesture(perform: show)
-        .pointerStyle(.link)
+        .onTapGesture { if !isRenaming { show() } }
+        .pointerStyle(isRenaming ? nil : .link)
         .help(session.agentName)
+        .contextMenu {
+            Button("Rename") { isRenaming = true }
+        }
     }
 
     /// Every session listed here has a tab open; paused is what one would

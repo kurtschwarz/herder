@@ -61,6 +61,7 @@ public final class WindowAgentSessions {
                 startedAt: now
             )
             if let title = report.title { session.title = title }
+            session.name = report.name
             if let sessionID = report.sessionID { session.sessionID = sessionID }
             session.live = AgentSession.Live(state: report.state, lastActivity: report.lastActivity)
             return session

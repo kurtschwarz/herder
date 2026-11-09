@@ -4,21 +4,23 @@ import SwiftUI
 /// Edits a name in place. Return or clicking away keeps the edit, Escape drops
 /// it; a blank name is the store's to refuse.
 struct RenameField: View {
+    let weight: Font.Weight
     let commit: (String) -> Void
 
     @State private var text: String
     @State private var isFinished = false
     @FocusState private var isFocused: Bool
 
-    init(name: String, commit: @escaping (String) -> Void) {
+    init(name: String, weight: Font.Weight = .semibold, commit: @escaping (String) -> Void) {
         _text = State(initialValue: name)
+        self.weight = weight
         self.commit = commit
     }
 
     var body: some View {
         TextField("Name", text: $text)
             .textFieldStyle(.plain)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 13, weight: weight))
             .foregroundStyle(Theme.Palette.text)
             .focused($isFocused)
             .onAppear { isFocused = true }
