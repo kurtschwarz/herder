@@ -1,3 +1,4 @@
+import Core
 import DesignSystem
 import SettingsFeature
 import SwiftUI
@@ -15,7 +16,7 @@ public struct SettingsWindow: View {
     }
 
     public var body: some View {
-        SettingsView(agents: environment.agents)
+        SettingsView(agents: environment.agents, version: AppVersion(info: Bundle.main.infoDictionary ?? [:]))
             .background { WindowGlass() }
             // No close callbacks: nothing in here can be lost by closing it.
             .background(WindowChrome())

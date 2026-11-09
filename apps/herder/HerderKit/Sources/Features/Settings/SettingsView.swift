@@ -11,9 +11,11 @@ public struct SettingsView: View {
     @State private var selection: SettingsPane = .general
 
     private let agents: AgentCatalog
+    private let version: AppVersion
 
-    public init(agents: AgentCatalog) {
+    public init(agents: AgentCatalog, version: AppVersion) {
         self.agents = agents
+        self.version = version
     }
 
     public var body: some View {
@@ -33,7 +35,7 @@ public struct SettingsView: View {
     @ViewBuilder
     private var detail: some View {
         switch selection {
-        case .general: GeneralSettings()
+        case .general: GeneralSettings(version: version)
         case .agents: AgentsSettings(catalog: agents)
         }
     }
@@ -41,7 +43,7 @@ public struct SettingsView: View {
 
 #if DEBUG
 #Preview {
-    SettingsView(agents: AgentCatalog(state: InMemoryStateStore()))
+    SettingsView(agents: AgentCatalog(state: InMemoryStateStore()), version: AppVersion(version: "0.1.0", build: "1", commit: "e87cd6e"))
         .frame(width: Theme.Size.settingsWindow.width, height: Theme.Size.settingsWindow.height)
         .background { WindowGlass() }
         .preferredColorScheme(.dark)

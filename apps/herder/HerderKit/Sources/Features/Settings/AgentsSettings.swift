@@ -15,7 +15,7 @@ struct AgentsSettings: View {
                 .foregroundStyle(Theme.Palette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
-            section("Built in") {
+            SettingsSection("Built in") {
                 ForEach(Agent.presets) { agent in
                     HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.loose) {
                         Text(agent.name)
@@ -38,7 +38,7 @@ struct AgentsSettings: View {
                 }
             }
 
-            section("Your agents") {
+            SettingsSection("Your agents") {
                 if catalog.custom.isEmpty {
                     Text("None yet.")
                         .foregroundStyle(Theme.Palette.tertiaryText)
@@ -51,20 +51,6 @@ struct AgentsSettings: View {
                     .buttonStyle(.secondary)
                     .padding(.top, Theme.Spacing.tight)
             }
-        }
-    }
-
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.normal) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.Palette.secondaryText)
-            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                content()
-            }
-            .padding(Theme.Spacing.loose)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fieldGroupSurface()
         }
     }
 }

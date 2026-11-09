@@ -79,7 +79,7 @@ test *args: syntax ghostty
 
 # Build the app
 build: project syntax ghostty
-    @{{ xcodebuild }} -configuration Debug -quiet build
+    @{{ xcodebuild }} -configuration Debug -quiet build HERDER_GIT_COMMIT=$(git rev-parse --short HEAD)
 
 # Build and run the app, with its output in this terminal
 dev: build

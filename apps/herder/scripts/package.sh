@@ -15,7 +15,7 @@ STAGE="$BUILD/dmg"
 ENTITLEMENTS="$ROOT/Herder/Herder.entitlements"
 ARCH="$(uname -m)"
 
-settings=()
+settings=("HERDER_GIT_COMMIT=$(git -C "$ROOT" rev-parse --short HEAD)")
 if [[ -n "${VERSION:-}" ]]; then
     settings+=("MARKETING_VERSION=$VERSION" "CURRENT_PROJECT_VERSION=$(git -C "$ROOT" rev-list --count HEAD)")
 fi
@@ -36,6 +36,17 @@ xcodebuild \
 rm -rf "$APP"
 # ditto rather than cp, to keep the bundle intact.
 ditto "$DERIVED/Build/Products/Release/Herder.app" "$APP"
+
+# A release must say the version its tag does. Checked here, before
+# anything is signed or notarized, rather than found in Settings later.
+built="$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")"
+if [[ -n "${VERSION:-}" && "$built" != "$VERSION" ]]; then
+    printf 'Built version %s, expected %s\n' "$built" "$VERSION" >&2
+    exit 1
+fi
+printf 'Version %s (%s), commit %s\n' "$built" \
+    "$(plutil -extract CFBundleVersion raw "$APP/Contents/Info.plist")" \
+    "$(plutil -extract HerderGitCommit raw "$APP/Contents/Info.plist")"
 
 if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
     codesign --force --deep --sign "$CODESIGN_IDENTITY" --timestamp --options runtime \
