@@ -82,14 +82,21 @@ public struct TabBar<Tab: Identifiable, Menu: View, NewTab: View, Trailing: View
 
     public var body: some View {
         HStack(spacing: Theme.Spacing.tight) {
-            strip
-                // No wider than the tabs, so the space past them is the
-                // filler's below, and first to the room, so the tabs scroll
-                // only once that is down to its minimum.
-                .frame(maxWidth: tabsWidth)
-                .layoutPriority(1)
+            if tabs.isEmpty {
+                // In the first tab's place, and the bar as tall as with one.
+                newTab
+                    .padding(.leading, Theme.Spacing.normal)
+                    .padding(.vertical, Theme.Spacing.tight)
+            } else {
+                strip
+                    // No wider than the tabs, so the space past them is the
+                    // filler's below, and first to the room, so the tabs scroll
+                    // only once that is down to its minimum.
+                    .frame(maxWidth: tabsWidth)
+                    .layoutPriority(1)
 
-            newTab
+                newTab
+            }
 
             filler
                 .frame(minWidth: Theme.Spacing.loose, maxWidth: .infinity)

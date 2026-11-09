@@ -25,6 +25,9 @@ struct AgentHeader: View {
             }
             .disabled(model.workspace == nil)
         }
+        // On top of the bar's own, so the first tab sits as far from the
+        // panel's top as from its side.
+        .padding(.top, Theme.Spacing.tight)
     }
 
     /// Another session, with the agent used last.
