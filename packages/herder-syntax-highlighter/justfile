@@ -1,7 +1,7 @@
 set shell := ["zsh", "-cu"]
 
 # Recipes for the syntax-highlighting crate. Callable from here, or from the
-# repo root as `just <recipe> packages/syntax-highlighter`.
+# repo root as `just <recipe> packages/herder-syntax-highlighter`.
 #
 # The build output is an XCFramework, because that is the only form a SwiftPM
 # `.binaryTarget` accepts. Whoever consumes it copies it in; this crate does not

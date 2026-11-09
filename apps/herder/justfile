@@ -9,7 +9,7 @@ kit := "HerderKit"
 
 # The syntax-highlighting crate. Its XCFramework is a `.binaryTarget` of
 # HerderKit, so it has to exist before SwiftPM will resolve the package at all.
-crate := "../../packages/syntax-highlighter"
+crate := "../../packages/herder-syntax-highlighter"
 vendor := kit + "/Vendor"
 
 # libghostty-vt, which the terminal component links the same way.

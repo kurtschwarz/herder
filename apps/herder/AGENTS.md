@@ -40,7 +40,7 @@ rationale.
 | A key the app stores state under | a `static let persistenceKey` beside the snapshot. **Never rename one** — it is a file name on the user's disk, so a rename is a migration. |
 | Live state two features both read | `Core/Workspace/`, on the `Workspace`, not whichever feature needed it first |
 | A different libghostty-vt version | `../../packages/ghostty-vt/GHOSTTY_COMMIT`, then fix what `TerminalUI` breaks |
-| A language for the editor to highlight | `../../packages/syntax-highlighter`, not here. See its `AGENTS.md`. |
+| A language for the editor to highlight | `../../packages/herder-syntax-highlighter`, not here. See its `AGENTS.md`. |
 
 Organise by feature, not by type: a feature's view, model and subviews sit together.
 Name files after the single type they hold.
@@ -72,7 +72,7 @@ just ghostty       # build libghostty-vt at the pinned commit (needs Zig 0.17.x)
 up by SwiftPM, so only changes to `Herder/` or `UITests/` need `just project`.
 
 `HerderKit` has a `.binaryTarget` on `Vendor/HerderSyntaxFFI.xcframework`, built
-from `../../packages/syntax-highlighter` and gitignored like the project file.
+from `../../packages/herder-syntax-highlighter` and gitignored like the project file.
 `test`, `build` and `bootstrap` all depend on the `syntax` recipe, so it is never
 stale; a fresh clone needs `just bootstrap` before SwiftPM will resolve the
 package, and needs a Rust toolchain for that to work. `ghostty` is the same

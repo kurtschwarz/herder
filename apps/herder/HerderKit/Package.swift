@@ -53,7 +53,7 @@ let package = Package(
         .target(name: "TestSupport", dependencies: ["Core"], swiftSettings: core),
 
         // Syntax highlighting, over the `herder-syntax` Rust crate under
-        // `packages/syntax-highlighter`. The grammars, their queries and the
+        // `packages/herder-syntax-highlighter`. The grammars, their queries and the
         // table matching a file to a language all live there.
         //
         // An XCFramework because that is the only shape a `.binaryTarget`

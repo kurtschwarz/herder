@@ -6,7 +6,7 @@ This is the target architecture for Herder and the rulebook for anyone (human or
 
 - Swift 6 language mode, `swift-tools-version: 6.2`, macOS 26 and later
 - SwiftUI for the app shell and panels; AppKit (`NSTextView` with TextKit 2) for the editor surface
-- Rust for performance-sensitive work, starting with the syntax highlighter in `packages/syntax-highlighter`. That package stays where it is and keeps its own build and binding setup.
+- Rust for performance-sensitive work, starting with the syntax highlighter in `packages/herder-syntax-highlighter`. That package stays where it is and keeps its own build and binding setup.
 - Zig, only to build libghostty-vt (the terminal emulation under the terminal panel) from a pinned Ghostty commit: `packages/ghostty-vt`. Zig 0.17.x, `brew install zig`. We write no Zig.
 - Distributed with Developer ID signing and notarization. No App Sandbox, because Herder spawns processes and opens arbitrary folders.
 
@@ -26,7 +26,7 @@ AppFeature            composition root: windows, menus, builds real services
   └──► Services        protocol implementations: disk, git, PTYs, persistence, Rust
               │
               ▼
-          RustBridge   Swift bindings for packages/syntax-highlighter
+          RustBridge   Swift bindings for packages/herder-syntax-highlighter
 ```
 
 ### The composition root is a module, not the Xcode target
@@ -39,7 +39,7 @@ AppFeature            composition root: windows, menus, builds real services
 
 ### RustBridge
 
-`RustBridge` is a role, not a target name. In Herder it is filled by the `HerderSyntaxFFI` binary target: `packages/syntax-highlighter` ships no Swift package, it builds an XCFramework, and `.binaryTarget` is how SwiftPM takes one. `Services` depends on it directly, so there is no separate wrapper target. Substitute `HerderSyntaxFFI` wherever this document and `check-boundaries.sh` say `RustBridge`.
+`RustBridge` is a role, not a target name. In Herder it is filled by the `HerderSyntaxFFI` binary target: `packages/herder-syntax-highlighter` ships no Swift package, it builds an XCFramework, and `.binaryTarget` is how SwiftPM takes one. `Services` depends on it directly, so there is no separate wrapper target. Substitute `HerderSyntaxFFI` wherever this document and `check-boundaries.sh` say `RustBridge`.
 
 ### Dependency rules
 
@@ -128,7 +128,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   └── ...                              # other apps: not Herder's business
 │
 └── packages/
-    ├── syntax-highlighter/              # Rust highlighter: stays here, owns its own build
+    ├── herder-syntax-highlighter/ # Rust highlighter: stays here, owns its own build
     ├── ghostty-vt/                      # a pinned Ghostty commit and the recipe that builds libghostty-vt
     ├── opencode-theme/                  # the `herder` opencode theme the agent panel asks for; `just install`
     ├── opencode-plugin-osc-7501/        # opencode plugin that reports session status with OSC 7501; `just install`
@@ -461,9 +461,9 @@ shows it.
 
 ## Rust
 
-- The syntax highlighter lives in `packages/syntax-highlighter` and stays there. Don't move it, rename it, or restructure its crates as part of other work.
+- The syntax highlighter lives in `packages/herder-syntax-highlighter` and stays there. Don't move it or restructure its crates as part of other work.
 - It owns its build and binding generation. HerderKit consumes its output; HerderKit doesn't reach into its internals or duplicate its build steps. `just syntax` builds the XCFramework and copies it into `HerderKit/Vendor/`, so the `.binaryTarget` path stays inside the package and SwiftPM never depends on Cargo's output directory.
-- **The bindings are hand-written**, not generated: a C header and a modulemap in `packages/syntax-highlighter/include/`, declaring module `HerderSyntaxFFI`. The header is the API. It is edited by hand, in step with `src/lib.rs`, and the two must not drift — `TreeSitterHighlighterTests` asserts the kind count matches.
+- **The bindings are hand-written**, not generated: a C header and a modulemap in `packages/herder-syntax-highlighter/include/`, declaring module `HerderSyntaxFFI`. The header is the API. It is edited by hand, in step with `src/lib.rs`, and the two must not drift — `TreeSitterHighlighterTests` asserts the kind count matches.
 - Changes to its public API (what Swift sees) are deliberate and get their own task.
 - Swift touches it in exactly one place: the highlighting service in `Services/Highlighting/` (for example `RustHighlightService`), which converts its types to Core types.
 - Keep the FFI API coarse: send edits, not whole documents; request highlights for the visible range; batch where possible.
@@ -505,7 +505,7 @@ shows it.
 - Unit tests use Swift Testing (`import Testing`): structs for suites, `#require` to unwrap, `#expect` for everything else. They run in parallel, so anything process-global needs a unique path per test.
 - Core and Services have unit tests. Feature models are tested against fakes from `TestSupport`.
 - Previews use fakes: `.environment(Workspace.preview())`.
-- The syntax highlighter is tested with `cargo test` and `cargo clippy` inside `packages/syntax-highlighter`. Clippy warnings are errors.
+- The syntax highlighter is tested with `cargo test` and `cargo clippy` inside `packages/herder-syntax-highlighter`. Clippy warnings are errors.
 
 ## Code conventions
 
@@ -522,7 +522,7 @@ Run from `apps/herder/`.
 
 ```
 just bootstrap # syntax + ghostty + project. Needed once in a fresh clone, and needs Rust and Zig toolchains.
-just syntax    # runs packages/syntax-highlighter's own build, then copies the XCFramework into Vendor/
+just syntax    # runs packages/herder-syntax-highlighter's own build, then copies the XCFramework into Vendor/
 just ghostty   # builds libghostty-vt at the commit in packages/ghostty-vt/GHOSTTY_COMMIT (needs Zig 0.17.x), copies it into Vendor/
 just project   # xcodegen generate. Needed after changing Herder/ or UITests/, not HerderKit.
 just build     # project + syntax, then xcodebuild
