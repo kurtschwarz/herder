@@ -20,6 +20,7 @@ public struct AgentPanel: View {
             Group {
                 if let tab = model.activeTab {
                     AgentTabContent(tab: tab, model: model)
+                        .id(tab.id)
                 } else {
                     AgentEmptyState(model: model)
                 }
