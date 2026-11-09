@@ -27,6 +27,7 @@ jobs:
     env:
       CODESIGN_IDENTITY: "Developer ID Application: KURT SCHWARZ (P9DZH3LW75)"
       DMG_PATH: apps/herder/build/Herder.dmg
+      ZIG_VERSION: 0.17.0
 
     steps:
       - name: Check out repository
@@ -45,7 +46,25 @@ jobs:
       - name: Set up Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.17.0
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      # Restore only: a cache saved under a tag is visible to that tag alone.
+      # Herder CI's runs on main keep these warm. The key matches Herder CI's.
+      - name: Restore libghostty-vt
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            packages/herder-ghostty-vt/target/GhosttyVt.xcframework
+            packages/herder-ghostty-vt/target/built-commit
+          key: ghostty-vt-${{ runner.os }}-${{ runner.arch }}-zig-${{ env.ZIG_VERSION }}-${{ hashFiles('packages/herder-ghostty-vt/GHOSTTY_COMMIT', 'packages/herder-ghostty-vt/justfile') }}
+
+      - name: Restore Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: packages/herder-syntax-highlighter -> target
+          shared-key: herder-syntax-highlighter
+          save-if: false
 
       - name: Install tools
         run: brew install just xcodegen
@@ -56,9 +75,8 @@ jobs:
           zig version
           rustup show active-toolchain
 
-      - name: Run tests
-        timeout-minutes: 25
-        run: just test apps/herder
+      # No tests here: the tag is on the release PR's merge commit, which Herder
+      # CI tested on the PR and tests again on the push to main.
 
       - name: Import Developer ID certificate
         env:
