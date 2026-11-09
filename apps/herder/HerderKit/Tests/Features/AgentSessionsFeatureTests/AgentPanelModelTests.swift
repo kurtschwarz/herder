@@ -446,6 +446,45 @@ import Testing
         #expect(model.tabs.map { model.title(of: $0) } == ["Codex", "Codex 2", "Codex 3"])
     }
 
+    // MARK: Naming
+
+    @Test func aNamedTabSaysItsNameInTheTabAndTheSidebar() async throws {
+        let (model, _, _) = try await shown(sessions: 2)
+        let tab = model.tabs[0]
+
+        model.rename(tab, to: "  Fix the build  ")
+
+        #expect(model.tabs.map { model.title(of: $0) } == ["Fix the build", "Claude Code 2"])
+        #expect(open.sessions.first?.title == "Fix the build")
+        #expect(model.activeTab?.id == tab.id)
+    }
+
+    @Test func aBlankNameGoesBackToTheAgents() async throws {
+        let (model, _, _) = try await shown(sessions: 1)
+        let tab = try #require(model.activeTab)
+        model.rename(tab, to: "Fix the build")
+
+        model.rename(tab, to: "   ")
+
+        #expect(model.title(of: tab) == "Claude Code")
+    }
+
+    @Test func aNameIsRememberedWithItsTab() async throws {
+        let registry = makeRegistry()
+        let model = makeModel()
+        let workspace = try await workspace(root, in: registry)
+        await model.show(workspace)
+        await model.startSession()
+        model.rename(try #require(model.activeTab), to: "Fix the build")
+        model.terminateAll()
+        await workspace.saveSnapshot()
+
+        let reopened = makeModel()
+        await reopened.show(try await self.workspace(root, in: makeRegistry()))
+
+        #expect(reopened.activeTab.map { reopened.title(of: $0) } == "Fix the build")
+    }
+
     // MARK: Agents that name their own sessions
 
     /// What opencode's lookup prints for sessions in `root`, made now.

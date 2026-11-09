@@ -108,10 +108,11 @@ public final class AgentPanelModel {
 
     public var canSelectOtherTab: Bool { tabs.count > 1 }
 
-    /// The agent's name, and which of its sessions this is once there is more
-    /// than one.
+    /// The name the person gave it, or else the agent's name, and which of its
+    /// sessions this is once there is more than one.
     func title(of tab: AgentTab) -> String {
-        tab.number > 1 ? "\(tab.agent.displayName) \(tab.number)" : tab.agent.displayName
+        if let name = tab.customName { return name }
+        return tab.number > 1 ? "\(tab.agent.displayName) \(tab.number)" : tab.agent.displayName
     }
 
     // MARK: Showing a workspace
@@ -152,7 +153,7 @@ public final class AgentPanelModel {
         guard !state.tabs.isEmpty else { return }
         let tabs = state.tabs.map {
             AgentTab(
-                id: $0.id, agent: $0.agent, number: $0.number,
+                id: $0.id, agent: $0.agent, number: $0.number, name: $0.name,
                 restored: true, sessionID: $0.session, startedAt: $0.started
             )
         }
@@ -239,6 +240,16 @@ public final class AgentPanelModel {
         remember(workspace.id)
         publish()
         if tab.phase == .waiting { Task { await resumeActive() } }
+    }
+
+    /// Names a tab, or with a blank name gives it back the agent's. Hands the
+    /// keyboard back to the terminal UI: the name was typed over it.
+    func rename(_ tab: AgentTab, to name: String) {
+        guard let id = tabsByWorkspace.first(where: { $0.value.contains { $0.id == tab.id } })?.key else { return }
+        tab.rename(to: name)
+        remember(id)
+        publish()
+        select(tab)
     }
 
     public func selectNextTab() { cycle(by: 1) }
@@ -365,7 +376,10 @@ public final class AgentPanelModel {
         guard let workspace = workspaceObjects[id]?.workspace else { return }
         let state = workspace.uiState(AgentPanelUIState.self)
         let tabs = (tabsByWorkspace[id] ?? []).map {
-            AgentPanelUIState.Tab(id: $0.id, agent: $0.agent, number: $0.number, session: $0.sessionID, started: $0.startedAt)
+            AgentPanelUIState.Tab(
+                id: $0.id, agent: $0.agent, number: $0.number, name: $0.customName,
+                session: $0.sessionID, started: $0.startedAt
+            )
         }
         let active = activeByWorkspace[id]
         guard state.tabs != tabs || state.active != active else { return }
@@ -430,7 +444,8 @@ public final class AgentPanelModel {
                     AgentSessionSummary(
                         id: tab.id,
                         workspace: workspace,
-                        title: tab.programTitle ?? title(of: tab),
+                        // The person's name over the program's.
+                        title: tab.customName ?? tab.programTitle ?? title(of: tab),
                         agentName: tab.agent.displayName,
                         state: tab.state,
                         lastActivity: tab.lastActivity

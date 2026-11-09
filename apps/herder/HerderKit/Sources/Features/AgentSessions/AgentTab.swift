@@ -32,6 +32,19 @@ final class AgentTab: Identifiable {
     /// nothing outside.
     let number: Int
 
+    /// A name the person gave it, which replaces the agent's until it is
+    /// cleared. Kept across launches, like the tab.
+    private(set) var customName: String?
+
+    /// The longest a name may be. About what a tab can show.
+    static let maxNameLength = 40
+
+    /// Names the tab. Blank goes back to the agent's name.
+    func rename(to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        customName = trimmed.isEmpty ? nil : String(trimmed.prefix(Self.maxNameLength))
+    }
+
     private(set) var phase: Phase
 
     /// Whether its agent has been started before, here or before a relaunch:
@@ -80,6 +93,7 @@ final class AgentTab: Identifiable {
         id: UUID = UUID(),
         agent: Agent,
         number: Int,
+        name: String? = nil,
         restored: Bool = false,
         sessionID: String? = nil,
         startedAt: Date? = nil
@@ -87,6 +101,7 @@ final class AgentTab: Identifiable {
         self.id = id
         self.agent = agent
         self.number = number
+        self.customName = name
         self.sessionID = sessionID
         self.startedAt = startedAt
         self.hasStarted = restored
