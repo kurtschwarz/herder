@@ -106,12 +106,21 @@ private struct NewSessionCard: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-            Text("New session")
-                .font(.title2.bold())
-                .foregroundStyle(Theme.Palette.text)
-            Text("In \(model.repositoryName). You type your first prompt in the agent.")
-                .foregroundStyle(Theme.Palette.secondaryText)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                Text("New session")
+                    .font(.title2.bold())
+                    .foregroundStyle(Theme.Palette.text)
+                Text("In \(model.repositoryName). You type your first prompt in the agent.")
+                    .foregroundStyle(Theme.Palette.secondaryText)
+            }
+            Spacer(minLength: Theme.Spacing.loose)
+            Button(action: cancel) {
+                PhIcon(Ph.xBold, size: 12)
+            }
+            .buttonStyle(.icon(size: 24))
+            .disabled(model.isCreating)
+            .help("Close")
         }
     }
 
