@@ -10,13 +10,18 @@ import Testing
     let client = LivePTYClient()
     let directory = URL.temporaryDirectory.appending(path: "LivePTYClientTests", directoryHint: .isDirectory)
 
+    /// Here and not in ``spawn(_:executable:size:)``, so a test that calls
+    /// the client itself cannot start in a folder that is not there yet.
+    init() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
     func spawn(
         _ arguments: [String],
         executable: String = "/bin/sh",
         size: PTYSize = PTYSize(columns: 80, rows: 24)
     ) async throws -> any PTYSession {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return try await client.spawn(PTYSpec(
+        try await client.spawn(PTYSpec(
             executable: executable,
             arguments: [executable] + arguments,
             environment: ["PATH": "/usr/bin:/bin", "TERM": "xterm-256color", "PS1": "$ "],
@@ -164,7 +169,6 @@ import Testing
     }
 
     @Test func thePidVariableIsTheProcesssOwnPid() async throws {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let session = try await client.spawn(PTYSpec(
             executable: "/bin/sh", arguments: ["sh", "-c", "echo \"$MARK:$$\""],
             environment: ["PATH": "/usr/bin:/bin"], workingDirectory: directory,
