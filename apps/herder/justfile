@@ -74,12 +74,16 @@ project:
 # depends on how many products the package exports: with several it is
 # `HerderKit-Package` instead. If this starts failing with "does not contain a
 # scheme", run `xcodebuild -list` in {{ kit }} and use what it prints.
+#
+# Without -parallel-testing-enabled the test bundles run one after another, so
+# the whole run waits on each bundle's slowest suite in turn. Side by side they
+# take about a quarter of the time. Their output interleaves as a result.
 test *args: syntax ghostty
-    cd {{ kit }} && xcodebuild test -scheme HerderKit -destination 'platform=macOS,arch={{ arch }}' {{ args }}
+    cd {{ kit }} && xcodebuild test -scheme HerderKit -destination 'platform=macOS,arch={{ arch }}' -parallel-testing-enabled YES {{ args }}
 
-# Build the app
-build: project syntax ghostty
-    @{{ xcodebuild }} -configuration Debug -quiet build HERDER_GIT_COMMIT=$(git rev-parse --short HEAD)
+# Build the app. Extra arguments go to xcodebuild, as with `test`.
+build *args: project syntax ghostty
+    @{{ xcodebuild }} -configuration Debug -quiet build HERDER_GIT_COMMIT=$(git rev-parse --short HEAD) {{ args }}
 
 # Build and run the app, with its output in this terminal
 dev: build
