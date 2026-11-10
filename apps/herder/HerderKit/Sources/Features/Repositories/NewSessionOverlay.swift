@@ -129,10 +129,11 @@ private struct NewSessionCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
             HStack(spacing: Theme.Spacing.normal) {
                 Text(title)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.Palette.secondaryText)
                 if let detail {
                     Text(detail)
+                        .font(.system(size: 12))
                         .foregroundStyle(Theme.Palette.tertiaryText)
                 }
             }
@@ -291,7 +292,7 @@ private struct NewWorktreeRow: View {
                 .foregroundStyle(Theme.Palette.secondaryText)
             VStack(alignment: .leading, spacing: 2) {
                 Text("New worktree")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.Palette.text)
                 Text("Its own checkout and branch. Nothing touches your files until you merge.")
                     .font(.callout)
@@ -318,7 +319,7 @@ private struct NewWorktreePanel: View {
 
     @FocusState private var isBranchFocused: Bool
 
-    private static let labelWidth: CGFloat = 90
+    private static let labelWidth: CGFloat = 76
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
@@ -329,11 +330,11 @@ private struct NewWorktreePanel: View {
                     prompt: Text("agent/new-task").foregroundStyle(Theme.Palette.tertiaryText)
                 )
                 .textFieldStyle(.plain)
-                .font(.system(.body, design: .monospaced))
+                .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Theme.Palette.text)
                 .focused($isBranchFocused)
                 .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-                .frame(minHeight: Theme.Size.control + 6)
+                .frame(minHeight: Theme.Size.control)
                 .fieldSurface()
             }
 
@@ -342,11 +343,11 @@ private struct NewWorktreePanel: View {
             row("Folder") {
                 if let message {
                     Text(message)
-                        .font(.callout)
+                        .font(.system(size: 12))
                         .foregroundStyle(Theme.Palette.warning)
                 } else if let location = model.location {
                     Text((location.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(Theme.Palette.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.head)
@@ -364,7 +365,7 @@ private struct NewWorktreePanel: View {
     private func row<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         HStack(spacing: Theme.Spacing.normal) {
             Text(title)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Theme.Palette.secondaryText)
                 .frame(width: Self.labelWidth, alignment: .leading)
             content()
@@ -393,7 +394,7 @@ private struct BaseBranchPicker: View {
         Button { isOpen.toggle() } label: {
             HStack(spacing: Theme.Spacing.normal) {
                 Text(model.baseBranch.isEmpty ? "\u{2014}" : model.baseBranch)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(Theme.Palette.text)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -401,7 +402,7 @@ private struct BaseBranchPicker: View {
                     .foregroundStyle(Theme.Palette.secondaryText)
             }
             .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-            .frame(maxWidth: .infinity, minHeight: Theme.Size.control + 6)
+            .frame(maxWidth: .infinity, minHeight: Theme.Size.control)
             .fieldSurface()
             .contentShape(Rectangle())
         }
