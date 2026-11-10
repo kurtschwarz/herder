@@ -77,9 +77,9 @@ project:
 test *args: syntax ghostty
     cd {{ kit }} && xcodebuild test -scheme HerderKit -destination 'platform=macOS,arch={{ arch }}' {{ args }}
 
-# Build the app
-build: project syntax ghostty
-    @{{ xcodebuild }} -configuration Debug -quiet build HERDER_GIT_COMMIT=$(git rev-parse --short HEAD)
+# Build the app. Extra arguments go to xcodebuild, as with `test`.
+build *args: project syntax ghostty
+    @{{ xcodebuild }} -configuration Debug -quiet build HERDER_GIT_COMMIT=$(git rev-parse --short HEAD) {{ args }}
 
 # Build and run the app, with its output in this terminal
 dev: build

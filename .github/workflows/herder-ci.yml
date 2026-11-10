@@ -36,8 +36,10 @@ jobs:
         include:
           - name: Test macOS app
             task: test
+            timeout: 25
           - name: Build macOS app
             task: build
+            timeout: 15
     env:
       ZIG_VERSION: 0.17.0
 
@@ -76,21 +78,48 @@ jobs:
         run: brew install just xcodegen ripgrep
 
       - name: Show toolchain versions
+        id: toolchain
         run: |
           swift --version
           zig version
           rustup show active-toolchain
+          printf 'xcode=%s\n' "$(xcodebuild -version | awk '/Build version/ {print $3}')" >> "$GITHUB_OUTPUT"
+
+      # Otherwise every run clones Sparkle and downloads its framework again.
+      - name: Cache Swift packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: swift-packages-${{ runner.os }}-${{ hashFiles('apps/herder/HerderKit/Package.resolved') }}
+
+      # Xcode 26's compilation cache is keyed by each compilation's inputs, not
+      # by file times, so it survives a fresh checkout where DerivedData would
+      # not. Its keys hold absolute paths, which are the same on every runner.
+      # Each run adds to the store it restored, and main saves the result under
+      # its own commit. A new Xcode starts the store over.
+      - name: Restore compilation cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/CompilationCache
+          key: xcode-cas-${{ matrix.task }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ github.sha }}
+          restore-keys: xcode-cas-${{ matrix.task }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-
 
       - name: Check import boundaries
         if: matrix.task == 'test'
         run: just in apps/herder check
 
-      - name: Run tests
-        if: matrix.task == 'test'
-        timeout-minutes: 25
-        run: just test apps/herder
+      - name: Run just ${{ matrix.task }}
+        timeout-minutes: ${{ matrix.timeout }}
+        run: >-
+          just ${{ matrix.task }} apps/herder
+          -clonedSourcePackagesDirPath '${{ runner.temp }}/SourcePackages'
+          COMPILATION_CACHE_ENABLE_CACHING=YES
+          COMPILATION_CACHE_CAS_PATH='${{ runner.temp }}/CompilationCache'
 
-      - name: Build app
-        if: matrix.task == 'build'
-        timeout-minutes: 15
-        run: just build apps/herder
+      # Only main's cache is visible to other refs.
+      - name: Save compilation cache
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/CompilationCache
+          key: xcode-cas-${{ matrix.task }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ github.sha }}

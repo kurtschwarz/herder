@@ -9,7 +9,7 @@ default:
     @just --list --unsorted
 
 # Build DIR
-build dir: (_in dir "build")
+build dir *args: (_in dir "build" args)
 
 # Run DIR's tests
 test dir *args: (_in dir "test" args)
