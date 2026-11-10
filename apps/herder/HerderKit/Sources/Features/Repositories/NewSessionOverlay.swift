@@ -9,9 +9,11 @@ public struct NewSessionOverlay: View {
 
     @Environment(\.startAgentSession) private var startAgentSession
     @Environment(AgentCatalog.self) private var catalog: AgentCatalog?
+    @Environment(WindowAgentSessions.self) private var open: WindowAgentSessions?
+    @Environment(Workspace.self) private var active: Workspace?
 
     /// The agent the session starts with. Chosen afresh each time the modal
-    /// opens, from the one used last.
+    /// opens, from the one used last, and kept when the repository changes.
     @State private var agentID: Agent.ID?
 
     public init(model: RepositoriesModel) {
@@ -29,8 +31,16 @@ public struct NewSessionOverlay: View {
 
                 NewSessionCard(
                     model: session,
+                    repositories: model.repositories.filter(\.isAvailable),
+                    currentRepository: model.newSessionRepository,
                     agents: catalog?.agents.filter(\.isRunnable) ?? [],
                     agentID: $agentID,
+                    activeWorktree: active?.id,
+                    activity: { worktree in
+                        WorktreeActivity(open?.sessions(in: WorkspaceID(worktree.path)) ?? [])
+                    },
+                    selectRepository: { model.switchNewSession(to: $0) },
+                    addRepository: { Task { await model.addRepositoryForNewSession() } },
                     cancel: { model.cancelNewSession() },
                     submit: {
                         let agent = agentID.flatMap { catalog?.agent($0) }
@@ -51,40 +61,34 @@ public struct NewSessionOverlay: View {
 
 private struct NewSessionCard: View {
     let model: NewSessionModel
+    let repositories: [Repository]
+    let currentRepository: Repository?
     let agents: [Agent]
     @Binding var agentID: Agent.ID?
+    let activeWorktree: WorkspaceID?
+    let activity: (GitWorktree) -> WorktreeActivity
+    let selectRepository: (Repository) -> Void
+    let addRepository: () -> Void
     let cancel: () -> Void
     let submit: () -> Void
-
-    @FocusState private var isFilterFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.loose) {
             header
 
-            Text("Worktree")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Theme.Palette.secondaryText)
+            section("Workspace") { workspaceChips }
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
-                NewWorktreeCard(model: model)
-                existingWorktrees
+            section("Where", detail: "\(model.worktrees.count) worktrees") {
+                VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
+                    worktreeList
+                    if model.choice == .newWorktree {
+                        NewWorktreePanel(model: model)
+                    }
+                }
             }
 
             if !agents.isEmpty {
-                HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
-                    Text("Agent")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Theme.Palette.secondaryText)
-                    Spacer(minLength: 0)
-                    Picker("Agent", selection: $agentID) {
-                        ForEach(agents) { agent in
-                            Text(agent.displayName).tag(Optional(agent.id))
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                }
+                section("Agent") { agentChips }
             }
 
             if let failure = model.failure {
@@ -100,91 +104,106 @@ private struct NewSessionCard: View {
         .padding(Theme.Spacing.section)
         .frame(width: Theme.Size.wideModalWidth)
         .modalSurface()
-        .task { await model.load() }
+        .task(id: ObjectIdentifier(model)) { await model.load() }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-            HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
-                WolfMark()
-                Text("New session")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.Palette.text)
-            }
-            Text("in \(model.repositoryName)")
+            Text("New session")
+                .font(.title2.bold())
+                .foregroundStyle(Theme.Palette.text)
+            Text("In \(model.repositoryName). You type your first prompt in the agent.")
                 .foregroundStyle(Theme.Palette.secondaryText)
         }
     }
 
-    private var existingWorktrees: some View {
-        let worktrees = model.filteredWorktrees
-
-        return VStack(spacing: 0) {
-            HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
-                PhIcon(Ph.magnifyingGlass, size: 16)
+    private func section<Content: View>(
+        _ title: String,
+        detail: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
+            HStack(spacing: Theme.Spacing.normal) {
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Theme.Palette.secondaryText)
-                TextField(
-                    "Filter",
-                    text: Bindable(model).filter,
-                    prompt: Text("Filter \(model.worktrees.count) worktrees…")
+                if let detail {
+                    Text(detail)
                         .foregroundStyle(Theme.Palette.tertiaryText)
-                )
-                .textFieldStyle(.plain)
-                .foregroundStyle(Theme.Palette.text)
-                .focused($isFilterFocused)
-
-                Text("⌘F")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Theme.Palette.tertiaryText)
-                    .padding(.horizontal, Theme.Spacing.normal - 2)
-                    .padding(.vertical, 2)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .strokeBorder(Theme.Palette.hairline, lineWidth: 1)
-                    }
+                }
             }
-            .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-            .frame(minHeight: Theme.Size.control + 8)
-            // Nothing visible: the badge above is the only sign of it.
-            .background {
-                Button("") { isFilterFocused = true }
-                    .keyboardShortcut("f", modifiers: .command)
-                    .opacity(0)
+            content()
+        }
+    }
+
+    // MARK: - Workspace
+
+    private var workspaceChips: some View {
+        FlowLayout {
+            ForEach(repositories) { repository in
+                ChoiceChip(
+                    title: repository.name,
+                    isSelected: repository.id == currentRepository?.id
+                ) {
+                    PhIcon(Ph.folderSimpleDuotone, size: 16)
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                } action: { selectRepository(repository) }
             }
 
-            Rectangle().fill(Theme.Palette.hairline).frame(height: 1)
+            ChoiceChip(title: "Open folder\u{2026}", isDashed: true) {
+                PhIcon(Ph.folderSimplePlus, size: 16)
+                    .foregroundStyle(Theme.Palette.secondaryText)
+            } action: { addRepository() }
+        }
+    }
 
+    // MARK: - Where
+
+    private var worktreeList: some View {
+        VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    Text("WORKTREES")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(0.8)
-                        .foregroundStyle(Theme.Palette.tertiaryText)
-                        .padding(.horizontal, Theme.Spacing.normal)
-                        .padding(.vertical, Theme.Spacing.normal)
-
-                    if worktrees.isEmpty {
-                        Text(model.isLoading ? "Reading worktrees…" : "No worktrees match.")
+                    if model.worktrees.isEmpty {
+                        Text(model.isLoading ? "Reading worktrees\u{2026}" : "No worktrees.")
                             .font(.callout)
                             .foregroundStyle(Theme.Palette.tertiaryText)
-                            .padding(.horizontal, Theme.Spacing.normal)
-                            .padding(.bottom, Theme.Spacing.normal)
+                            .padding(Theme.Spacing.normal)
                     }
 
-                    ForEach(worktrees) { worktree in
+                    ForEach(model.listedWorktrees) { worktree in
                         WorktreeChoiceRow(
                             worktree: worktree,
+                            isDefault: worktree.id == model.defaultWorktree?.id,
+                            isActive: WorkspaceID(worktree.path) == activeWorktree,
+                            activity: activity(worktree),
                             isSelected: model.choice == .existing(worktree.id)
                         ) { model.select(worktree) }
                     }
                 }
-                .padding(.horizontal, Theme.Spacing.normal)
-                .padding(.bottom, Theme.Spacing.normal)
+                .padding(Theme.Spacing.normal)
             }
             .scrollIndicators(.hidden)
-            .frame(maxHeight: 220)
+            .frame(maxHeight: 5 * WorktreeChoiceRow.height)
+
+            Rectangle().fill(Theme.Palette.hairline).frame(height: 1)
+                .padding(.horizontal, Theme.Spacing.loose)
+
+            NewWorktreeRow(isSelected: model.choice == .newWorktree) { model.selectNewWorktree() }
+                .padding(Theme.Spacing.normal)
         }
         .fieldGroupSurface()
+    }
+
+    // MARK: - Agent
+
+    private var agentChips: some View {
+        FlowLayout {
+            ForEach(agents) { agent in
+                ChoiceChip(title: agent.displayName, isSelected: agent.id == agentID) {
+                    AgentBadge(id: agent.id, name: agent.displayName, size: 20)
+                } action: { agentID = agent.id }
+            }
+        }
     }
 
     private var buttons: some View {
@@ -211,76 +230,151 @@ private struct NewSessionCard: View {
     }
 
     private var primaryLabel: String {
-        model.choice == .newWorktree ? "Create worktree & open session" : "Open session"
+        let isNew = model.choice == .newWorktree
+        guard let name = agents.first(where: { $0.id == agentID })?.displayName else {
+            return isNew ? "Create worktree & open session" : "Open session"
+        }
+        return isNew ? "Create worktree & start \(name)" : "Start \(name)"
     }
 }
 
-/// The "New worktree" choice: a branch name, and the branch to cut it from.
-private struct NewWorktreeCard: View {
-    let model: NewSessionModel
+/// A pill to pick one of several things: a workspace or an agent. Dashed for
+/// the one that is not a choice but a way to add another.
+private struct ChoiceChip<Leading: View>: View {
+    let title: String
+    var isSelected = false
+    var isDashed = false
+    @ViewBuilder let leading: Leading
+    let action: () -> Void
 
-    private var isSelected: Bool { model.choice == .newWorktree }
+    @State private var isHovering = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.Radius.fieldGroup, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.control + 2, style: .continuous)
 
-        VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
-            HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
-                RadioDot(isSelected: isSelected)
-                PhIcon(Ph.gitFork, size: 18)
-                    .foregroundStyle(Theme.Palette.violet)
+        Button(action: action) {
+            HStack(spacing: Theme.Spacing.normal) {
+                leading
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(isDashed ? Theme.Palette.secondaryText : Theme.Palette.text)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+            .frame(minHeight: Theme.Size.control + 8)
+            .background {
+                shape.fill(
+                    isSelected ? Theme.Palette.violet.opacity(0.15)
+                        : isHovering && !isDashed ? Theme.Palette.controlPressed : Theme.Palette.control
+                )
+            }
+            .overlay {
+                if isDashed {
+                    shape.strokeBorder(Theme.Palette.tertiaryText, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                } else {
+                    shape.strokeBorder(
+                        isSelected ? Theme.Palette.violet.opacity(0.8) : Theme.Palette.hairline,
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
+                }
+            }
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+    }
+}
+
+/// The "New worktree" choice, last in the list.
+private struct NewWorktreeRow: View {
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
+            RadioDot(isSelected: isSelected)
+            PhIcon(Ph.plus, size: 16)
+                .foregroundStyle(Theme.Palette.secondaryText)
+            VStack(alignment: .leading, spacing: 2) {
                 Text("New worktree")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Theme.Palette.text)
+                Text("Its own checkout and branch. Nothing touches your files until you merge.")
+                    .font(.callout)
+                    .foregroundStyle(Theme.Palette.secondaryText)
+                    .lineLimit(1)
             }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+        .frame(minHeight: 52)
+        .background {
+            RoundedRectangle(cornerRadius: Theme.Radius.control + 2, style: .continuous)
+                .fill(isSelected ? Theme.Palette.violet.opacity(0.14) : .clear)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: select)
+    }
+}
 
-            HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
+/// What the new worktree is called and cut from, and where it will go.
+private struct NewWorktreePanel: View {
+    let model: NewSessionModel
+
+    @FocusState private var isBranchFocused: Bool
+
+    private static let labelWidth: CGFloat = 90
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
+            row("Branch") {
                 TextField(
                     "Branch",
                     text: Binding(get: { model.branchName }, set: { model.editBranchName($0) }),
-                    prompt: Text("agent/add-minimap").foregroundStyle(Theme.Palette.tertiaryText)
+                    prompt: Text("agent/new-task").foregroundStyle(Theme.Palette.tertiaryText)
                 )
                 .textFieldStyle(.plain)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(Theme.Palette.text)
+                .focused($isBranchFocused)
                 .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
                 .frame(minHeight: Theme.Size.control + 6)
                 .fieldSurface()
-
-                Text("from")
-                    .foregroundStyle(Theme.Palette.secondaryText)
-
-                baseMenu
             }
-            .padding(.leading, 30)
 
-            if let message {
-                Text(message)
-                    .font(.callout)
-                    .foregroundStyle(Theme.Palette.warning)
-                    .padding(.leading, 30)
-            } else if let location = model.location {
-                Text(location.path(percentEncoded: false))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Theme.Palette.tertiaryText)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                    .padding(.leading, 30)
+            row("Based on") { BaseBranchPicker(model: model) }
+
+            row("Folder") {
+                if let message {
+                    Text(message)
+                        .font(.callout)
+                        .foregroundStyle(Theme.Palette.warning)
+                } else if let location = model.location {
+                    Text((location.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                } else {
+                    Text("\u{2014}").foregroundStyle(Theme.Palette.tertiaryText)
+                }
             }
         }
-        .padding(Theme.Spacing.normal + Theme.Spacing.tight)
-        .background {
-            shape.fill(isSelected ? Theme.Palette.violet.opacity(0.12) : Theme.Palette.fieldGroup)
-        }
-        .overlay {
-            shape.strokeBorder(isSelected ? Theme.Palette.violet.opacity(0.7) : Theme.Palette.hairline, lineWidth: 1.5)
-        }
-        .contentShape(shape)
-        .onTapGesture { model.selectNewWorktree() }
+        .padding(Theme.Spacing.loose)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fieldGroupSurface()
+        .task { isBranchFocused = true }
     }
 
-    private var baseMenu: some View {
-        BaseBranchPicker(model: model)
+    private func row<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: Theme.Spacing.normal) {
+            Text(title)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Theme.Palette.secondaryText)
+                .frame(width: Self.labelWidth, alignment: .leading)
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var message: String? {
@@ -303,20 +397,20 @@ private struct BaseBranchPicker: View {
     var body: some View {
         Button { isOpen.toggle() } label: {
             HStack(spacing: Theme.Spacing.normal) {
-                Text(model.baseBranch.isEmpty ? "—" : model.baseBranch)
+                Text(model.baseBranch.isEmpty ? "\u{2014}" : model.baseBranch)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(Theme.Palette.text)
                     .lineLimit(1)
+                Spacer(minLength: 0)
                 PhIcon(Ph.caretUpDown, size: 12)
                     .foregroundStyle(Theme.Palette.secondaryText)
             }
             .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-            .frame(minHeight: Theme.Size.control + 6)
+            .frame(maxWidth: .infinity, minHeight: Theme.Size.control + 6)
             .fieldSurface()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .fixedSize()
         .disabled(model.branches.isEmpty)
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             ScrollView {
@@ -367,7 +461,14 @@ private struct BranchOption: View {
 }
 
 private struct WorktreeChoiceRow: View {
+    /// Tall enough for a name and a path, which is what the list's height is
+    /// counted in.
+    static let height: CGFloat = 56
+
     let worktree: GitWorktree
+    let isDefault: Bool
+    let isActive: Bool
+    let activity: WorktreeActivity
     let isSelected: Bool
     let select: () -> Void
 
@@ -378,26 +479,60 @@ private struct WorktreeChoiceRow: View {
             RadioDot(isSelected: isSelected)
             PhIcon(Ph.gitBranch, size: 16)
                 .foregroundStyle(Theme.Palette.secondaryText)
-            Text(NewSessionModel.label(of: worktree))
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(Theme.Palette.text)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 0)
-            if let date = worktree.lastActivity {
-                Text(RelativeAge.short(from: date))
-                    .foregroundStyle(Theme.Palette.secondaryText)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: Theme.Spacing.normal) {
+                    Text(NewSessionModel.label(of: worktree))
+                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Theme.Palette.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if isDefault { badge("default") }
+                    if isActive { badge("current") }
+                }
+                Text((worktree.path.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
+
+            Spacer(minLength: Theme.Spacing.normal)
+
+            status
         }
-        .padding(.horizontal, Theme.Spacing.normal)
-        .frame(minHeight: 32)
+        .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+        .frame(minHeight: Self.height - 2)
         .background {
-            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .fill(isSelected || isHovering ? Theme.Palette.control : .clear)
+            RoundedRectangle(cornerRadius: Theme.Radius.control + 2, style: .continuous)
+                .fill(isSelected ? Theme.Palette.violet.opacity(0.14) : isHovering ? Theme.Palette.control : .clear)
         }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
         .onTapGesture(perform: select)
+    }
+
+    private func badge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(Theme.Palette.secondaryText)
+            .padding(.horizontal, Theme.Spacing.normal - 1)
+            .padding(.vertical, 1)
+            .background {
+                RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Theme.Palette.control)
+            }
+    }
+
+    private var status: some View {
+        HStack(spacing: Theme.Spacing.normal - 2) {
+            switch activity {
+            case .working: Circle().fill(Theme.Palette.success).frame(width: 8, height: 8)
+            case .waiting: Circle().fill(Theme.Palette.warning).frame(width: 8, height: 8)
+            case .idle, .none: EmptyView()
+            }
+            Text(activity.label)
+                .foregroundStyle(activity == .none ? Theme.Palette.tertiaryText : Theme.Palette.secondaryText)
+        }
     }
 }
 

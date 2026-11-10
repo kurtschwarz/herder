@@ -254,6 +254,90 @@ import Testing
         #expect(session.failure == "no")
     }
 
+    @Test func switchingRepositoryKeepsTheBranchNameAndResetsTheRest() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        git.seed(branches: ["main", "dev"], at: URL(filePath: "/code/api"))
+        model.beginNewSession(in: api)
+        let first = try #require(model.newSession)
+        await first.load()
+        first.editBranchName("fix")
+        first.baseBranch = "dev"
+        first.fail("old")
+
+        model.switchNewSession(to: web)
+
+        let second = try #require(model.newSession)
+        #expect(second !== first)
+        #expect(second.repositoryName == "web")
+        #expect(second.branchName == "fix")
+        #expect(second.choice == .newWorktree)
+        #expect(second.baseBranch.isEmpty)
+        #expect(second.failure == nil)
+        #expect(model.newSessionRepository?.id == web.id)
+    }
+
+    @Test func switchingToTheCurrentRepositoryChangesNothing() async throws {
+        let api = try await addRepository("/code/api")
+        model.beginNewSession(in: api)
+        let session = try #require(model.newSession)
+
+        model.switchNewSession(to: api)
+
+        #expect(model.newSession === session)
+    }
+
+    @Test func openingAFolderAddsItAndMovesTheModalThere() async throws {
+        let api = try await addRepository("/code/api")
+        let web = URL(filePath: "/code/web")
+        git.seed(web, .mainWorkingTree)
+        picker.script(web)
+        model.beginNewSession(in: api)
+
+        await model.addRepositoryForNewSession()
+
+        #expect(model.repositories.map(\.name) == ["api", "web"])
+        #expect(model.newSession?.repositoryName == "web")
+    }
+
+    @Test func aFolderThatCannotBeAddedIsExplainedInTheModal() async throws {
+        let api = try await addRepository("/code/api")
+        picker.script(URL(filePath: "/code/api"))
+        model.beginNewSession(in: api)
+
+        await model.addRepositoryForNewSession()
+
+        #expect(model.newSession?.repositoryName == "api")
+        #expect(model.newSession?.failure == "That folder is already in the sidebar.")
+    }
+
+    @Test func cancellingTheFolderPickerChangesNothing() async throws {
+        let api = try await addRepository("/code/api")
+        model.beginNewSession(in: api)
+
+        await model.addRepositoryForNewSession()
+
+        #expect(model.newSession?.repositoryName == "api")
+        #expect(model.newSession?.failure == nil)
+    }
+
+    @Test func aSessionStartedInAHiddenRepositoryPutsItOnShow() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        git.seed(branches: ["main"], at: URL(filePath: "/code/web"))
+        list.setShown(web, false)
+        #expect(!model.isShown(web))
+        model.beginNewSession(in: web)
+        let session = try #require(model.newSession)
+        await session.load()
+        session.editBranchName("fix")
+
+        await model.submitNewSession()
+
+        #expect(model.isShown(web))
+        #expect(model.isShown(api))
+    }
+
     // MARK: - Which repository a worktree belongs to
     //
     // These replace four tests about `selectedWorktree`, which this model no

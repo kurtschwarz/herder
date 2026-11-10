@@ -38,14 +38,22 @@ final class NewSessionModel {
     private(set) var choice: Choice = .newWorktree
     private(set) var branchName = ""
     var baseBranch = ""
-    var filter = ""
 
     private var kind: GitRepositoryKind = .notARepository
 
-    init(repositoryName: String, repository: URL, git: any GitClient) {
+    /// `branchName` carries what was typed over from the modal this replaces,
+    /// when the person switches repository half way through.
+    init(repositoryName: String, repository: URL, git: any GitClient, branchName: String = "") {
         self.repositoryName = repositoryName
         self.repository = repository
         self.git = git
+        self.branchName = branchName
+    }
+
+    /// Says something went wrong outside this model's own work, such as a
+    /// folder that could not be added.
+    func fail(_ message: String) {
+        failure = message
     }
 
     // MARK: - Loading
@@ -94,10 +102,20 @@ final class NewSessionModel {
         failure = nil
     }
 
-    var filteredWorktrees: [GitWorktree] {
-        let query = filter.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return worktrees }
-        return worktrees.filter { Self.label(of: $0).localizedCaseInsensitiveContains(query) }
+    /// The worktree the repository's mainline lives in: the one with `main`
+    /// or `master` checked out, else the main working tree. A bare repository
+    /// has no main working tree, so there the branch is all there is to go by.
+    var defaultWorktree: GitWorktree? {
+        worktrees.first { worktree in
+            if case .branch(let name) = worktree.checkout { return ["main", "master"].contains(name) }
+            return false
+        } ?? worktrees.first(where: \.isMainWorkingTree)
+    }
+
+    /// The worktrees as listed: the default first, the rest as git gave them.
+    var listedWorktrees: [GitWorktree] {
+        guard let first = defaultWorktree else { return worktrees }
+        return [first] + worktrees.filter { $0.id != first.id }
     }
 
     static func label(of worktree: GitWorktree) -> String {

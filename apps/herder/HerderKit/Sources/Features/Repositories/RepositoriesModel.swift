@@ -51,7 +51,7 @@ public final class RepositoriesModel {
 
     /// The repository the new-session modal is open for, so its worktrees can be
     /// re-read once one is created.
-    private var newSessionRepository: Repository?
+    private(set) var newSessionRepository: Repository?
 
     /// Whether a modal is covering the window.
     public var isModalPresented: Bool { adding != nil || newSession != nil }
@@ -151,14 +151,46 @@ public final class RepositoriesModel {
         newSessionRepository = nil
     }
 
+    /// Moves the open modal to another repository. What was typed as a branch
+    /// name goes with it; the worktree chosen, the base and any failure belong
+    /// to the repository left and do not.
+    func switchNewSession(to repository: Repository) {
+        guard let current = newSession, repository.isAvailable,
+              repository.id != newSessionRepository?.id else { return }
+        newSessionRepository = repository
+        newSession = NewSessionModel(
+            repositoryName: repository.name,
+            repository: URL(filePath: repository.path),
+            git: git,
+            branchName: current.branchName
+        )
+    }
+
+    /// Asks for a folder, adds it to this window and moves the open modal to
+    /// it. Cancelling the picker changes nothing; a folder that cannot be
+    /// added is said so in the modal.
+    func addRepositoryForNewSession() async {
+        guard newSession != nil, let url = await picker.pickFolder(startingAt: nil) else { return }
+        do {
+            let repository = try await list.add(url: url)
+            switchNewSession(to: repository)
+        } catch {
+            newSession?.fail(AddRepositoryModel.Refusal(error).message)
+        }
+    }
+
     /// Makes the worktree the modal describes, if it is a new one, closes it,
-    /// and shows the worktree under its repository. Returns the worktree the
-    /// session is for. A failure leaves the modal up with the reason.
+    /// and shows the worktree under its repository, which is put on show if it
+    /// was not, so the session can be seen. Returns the worktree the session
+    /// is for. A failure leaves the modal up with the reason.
     func submitNewSession() async -> WorkspaceID? {
         guard let newSession, let path = await newSession.submit() else { return nil }
         let repository = newSessionRepository
         cancelNewSession()
-        if let repository { await refresh(repository) }
+        if let repository {
+            if !list.isShown(repository) { list.setShown(repository, true) }
+            await refresh(repository)
+        }
         return WorkspaceID(path)
     }
 

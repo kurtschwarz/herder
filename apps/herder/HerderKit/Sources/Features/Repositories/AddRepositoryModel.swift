@@ -27,6 +27,19 @@ final class AddRepositoryModel {
             case nil: self = .failed(error.localizedDescription)
             }
         }
+
+        var message: String {
+            switch self {
+            case .notARepository:
+                "That folder isn't a git repository. Choose the folder that contains .git."
+            case .linkedWorktree(let main):
+                "That's a worktree of \(main.lastPathComponent). Add the repository instead and its worktrees come along."
+            case .alreadyOpen:
+                "That folder is already in the sidebar."
+            case .failed(let reason):
+                reason
+            }
+        }
     }
 
     private let repositories: WindowRepositories

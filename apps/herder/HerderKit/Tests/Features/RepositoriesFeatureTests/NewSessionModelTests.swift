@@ -78,18 +78,34 @@ import Testing
         #expect(model.choice == .newWorktree)
     }
 
-    @Test func filteringMatchesBranchNamesAndShasWithoutCase() async {
-        seed()
+    @Test func theWorktreeOnMainIsTheDefaultAndListedFirst() async {
+        git.seed(repository, .bare)
+        git.seed(branches: ["feature", "main"], at: repository)
+        git.seed(worktrees: [
+            GitWorktree(path: repository.appending(path: "feature"), checkout: .branch("feature"), isMainWorkingTree: false),
+            GitWorktree(path: repository.appending(path: "main"), checkout: .branch("main"), isMainWorkingTree: false),
+        ], at: repository)
+
         await model.load()
 
-        model.filter = "FEAT"
-        #expect(model.filteredWorktrees.map(NewSessionModel.label) == ["feature"])
+        #expect(model.defaultWorktree?.checkout == .branch("main"))
+        #expect(model.listedWorktrees.map(NewSessionModel.label) == ["main", "feature"])
+    }
 
-        model.filter = "abc"
-        #expect(model.filteredWorktrees.map(NewSessionModel.label) == ["abc1234"])
+    @Test func withNoMainBranchTheMainWorkingTreeIsTheDefault() async {
+        seed(checkout: "dev")
 
-        model.filter = "  "
-        #expect(model.filteredWorktrees.count == 3)
+        await model.load()
+
+        #expect(model.defaultWorktree?.path == repository)
+        #expect(model.listedWorktrees.first?.path == repository)
+    }
+
+    @Test func aCarriedOverBranchNameIsKept() {
+        let carried = NewSessionModel(repositoryName: "web", repository: repository, git: git, branchName: "agent/x")
+
+        #expect(carried.branchName == "agent/x")
+        #expect(carried.choice == .newWorktree)
     }
 
     // MARK: - The name
