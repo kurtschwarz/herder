@@ -23,7 +23,9 @@ public struct SettingsWindow: View {
         )
             .background { WindowGlass() }
             // No close callbacks: nothing in here can be lost by closing it.
-            .background(WindowChrome())
+            // It is one window for the life of the app, so without following
+            // the active Space ⌘, would jump back to the Space it first opened on.
+            .background(WindowChrome(followsActiveSpace: true))
             .ignoresSafeArea()
             // Outside the safe area being ignored, not inside it. The window is
             // sized to this plus the title bar's safe area; inside, a fixed

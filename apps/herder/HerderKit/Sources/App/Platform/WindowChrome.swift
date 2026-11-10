@@ -27,6 +27,11 @@ struct WindowChrome: NSViewRepresentable {
     /// What its terminals are running. Asked of the processes, so it waits.
     var runningCommands: () async -> [String] = { [] }
 
+    /// Whether the window moves to whichever Space is showing when it is
+    /// brought forward, instead of pulling the person back to the one it first
+    /// opened on.
+    var followsActiveSpace = false
+
     /// Holds the resize observer for as long as the view is alive.
     final class Coordinator {
         var observer: NSObjectProtocol?
@@ -100,6 +105,9 @@ struct WindowChrome: NSViewRepresentable {
         window.backgroundColor = .clear
         // With no title bar left to grab, the background becomes the drag handle.
         window.isMovableByWindowBackground = true
+        if followsActiveSpace {
+            window.collectionBehavior.insert(.moveToActiveSpace)
+        }
 
         // AppKit lays the buttons back out when the window resizes, so the
         // adjustment has to be reapplied rather than set once.
