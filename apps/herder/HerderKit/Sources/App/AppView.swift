@@ -171,11 +171,13 @@ private struct WindowView: View {
         // title bar included.
         .overlay { AddRepositoryOverlay(model: window.repositoryList) }
         // An overlay is outside the environment set above, and this one reads
-        // which worktree is open and what runs in each.
+        // which worktree is open, what runs in each, the agents to offer, and
+        // how to start one.
         .overlay {
             NewSessionOverlay(model: window.repositoryList)
                 .environment(window.activeWorkspace)
                 .environment(window.agentPanel.sessions)
+                .modifier(WindowActions(window: window, agents: environment.agents))
         }
         // Where ⇧⌘N finds the window it should open the modal in.
         .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
