@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/kurtschwarz/herder/compare/herder-v0.1.1...herder-v0.2.0) (2026-11-10)
+
+
+### Features
+
+* **herder:** pick which workspaces to show ([#4](https://github.com/kurtschwarz/herder/issues/4)) ([3b5eba2](https://github.com/kurtschwarz/herder/commit/3b5eba2475f42832ccdbbf399403734e2624e7e7))
+* **herder:** pick which workspaces to show ([#4](https://github.com/kurtschwarz/herder/issues/4)) ([3b5eba2](https://github.com/kurtschwarz/herder/commit/3b5eba2475f42832ccdbbf399403734e2624e7e7))
+* **herder:** redesign the new session modal ([#16](https://github.com/kurtschwarz/herder/issues/16)) ([f294f8e](https://github.com/kurtschwarz/herder/commit/f294f8e2d6afccd5253d7d3dc59879faecd13e75))
+* **herder:** session history in the sidebar ([#6](https://github.com/kurtschwarz/herder/issues/6)) ([3e77a37](https://github.com/kurtschwarz/herder/commit/3e77a3719b073f5d49de2d3b4b6f37e88fc38ea4))
+
+
+### Bug Fixes
+
+* **deps:** update rust crate tree-sitter-css to 0.25 ([#14](https://github.com/kurtschwarz/herder/issues/14)) ([ed3259a](https://github.com/kurtschwarz/herder/commit/ed3259ab9995ba16705434cb2b1238424e404aed))
+
 ## [0.1.1](https://github.com/kurtschwarz/herder/compare/herder-v0.1.0...herder-v0.1.1) (2026-11-09)
 
 
