@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/kurtschwarz/herder/compare/herder-v0.2.0...herder-v0.2.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **herder:** open settings on the active space ([#17](https://github.com/kurtschwarz/herder/issues/17)) ([69c8ae0](https://github.com/kurtschwarz/herder/commit/69c8ae0e2c86942dd3a4c9b216f1fc1034f334fe))
+
 ## [0.2.0](https://github.com/kurtschwarz/herder/compare/herder-v0.1.1...herder-v0.2.0) (2026-11-10)
 
 
