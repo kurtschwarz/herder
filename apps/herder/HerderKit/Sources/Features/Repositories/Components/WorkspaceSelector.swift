@@ -49,6 +49,7 @@ struct WorkspaceSelector: View {
             .contentShape(shape)
         }
         .buttonStyle(.plain)
+        .pointerStyle(.link)
         .help(isMultiple ? "Choose which workspaces to show" : "Choose a workspace")
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             WorkspaceSelection(
@@ -214,6 +215,7 @@ private struct WorkspaceOption: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { if isEnabled, !isRenaming { toggle() } }
+        .pointerStyle(isEnabled && !isRenaming ? .link : nil)
         .accessibilityAddTraits(.isButton)
         .onHover { isHovering = $0 }
         .help(help)
@@ -241,23 +243,5 @@ private struct WorkspaceOption: View {
         if !repository.isAvailable { return "\(repository.path) can\u{2019}t be reached" }
         if isEnabled || !isMultiple { return repository.path }
         return "At least one workspace stays on the sidebar"
-    }
-}
-
-private struct CheckBox: View {
-    let isOn: Bool
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
-        ZStack {
-            if isOn {
-                shape.fill(Theme.Palette.violet)
-                PhIcon(Ph.checkBold, size: 11)
-                    .foregroundStyle(Theme.Palette.onViolet)
-            } else {
-                shape.strokeBorder(Theme.Palette.tertiaryText, lineWidth: 1.5)
-            }
-        }
-        .frame(width: 18, height: 18)
     }
 }

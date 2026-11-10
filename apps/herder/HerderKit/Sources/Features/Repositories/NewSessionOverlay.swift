@@ -275,6 +275,7 @@ private struct ChoiceChip<Leading: View>: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        .pointerStyle(.link)
     }
 }
 
@@ -307,6 +308,7 @@ private struct NewWorktreeRow: View {
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: select)
+        .pointerStyle(.link)
     }
 }
 
@@ -405,6 +407,7 @@ private struct BaseBranchPicker: View {
         }
         .buttonStyle(.plain)
         .disabled(model.branches.isEmpty)
+        .pointerStyle(model.branches.isEmpty ? nil : .link)
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
@@ -450,6 +453,7 @@ private struct BranchOption: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        .pointerStyle(.link)
     }
 }
 
@@ -503,6 +507,7 @@ private struct WorktreeChoiceRow: View {
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
         .onTapGesture(perform: select)
+        .pointerStyle(.link)
     }
 
     private func badge(_ text: String) -> some View {
@@ -527,21 +532,5 @@ private struct WorktreeChoiceRow: View {
                 .font(.system(size: 12))
                 .foregroundStyle(activity == .none ? Theme.Palette.tertiaryText : Theme.Palette.secondaryText)
         }
-    }
-}
-
-private struct RadioDot: View {
-    let isSelected: Bool
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .strokeBorder(isSelected ? .clear : Theme.Palette.tertiaryText, lineWidth: 1.5)
-            if isSelected {
-                Circle().fill(Theme.Palette.violet)
-                Circle().fill(Theme.Palette.onViolet).frame(width: 8, height: 8)
-            }
-        }
-        .frame(width: 20, height: 20)
     }
 }
