@@ -43,11 +43,7 @@ struct OpenSessionsSection: View {
             }
 
             if sessions.isEmpty {
-                Text("No sessions running")
-                    .font(.callout)
-                    .foregroundStyle(Theme.Palette.tertiaryText)
-                    .padding(.horizontal, Theme.Spacing.normal + 2)
-                    .padding(.vertical, Theme.Spacing.tight)
+                startSessionButton
             }
         }
     }
@@ -58,14 +54,12 @@ struct OpenSessionsSection: View {
                 .font(.system(size: 11, weight: .semibold))
                 .kerning(0.6)
                 .foregroundStyle(Theme.Palette.tertiaryText)
-            if count > 0 {
-                Text("\(count)")
-                    .font(.system(size: 11, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.Palette.secondaryText)
-                    .frame(minWidth: 18, minHeight: 18)
-                    .background(Circle().fill(Theme.Palette.control))
-            }
+            Text("\(count)")
+                .font(.system(size: 11, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(Theme.Palette.secondaryText)
+                .frame(minWidth: 18, minHeight: 18)
+                .background(Circle().fill(Theme.Palette.control))
             Spacer(minLength: 0)
             newSessionButton
         }
@@ -73,17 +67,46 @@ struct OpenSessionsSection: View {
         .padding(.vertical, Theme.Spacing.tight)
     }
 
+    private var newSessionRepository: Repository? {
+        model.repositoryForNewSession(active: active?.id.url)
+    }
+
     /// Opens the modal, which has the workspace chips to say where.
     private var newSessionButton: some View {
-        let repository = model.repositoryForNewSession(active: active?.id.url)
-        return Button {
-            if let repository { model.beginNewSession(in: repository) }
+        Button {
+            if let repository = newSessionRepository { model.beginNewSession(in: repository) }
         } label: {
             PhIcon(Ph.plus, size: 12)
         }
         .buttonStyle(.icon(size: 20))
-        .disabled(repository == nil)
+        .disabled(newSessionRepository == nil)
         .help("New session")
+    }
+
+    /// What the list shows while there is nothing in it: the same thing as
+    /// the plus, said in words.
+    private var startSessionButton: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.control + 2, style: .continuous)
+        return Button {
+            if let repository = newSessionRepository { model.beginNewSession(in: repository) }
+        } label: {
+            HStack(spacing: Theme.Spacing.normal) {
+                PhIcon(Ph.plus, size: 14)
+                Text("Start a session")
+            }
+            .foregroundStyle(Theme.Palette.secondaryText)
+            .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+            .frame(maxWidth: .infinity, minHeight: Theme.Size.control + 4, alignment: .leading)
+            .overlay {
+                shape.strokeBorder(Theme.Palette.tertiaryText.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            }
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .disabled(newSessionRepository == nil)
+        .pointerStyle(newSessionRepository == nil ? nil : .link)
+        .padding(.horizontal, Theme.Spacing.normal)
+        .padding(.vertical, Theme.Spacing.tight)
     }
 
     private func notice(_ text: String, help: String) -> some View {
