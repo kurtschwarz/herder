@@ -17,7 +17,7 @@ tree-sitter-highlight = "0.27"
 
 tree-sitter-bash = "0.25"
 tree-sitter-c = "0.24"
-tree-sitter-css = "0.23"
+tree-sitter-css = "0.25"
 # Renamed: the only published gitignore grammar is under its author's name
 # rather than the `tree-sitter-*` convention the rest of these follow. Aliased
 # so `language.rs` reads the same for every row.
