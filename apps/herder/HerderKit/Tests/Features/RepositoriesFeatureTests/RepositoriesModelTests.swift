@@ -167,6 +167,25 @@ import Testing
         #expect(model.selectionTitle == "2 workspaces")
     }
 
+    @Test func aSingleChoiceIsNamedAfterIt() async throws {
+        let api = try await addRepository("/code/api")
+        _ = try await addRepository("/code/web")
+
+        #expect(model.selectionTitle(for: [api.id]) == "api")
+        #expect(model.selectionTitle(for: []) == "Workspaces")
+    }
+
+    @Test func settingTheShownSetSwapsEvenTheLastOne() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        _ = try await addRepository("/code/infra")
+        model.setShown([api.id])
+
+        model.setShown([web.id])
+
+        #expect(model.shownRepositories.map(\.name) == ["web"])
+    }
+
     @Test func theLastOneShowingCannotBeUnticked() async throws {
         let api = try await addRepository("/code/api")
         let web = try await addRepository("/code/web")
@@ -252,6 +271,65 @@ import Testing
 
         #expect(model.newSession != nil)
         #expect(session.failure == "no")
+    }
+
+    @Test func switchingRepositoryKeepsTheBranchNameAndResetsTheRest() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        git.seed(branches: ["main", "dev"], at: URL(filePath: "/code/api"))
+        model.beginNewSession(in: api)
+        let first = try #require(model.newSession)
+        await first.load()
+        first.editBranchName("fix")
+        first.baseBranch = "dev"
+
+        model.switchNewSession(to: web)
+
+        let second = try #require(model.newSession)
+        #expect(second !== first)
+        #expect(second.repositoryName == "web")
+        #expect(second.branchName == "fix")
+        #expect(second.choice == .newWorktree)
+        #expect(second.baseBranch.isEmpty)
+        #expect(second.failure == nil)
+        #expect(model.newSessionRepository?.id == web.id)
+    }
+
+    @Test func aNewSessionStartsInTheActiveWorktreesRepositoryElseTheFirst() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        await model.refresh([api, web])
+
+        #expect(model.repositoryForNewSession(active: URL(filePath: "/code/web"))?.id == web.id)
+        #expect(model.repositoryForNewSession(active: URL(filePath: "/elsewhere"))?.id == api.id)
+        #expect(model.repositoryForNewSession(active: nil)?.id == api.id)
+    }
+
+    @Test func switchingToTheCurrentRepositoryChangesNothing() async throws {
+        let api = try await addRepository("/code/api")
+        model.beginNewSession(in: api)
+        let session = try #require(model.newSession)
+
+        model.switchNewSession(to: api)
+
+        #expect(model.newSession === session)
+    }
+
+    @Test func aSessionStartedInAHiddenRepositoryPutsItOnShow() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        git.seed(branches: ["main"], at: URL(filePath: "/code/web"))
+        list.setShown(web, false)
+        #expect(!model.isShown(web))
+        model.beginNewSession(in: web)
+        let session = try #require(model.newSession)
+        await session.load()
+        session.editBranchName("fix")
+
+        await model.submitNewSession()
+
+        #expect(model.isShown(web))
+        #expect(model.isShown(api))
     }
 
     // MARK: - Which repository a worktree belongs to

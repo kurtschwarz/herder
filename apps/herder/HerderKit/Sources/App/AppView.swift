@@ -170,7 +170,15 @@ private struct WindowView: View {
         // After the safe area is ignored, so the scrim covers the whole window,
         // title bar included.
         .overlay { AddRepositoryOverlay(model: window.repositoryList) }
-        .overlay { NewSessionOverlay(model: window.repositoryList) }
+        // An overlay is outside the environment set above, and this one reads
+        // which worktree is open, what runs in each, the agents to offer, and
+        // how to start one.
+        .overlay {
+            NewSessionOverlay(model: window.repositoryList)
+                .environment(window.activeWorkspace)
+                .environment(window.agentPanel.sessions)
+                .modifier(WindowActions(window: window, agents: environment.agents))
+        }
         // Where ⇧⌘N finds the window it should open the modal in.
         .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
         .modifier(TabCommandValues(editor: window.editor, terminal: window.terminal, agents: window.agentPanel))

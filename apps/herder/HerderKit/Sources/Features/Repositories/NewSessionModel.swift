@@ -38,15 +38,29 @@ final class NewSessionModel {
     private(set) var choice: Choice = .newWorktree
     private(set) var branchName = ""
     var baseBranch = ""
-    var filter = ""
 
     private var kind: GitRepositoryKind = .notARepository
 
-    init(repositoryName: String, repository: URL, git: any GitClient) {
+    /// The worktree to start on once the list is read, if it is one of this
+    /// repository's: the one the window has open.
+    private let preferredWorktree: URL?
+
+    /// `branchName` carries what was typed over from the modal this replaces,
+    /// when the person switches repository half way through.
+    init(
+        repositoryName: String,
+        repository: URL,
+        git: any GitClient,
+        branchName: String = "",
+        preferredWorktree: URL? = nil
+    ) {
         self.repositoryName = repositoryName
         self.repository = repository
         self.git = git
+        self.branchName = branchName
+        self.preferredWorktree = preferredWorktree
     }
+
 
     // MARK: - Loading
 
@@ -65,6 +79,17 @@ final class NewSessionModel {
         }
 
         if baseBranch.isEmpty { baseBranch = defaultBase() }
+        selectPreferredWorktree()
+    }
+
+    /// Starts on the open worktree, unless a branch name was carried over,
+    /// which says a new one is wanted, or something was picked meanwhile.
+    private func selectPreferredWorktree() {
+        guard choice == .newWorktree, branchName.isEmpty, let preferredWorktree else { return }
+        let key = PathKey(preferredWorktree)
+        if let match = worktrees.first(where: { PathKey($0.path) == key }) {
+            choice = .existing(match.id)
+        }
     }
 
     /// Where a new branch most likely starts: what the main working tree has
@@ -94,10 +119,20 @@ final class NewSessionModel {
         failure = nil
     }
 
-    var filteredWorktrees: [GitWorktree] {
-        let query = filter.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return worktrees }
-        return worktrees.filter { Self.label(of: $0).localizedCaseInsensitiveContains(query) }
+    /// The worktree the repository's mainline lives in: the one with `main`
+    /// or `master` checked out, else the main working tree. A bare repository
+    /// has no main working tree, so there the branch is all there is to go by.
+    var defaultWorktree: GitWorktree? {
+        worktrees.first { worktree in
+            if case .branch(let name) = worktree.checkout { return ["main", "master"].contains(name) }
+            return false
+        } ?? worktrees.first(where: \.isMainWorkingTree)
+    }
+
+    /// The worktrees as listed: the default first, the rest as git gave them.
+    var listedWorktrees: [GitWorktree] {
+        guard let first = defaultWorktree else { return worktrees }
+        return [first] + worktrees.filter { $0.id != first.id }
     }
 
     static func label(of worktree: GitWorktree) -> String {

@@ -61,7 +61,13 @@ private struct RepositoriesHeader: View {
                     .foregroundStyle(Theme.Palette.text)
                 Spacer(minLength: 0)
             } else {
-                WorkspaceSelector(model: model)
+                WorkspaceSelector(
+                    model: model,
+                    selection: .multiple(Binding(
+                        get: { Set(model.shownRepositories.map(\.id)) },
+                        set: { model.setShown($0) }
+                    ))
+                )
             }
             Button { model.beginAdding() } label: {
                 PhIcon(Ph.folderSimplePlus, size: 18)

@@ -51,7 +51,7 @@ public final class RepositoriesModel {
 
     /// The repository the new-session modal is open for, so its worktrees can be
     /// re-read once one is created.
-    private var newSessionRepository: Repository?
+    private(set) var newSessionRepository: Repository?
 
     /// Whether a modal is covering the window.
     public var isModalPresented: Bool { adding != nil || newSession != nil }
@@ -90,14 +90,30 @@ public final class RepositoriesModel {
         list.showAll()
     }
 
-    /// What the selector's button says: the one name when one is showing.
+    /// Shows exactly the repositories in `ids`. Those to show go first, so
+    /// the rule that keeps one on show never refuses a swap of the last one.
+    func setShown(_ ids: Set<UUID>) {
+        for repository in repositories where ids.contains(repository.id) && !isShown(repository) {
+            list.setShown(repository, true)
+        }
+        for repository in repositories where !ids.contains(repository.id) && isShown(repository) {
+            list.setShown(repository, false)
+        }
+    }
+
+    /// What the sidebar's selector says: the one name when one is showing.
     var selectionTitle: String {
-        let shown = shownRepositories
-        switch shown.count {
+        selectionTitle(for: Set(shownRepositories.map(\.id)))
+    }
+
+    /// What a workspace selector says with `ids` picked.
+    func selectionTitle(for ids: Set<UUID>) -> String {
+        let picked = repositories.filter { ids.contains($0.id) }
+        switch picked.count {
         case 0: return "Workspaces"
-        case 1: return shown[0].name
+        case 1: return picked[0].name
         case repositories.count: return "All workspaces"
-        default: return "\(shown.count) workspaces"
+        default: return "\(picked.count) workspaces"
         }
     }
 
@@ -111,13 +127,27 @@ public final class RepositoriesModel {
     /// `selectedWorkspace` kept in step with the selection by hand; the
     /// listings already know which repository each worktree came from.
     public func nameOfRepository(holding path: URL) -> String? {
+        repository(holding: path)?.name
+    }
+
+    func repository(holding path: URL) -> Repository? {
         let key = PathKey(path)
         for (id, listing) in listings {
             guard case .loaded(let worktrees) = listing else { continue }
             guard worktrees.contains(where: { PathKey($0.path) == key }) else { continue }
-            return list.repository(id: id)?.name
+            return list.repository(id: id)
         }
         return nil
+    }
+
+    /// Where a new session most likely belongs: the repository of the
+    /// worktree open now, else the first one that can be used.
+    func repositoryForNewSession(active: URL?) -> Repository? {
+        let usable = repositories.filter(\.isAvailable)
+        if let active, let holding = repository(holding: active), usable.contains(where: { $0.id == holding.id }) {
+            return holding
+        }
+        return usable.first
     }
 
     public func beginAdding() {
@@ -136,29 +166,56 @@ public final class RepositoriesModel {
         self.adding = nil
     }
 
-    func beginNewSession(in repository: Repository) {
+    /// The worktree the window had open when the modal opened, which it starts
+    /// on in whichever repository holds it.
+    private var newSessionActiveWorktree: URL?
+
+    func beginNewSession(in repository: Repository, active: URL? = nil) {
         guard !isModalPresented, repository.isAvailable else { return }
         newSessionRepository = repository
+        newSessionActiveWorktree = active
         newSession = NewSessionModel(
             repositoryName: repository.name,
             repository: URL(filePath: repository.path),
-            git: git
+            git: git,
+            preferredWorktree: active
         )
     }
 
     func cancelNewSession() {
         newSession = nil
         newSessionRepository = nil
+        newSessionActiveWorktree = nil
+    }
+
+    /// Moves the open modal to another repository. What was typed as a branch
+    /// name goes with it; the worktree chosen, the base and any failure belong
+    /// to the repository left and do not.
+    func switchNewSession(to repository: Repository) {
+        guard let current = newSession, repository.isAvailable,
+              repository.id != newSessionRepository?.id else { return }
+        newSessionRepository = repository
+        newSession = NewSessionModel(
+            repositoryName: repository.name,
+            repository: URL(filePath: repository.path),
+            git: git,
+            branchName: current.branchName,
+            preferredWorktree: newSessionActiveWorktree
+        )
     }
 
     /// Makes the worktree the modal describes, if it is a new one, closes it,
-    /// and shows the worktree under its repository. Returns the worktree the
-    /// session is for. A failure leaves the modal up with the reason.
+    /// and shows the worktree under its repository, which is put on show if it
+    /// was not, so the session can be seen. Returns the worktree the session
+    /// is for. A failure leaves the modal up with the reason.
     func submitNewSession() async -> WorkspaceID? {
         guard let newSession, let path = await newSession.submit() else { return nil }
         let repository = newSessionRepository
         cancelNewSession()
-        if let repository { await refresh(repository) }
+        if let repository {
+            if !list.isShown(repository) { list.setShown(repository, true) }
+            await refresh(repository)
+        }
         return WorkspaceID(path)
     }
 
