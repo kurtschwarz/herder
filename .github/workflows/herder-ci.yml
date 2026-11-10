@@ -23,10 +23,21 @@ permissions:
   contents: read
 
 jobs:
-  test-and-build:
-    name: Test and build macOS app
+  # Both compile all of HerderKit, and not into the same DerivedData, so running
+  # them side by side rather than one after the other halves the wait.
+  herder:
+    name: ${{ matrix.name }}
     runs-on: macos-26
     timeout-minutes: 45
+    strategy:
+      # A broken build says something a failing test does not, so see both.
+      fail-fast: false
+      matrix:
+        include:
+          - name: Test macOS app
+            task: test
+          - name: Build macOS app
+            task: build
     env:
       ZIG_VERSION: 0.17.0
 
@@ -71,12 +82,15 @@ jobs:
           rustup show active-toolchain
 
       - name: Check import boundaries
+        if: matrix.task == 'test'
         run: just in apps/herder check
 
       - name: Run tests
+        if: matrix.task == 'test'
         timeout-minutes: 25
         run: just test apps/herder
 
       - name: Build app
+        if: matrix.task == 'build'
         timeout-minutes: 15
         run: just build apps/herder
