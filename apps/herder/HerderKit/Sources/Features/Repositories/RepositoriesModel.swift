@@ -90,14 +90,30 @@ public final class RepositoriesModel {
         list.showAll()
     }
 
-    /// What the selector's button says: the one name when one is showing.
+    /// Shows exactly the repositories in `ids`. Those to show go first, so
+    /// the rule that keeps one on show never refuses a swap of the last one.
+    func setShown(_ ids: Set<UUID>) {
+        for repository in repositories where ids.contains(repository.id) && !isShown(repository) {
+            list.setShown(repository, true)
+        }
+        for repository in repositories where !ids.contains(repository.id) && isShown(repository) {
+            list.setShown(repository, false)
+        }
+    }
+
+    /// What the sidebar's selector says: the one name when one is showing.
     var selectionTitle: String {
-        let shown = shownRepositories
-        switch shown.count {
+        selectionTitle(for: Set(shownRepositories.map(\.id)))
+    }
+
+    /// What a workspace selector says with `ids` picked.
+    func selectionTitle(for ids: Set<UUID>) -> String {
+        let picked = repositories.filter { ids.contains($0.id) }
+        switch picked.count {
         case 0: return "Workspaces"
-        case 1: return shown[0].name
+        case 1: return picked[0].name
         case repositories.count: return "All workspaces"
-        default: return "\(shown.count) workspaces"
+        default: return "\(picked.count) workspaces"
         }
     }
 

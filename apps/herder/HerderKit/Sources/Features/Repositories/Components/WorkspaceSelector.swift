@@ -3,11 +3,22 @@ import Core
 import DesignSystem
 import SwiftUI
 
-/// The sidebar's title, as a button: says which workspaces are showing, and
-/// opens a list to tick more of them. A popover rather than a `Menu`, for the
-/// reason `BaseBranchPicker` gives, and because a menu closes on every pick.
+/// A button that says which workspaces are picked, and opens a list to pick
+/// them. A popover rather than a `Menu`, for the reason `BaseBranchPicker`
+/// gives, and because a multiple choice must stay open across picks.
+///
+/// ``Selection`` sets what kind of choice it is. One workspace closes the list
+/// on pick and leaves out the ones that cannot be reached. Several keeps at
+/// least one ticked, and is where a repository is revealed, renamed or taken
+/// out of the window: the sidebar has no row of its own for one.
 struct WorkspaceSelector: View {
+    enum Selection {
+        case single(Binding<UUID?>)
+        case multiple(Binding<Set<UUID>>)
+    }
+
     let model: RepositoriesModel
+    let selection: Selection
 
     @State private var isOpen = false
 
@@ -20,7 +31,7 @@ struct WorkspaceSelector: View {
             HStack(spacing: Theme.Spacing.normal) {
                 PhIcon(Ph.folderSimpleDuotone, size: 16)
                     .foregroundStyle(Theme.Palette.violet)
-                Text(model.selectionTitle)
+                Text(model.selectionTitle(for: picked))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Theme.Palette.text)
                     .lineLimit(1)
@@ -38,28 +49,70 @@ struct WorkspaceSelector: View {
             .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .help("Choose which workspaces to show")
+        .help(isMultiple ? "Choose which workspaces to show" : "Choose a workspace")
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
-            WorkspaceSelection(model: model) { isOpen = false }
+            WorkspaceSelection(
+                model: model,
+                picked: picked,
+                isMultiple: isMultiple,
+                toggle: toggle,
+                selectAll: { setPicked(Set(model.repositories.map(\.id))) },
+                done: { isOpen = false }
+            )
+        }
+    }
+
+    private var isMultiple: Bool {
+        if case .multiple = selection { true } else { false }
+    }
+
+    private var picked: Set<UUID> {
+        switch selection {
+        case .single(let binding): binding.wrappedValue.map { [$0] } ?? []
+        case .multiple(let binding): binding.wrappedValue
+        }
+    }
+
+    private func setPicked(_ ids: Set<UUID>) {
+        if case .multiple(let binding) = selection { binding.wrappedValue = ids }
+    }
+
+    private func toggle(_ repository: Repository) {
+        switch selection {
+        case .single(let binding):
+            binding.wrappedValue = repository.id
+            isOpen = false
+        case .multiple(let binding):
+            if binding.wrappedValue.contains(repository.id) {
+                binding.wrappedValue.remove(repository.id)
+            } else {
+                binding.wrappedValue.insert(repository.id)
+            }
         }
     }
 }
 
-/// The popover: one box per repository this window lists.
+/// The popover: one row per repository this window lists.
 private struct WorkspaceSelection: View {
     let model: RepositoriesModel
+    let picked: Set<UUID>
+    let isMultiple: Bool
+    let toggle: (Repository) -> Void
+    let selectAll: () -> Void
     let done: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Show sessions from")
-                .textCase(.uppercase)
-                .font(.system(size: 11, weight: .semibold))
-                .kerning(0.6)
-                .foregroundStyle(Theme.Palette.tertiaryText)
-                .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-                .padding(.top, Theme.Spacing.normal)
-                .padding(.bottom, Theme.Spacing.tight)
+            if isMultiple {
+                Text("Show sessions from")
+                    .textCase(.uppercase)
+                    .font(.system(size: 11, weight: .semibold))
+                    .kerning(0.6)
+                    .foregroundStyle(Theme.Palette.tertiaryText)
+                    .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+                    .padding(.top, Theme.Spacing.normal)
+                    .padding(.bottom, Theme.Spacing.tight)
+            }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
@@ -67,44 +120,54 @@ private struct WorkspaceSelection: View {
                         WorkspaceOption(
                             repository: repository,
                             model: model,
-                            isOn: model.isShown(repository),
-                            isEnabled: !model.isShown(repository) || model.canHide(repository)
-                        ) { model.setShown(repository, !model.isShown(repository)) }
+                            isOn: picked.contains(repository.id),
+                            isMultiple: isMultiple,
+                            isEnabled: isEnabled(repository)
+                        ) { toggle(repository) }
                     }
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
             .frame(maxHeight: 280)
 
-            Divider()
-                .padding(.vertical, Theme.Spacing.normal)
+            if isMultiple {
+                Divider()
+                    .padding(.vertical, Theme.Spacing.normal)
 
-            HStack(spacing: Theme.Spacing.normal) {
-                Button { model.showAll() } label: {
-                    Text("Select all").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.secondary)
-                .disabled(model.shownRepositories.count == model.repositories.count)
+                HStack(spacing: Theme.Spacing.normal) {
+                    Button(action: selectAll) {
+                        Text("Select all").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.secondary)
+                    .disabled(picked.count == model.repositories.count)
 
-                Button(action: done) {
-                    Text("Done").frame(maxWidth: .infinity)
+                    Button(action: done) {
+                        Text("Done").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.primary)
+                    .keyboardShortcut(.defaultAction)
                 }
-                .buttonStyle(.primary)
-                .keyboardShortcut(.defaultAction)
             }
         }
         .padding(Theme.Spacing.normal)
         .frame(width: 260)
     }
+
+    /// One workspace must be somewhere you can work in. Several must keep one
+    /// ticked, so the sidebar is never empty while it lists any.
+    private func isEnabled(_ repository: Repository) -> Bool {
+        guard isMultiple else { return repository.isAvailable }
+        return !picked.contains(repository.id) || picked.count > 1
+    }
 }
 
-/// One repository in the selector: ticked to show its sessions, and, with a
-/// right click, revealed, renamed or taken out of this window. The sidebar has
-/// no row of its own for a repository, so this is where those live.
+/// One repository in the selector. Ticked, or checked when only one is
+/// picked; with several, a right click reveals, renames or removes it.
 private struct WorkspaceOption: View {
     let repository: Repository
     let model: RepositoriesModel
     let isOn: Bool
+    let isMultiple: Bool
     let isEnabled: Bool
     let toggle: () -> Void
 
@@ -118,8 +181,10 @@ private struct WorkspaceOption: View {
     /// remove it.
     var body: some View {
         HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
-            CheckBox(isOn: isOn)
-                .opacity(isEnabled ? 1 : 0.5)
+            if isMultiple {
+                CheckBox(isOn: isOn)
+                    .opacity(isEnabled ? 1 : 0.5)
+            }
             if isRenaming {
                 RenameField(name: repository.name) { name in
                     Task { await model.commitRename(repository, to: name) }
@@ -136,6 +201,10 @@ private struct WorkspaceOption: View {
                 PhIcon(Ph.warningFill, size: 12)
                     .foregroundStyle(Theme.Palette.warning)
             }
+            if !isMultiple, isOn {
+                PhIcon(Ph.checkBold, size: 12)
+                    .foregroundStyle(Theme.Palette.text)
+            }
         }
         .padding(.horizontal, Theme.Spacing.normal)
         .frame(minHeight: 32)
@@ -149,26 +218,29 @@ private struct WorkspaceOption: View {
         .onHover { isHovering = $0 }
         .help(help)
         .contextMenu {
-            Button("Reveal in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([repository.url])
-            }
-            .disabled(!repository.isAvailable)
+            if isMultiple {
+                Button("Reveal in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([repository.url])
+                }
+                .disabled(!repository.isAvailable)
 
-            Button("Rename") { model.renaming = repository.id }
+                Button("Rename") { model.renaming = repository.id }
 
-            Divider()
+                Divider()
 
-            // This window's list only: other windows keep it, and so does the
-            // app, which is why this is not a deletion.
-            Button("Remove from This Window", role: .destructive) {
-                model.remove(repository)
+                // This window's list only: other windows keep it, and so does
+                // the app, which is why this is not a deletion.
+                Button("Remove from This Window", role: .destructive) {
+                    model.remove(repository)
+                }
             }
         }
     }
 
     private var help: String {
         if !repository.isAvailable { return "\(repository.path) can\u{2019}t be reached" }
-        return isEnabled ? repository.path : "At least one workspace stays on the sidebar"
+        if isEnabled || !isMultiple { return repository.path }
+        return "At least one workspace stays on the sidebar"
     }
 }
 

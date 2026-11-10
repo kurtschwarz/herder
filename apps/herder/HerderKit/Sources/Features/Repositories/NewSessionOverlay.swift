@@ -31,15 +31,13 @@ public struct NewSessionOverlay: View {
 
                 NewSessionCard(
                     model: session,
-                    repositories: model.repositories.filter(\.isAvailable),
-                    currentRepository: model.newSessionRepository,
+                    workspaces: model,
                     agents: catalog?.agents.filter(\.isRunnable) ?? [],
                     agentID: $agentID,
                     activeWorktree: active?.id,
                     activity: { worktree in
                         WorktreeActivity(open?.sessions(in: WorkspaceID(worktree.path)) ?? [])
                     },
-                    selectRepository: { model.switchNewSession(to: $0) },
                     cancel: { model.cancelNewSession() },
                     submit: {
                         let agent = agentID.flatMap { catalog?.agent($0) }
@@ -60,13 +58,12 @@ public struct NewSessionOverlay: View {
 
 private struct NewSessionCard: View {
     let model: NewSessionModel
-    let repositories: [Repository]
-    let currentRepository: Repository?
+    /// The window's repositories, for picking which one the session is in.
+    let workspaces: RepositoriesModel
     let agents: [Agent]
     @Binding var agentID: Agent.ID?
     let activeWorktree: WorkspaceID?
     let activity: (GitWorktree) -> WorktreeActivity
-    let selectRepository: (Repository) -> Void
     let cancel: () -> Void
     let submit: () -> Void
 
@@ -74,7 +71,7 @@ private struct NewSessionCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.loose) {
             header
 
-            section("Workspace") { workspaceChips }
+            section("Workspace") { workspaceMenu }
 
             section("Where", detail: "\(model.worktrees.count) worktrees") {
                 VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
@@ -145,18 +142,18 @@ private struct NewSessionCard: View {
 
     // MARK: - Workspace
 
-    private var workspaceChips: some View {
-        FlowLayout {
-            ForEach(repositories) { repository in
-                ChoiceChip(
-                    title: repository.name,
-                    isSelected: repository.id == currentRepository?.id
-                ) {
-                    PhIcon(Ph.folderSimpleDuotone, size: 16)
-                        .foregroundStyle(Theme.Palette.secondaryText)
-                } action: { selectRepository(repository) }
-            }
-        }
+    private var workspaceMenu: some View {
+        WorkspaceSelector(
+            model: workspaces,
+            selection: .single(Binding(
+                get: { workspaces.newSessionRepository?.id },
+                set: { id in
+                    if let repository = workspaces.repositories.first(where: { $0.id == id }) {
+                        workspaces.switchNewSession(to: repository)
+                    }
+                }
+            ))
+        )
     }
 
     // MARK: - Where

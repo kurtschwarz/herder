@@ -167,6 +167,25 @@ import Testing
         #expect(model.selectionTitle == "2 workspaces")
     }
 
+    @Test func aSingleChoiceIsNamedAfterIt() async throws {
+        let api = try await addRepository("/code/api")
+        _ = try await addRepository("/code/web")
+
+        #expect(model.selectionTitle(for: [api.id]) == "api")
+        #expect(model.selectionTitle(for: []) == "Workspaces")
+    }
+
+    @Test func settingTheShownSetSwapsEvenTheLastOne() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        _ = try await addRepository("/code/infra")
+        model.setShown([api.id])
+
+        model.setShown([web.id])
+
+        #expect(model.shownRepositories.map(\.name) == ["web"])
+    }
+
     @Test func theLastOneShowingCannotBeUnticked() async throws {
         let api = try await addRepository("/code/api")
         let web = try await addRepository("/code/web")
