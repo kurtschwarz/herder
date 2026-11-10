@@ -276,6 +276,16 @@ import Testing
         #expect(model.newSessionRepository?.id == web.id)
     }
 
+    @Test func aNewSessionStartsInTheActiveWorktreesRepositoryElseTheFirst() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        await model.refresh([api, web])
+
+        #expect(model.repositoryForNewSession(active: URL(filePath: "/code/web"))?.id == web.id)
+        #expect(model.repositoryForNewSession(active: URL(filePath: "/elsewhere"))?.id == api.id)
+        #expect(model.repositoryForNewSession(active: nil)?.id == api.id)
+    }
+
     @Test func switchingToTheCurrentRepositoryChangesNothing() async throws {
         let api = try await addRepository("/code/api")
         model.beginNewSession(in: api)

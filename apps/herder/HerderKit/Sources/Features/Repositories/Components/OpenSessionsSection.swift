@@ -73,32 +73,17 @@ struct OpenSessionsSection: View {
         .padding(.vertical, Theme.Spacing.tight)
     }
 
-    /// One repository on show starts a session in it; with more, the menu
-    /// asks which.
-    @ViewBuilder
+    /// Opens the modal, which has the workspace chips to say where.
     private var newSessionButton: some View {
-        let available = repositories.filter(\.isAvailable)
-        if available.count == 1 {
-            Button { model.beginNewSession(in: available[0]) } label: {
-                PhIcon(Ph.plus, size: 12)
-            }
-            .buttonStyle(.icon(size: 20))
-            .help("New session in \(available[0].name)")
-        } else {
-            Menu {
-                ForEach(available) { repository in
-                    Button(repository.name) { model.beginNewSession(in: repository) }
-                }
-            } label: {
-                HoverIconLabel(icon: Ph.plus, iconSize: 12, side: 20, radius: 6)
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .disabled(available.isEmpty)
-            .help("New session")
+        let repository = model.repositoryForNewSession(active: active?.id.url)
+        return Button {
+            if let repository { model.beginNewSession(in: repository) }
+        } label: {
+            PhIcon(Ph.plus, size: 12)
         }
+        .buttonStyle(.icon(size: 20))
+        .disabled(repository == nil)
+        .help("New session")
     }
 
     private func notice(_ text: String, help: String) -> some View {

@@ -111,13 +111,27 @@ public final class RepositoriesModel {
     /// `selectedWorkspace` kept in step with the selection by hand; the
     /// listings already know which repository each worktree came from.
     public func nameOfRepository(holding path: URL) -> String? {
+        repository(holding: path)?.name
+    }
+
+    func repository(holding path: URL) -> Repository? {
         let key = PathKey(path)
         for (id, listing) in listings {
             guard case .loaded(let worktrees) = listing else { continue }
             guard worktrees.contains(where: { PathKey($0.path) == key }) else { continue }
-            return list.repository(id: id)?.name
+            return list.repository(id: id)
         }
         return nil
+    }
+
+    /// Where a new session most likely belongs: the repository of the
+    /// worktree open now, else the first one that can be used.
+    func repositoryForNewSession(active: URL?) -> Repository? {
+        let usable = repositories.filter(\.isAvailable)
+        if let active, let holding = repository(holding: active), usable.contains(where: { $0.id == holding.id }) {
+            return holding
+        }
+        return usable.first
     }
 
     public func beginAdding() {
