@@ -136,13 +136,34 @@ struct WindowChrome: NSViewRepresentable {
                       event.locationInWindow.y >= window.frame.height - Self.headerHeight,
                       !Self.isHandled(event, in: window)
                 else { return event }
-                window.zoom(nil)
+                Self.toggleZoom(window)
                 return event
             }
         }
 
         Self.growTitleBar(in: window)
         Self.positionTrafficLights(in: window)
+    }
+
+    /// Zooms the window, or puts a zoomed one that has been moved back in place.
+    ///
+    /// AppKit decides a window is zoomed by its size alone, so a zoomed window
+    /// dragged away still counts as zoomed and `zoom` would shrink it. Dragged
+    /// away is where the person wants it filling the screen again.
+    private static func toggleZoom(_ window: NSWindow) {
+        guard let target = window.screen?.visibleFrame else {
+            window.zoom(nil)
+            return
+        }
+
+        let frame = window.frame
+        let sameSize = abs(frame.width - target.width) < 2 && abs(frame.height - target.height) < 2
+        let inPlace = abs(frame.minX - target.minX) < 2 && abs(frame.minY - target.minY) < 2
+        if sameSize, !inPlace {
+            window.setFrame(target, display: true, animate: true)
+        } else {
+            window.zoom(nil)
+        }
     }
 
     /// Whether the click lands on a view that answers a double-click itself.
