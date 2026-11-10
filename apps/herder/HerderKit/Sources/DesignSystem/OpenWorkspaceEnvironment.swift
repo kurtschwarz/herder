@@ -24,4 +24,13 @@ extension EnvironmentValues {
     /// How a feature asks this window to bring an open agent session forward.
     /// See ``ShowAgentSessionAction``; carried here for the reason above.
     @Entry public var showAgentSession: ShowAgentSessionAction = .inert
+
+    /// How a feature asks this window to pick up an agent session from the
+    /// history. See ``ResumeAgentSessionAction``; carried here for the reason
+    /// above.
+    @Entry public var resumeAgentSession: ResumeAgentSessionAction = .inert
+
+    /// How a feature asks this window to name an open agent session. See
+    /// ``RenameAgentSessionAction``; carried here for the reason above.
+    @Entry public var renameAgentSession: RenameAgentSessionAction = .inert
 }

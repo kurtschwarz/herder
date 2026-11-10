@@ -322,7 +322,8 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         )
         if bytes.isEmpty { return }
         emulator.clearSelection()
-        screen.send(bytes)
+        // Return, and the keypad's Enter.
+        screen.send(bytes, submits: [36, 76].contains(event.keyCode))
         screen.refresh()
     }
 

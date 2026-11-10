@@ -1,0 +1,237 @@
+import Core
+import Foundation
+import TestSupport
+import Testing
+
+@testable import AgentSessionsFeature
+
+/// What the panel writes into the session history as sessions start and end,
+/// and what it does with one picked up from it.
+@Suite(.timeLimit(.minutes(1))) struct AgentPanelHistoryTests {
+    let files = InMemoryFileClient()
+    let git = StubGitClient()
+    let watcher = StubFileWatcherClient()
+    let clock = VirtualClockClient()
+    let state = InMemoryStateStore()
+    let pty = StubPTYClient()
+    let catalog = AgentCatalog(state: InMemoryStateStore())
+    let sessions: AgentSessions
+    let root = URL(filePath: "/code/api")
+
+    init() {
+        sessions = AgentSessions(git: git, state: state, clock: clock)
+    }
+
+    var repository: PathKey { PathKey(root) }
+
+    func shown() async throws -> AgentPanelModel {
+        let registry = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
+        let model = AgentPanelModel(
+            pty: pty, commands: StubCommandClient(), clock: VirtualClockClient(), catalog: catalog,
+            sessions: WindowAgentSessions(store: sessions),
+            environment: ["SHELL": "/bin/sh"], sampleInterval: .seconds(3600)
+        )
+        await model.show(try #require(await registry.open(WorkspaceID(root))))
+        return model
+    }
+
+    func eventually(_ what: String, _ condition: () -> Bool) async throws {
+        for _ in 0..<400 {
+            if condition() { return }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        Issue.record("never happened: \(what)")
+    }
+
+    func started(_ agent: Agent? = nil) async throws -> (AgentPanelModel, AgentSession) {
+        let model = try await shown()
+        await model.startSession(agent)
+        let id = try #require(model.activeTab?.id)
+        model.activeTab?.screen?.send(text: "hello\r")
+        try await eventually("it is written down") { sessions.recorded(in: repository).contains { $0.id == id } }
+        return (model, try #require(sessions.session(id)))
+    }
+
+    /// A tab remembered from before there was a history has no record. It
+    /// gets one once it is said something to after it resumes, keeping when
+    /// it first started.
+    @Test func aTabRestoredWithNoRecordIsWrittenDownWhenItIsSaidSomethingTo() async throws {
+        let registry = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
+        let workspace = try #require(await registry.open(WorkspaceID(root)))
+        let id = UUID()
+        let started = Date(timeIntervalSince1970: 1_000_000)
+        let claude = try #require(Agent.presets.first { $0.id == "claude-code" })
+        workspace.uiState(AgentPanelUIState.self).tabs = [
+            AgentPanelUIState.Tab(id: id, agent: claude, number: 1, started: started),
+        ]
+        let model = AgentPanelModel(
+            pty: pty, commands: StubCommandClient(), clock: VirtualClockClient(), catalog: catalog,
+            sessions: WindowAgentSessions(store: sessions), environment: ["SHELL": "/bin/sh"], sampleInterval: .seconds(3600)
+        )
+
+        await model.show(workspace)
+        model.activeTab?.screen?.send(text: "hello\r")
+
+        try await eventually("it is written down") { sessions.recorded(in: repository).contains { $0.id == id } }
+        let session = try #require(sessions.session(id))
+        #expect(session.startedAt == started)
+        #expect(session.sessionID == id.uuidString.lowercased())
+        #expect(model.sessions.sessions.map(\.id) == [id])
+    }
+
+    @Test func aTabThatNeverStartedIsListedButNotWrittenDown() async throws {
+        let model = try await shown()
+        pty.failSpawns(with: .spawnFailed(2))
+
+        await model.startSession()
+
+        let id = try #require(model.activeTab?.id)
+        #expect(model.sessions.sessions.map(\.id) == [id])
+        #expect(model.sessions.sessions.first?.state == .failed)
+        #expect(sessions.session(id) == nil)
+    }
+
+    @Test func aTabLeftAloneIsListedButNotWrittenDown() async throws {
+        let model = try await shown()
+
+        await model.startSession()
+        let id = try #require(model.activeTab?.id)
+        // Typing without Return is not saying anything yet.
+        model.activeTab?.screen?.send(text: "hel")
+        await sessions.flushSaves()
+
+        #expect(model.sessions.sessions.map(\.id) == [id])
+        #expect(sessions.session(id) == nil)
+    }
+
+    @Test func closingATabLeftAloneLeavesNoHistory() async throws {
+        let model = try await shown()
+        await model.startSession()
+
+        model.closeActiveTab()
+        await sessions.flushSaves()
+
+        #expect(sessions.recorded(in: repository).isEmpty)
+    }
+
+    @Test func aSessionIsWrittenDownWhenItIsFirstSaidSomethingTo() async throws {
+        let (model, record) = try await started()
+
+        #expect(record.id == model.activeTab?.id)
+        #expect(record.agentID == "claude-code")
+        #expect(record.agentName == "Claude Code")
+        #expect(record.worktree == WorkspaceID(root))
+        #expect(record.sessionID == record.id.uuidString.lowercased())
+        #expect(record.endedAt == nil)
+    }
+
+    @Test func anAgentThatGivesNoIDHasNoneRecorded() async throws {
+        let codex = try #require(Agent.presets.first { $0.id == "codex" })
+
+        let (_, record) = try await started(codex)
+
+        #expect(record.sessionID == nil)
+    }
+
+    @Test func closingTheTabEndsIt() async throws {
+        let (model, record) = try await started()
+
+        model.closeActiveTab()
+
+        #expect(sessions.session(record.id)?.endReason == .closed)
+        #expect(sessions.ended(in: repository).map(\.id) == [record.id])
+    }
+
+    @Test func theAgentQuittingEndsIt() async throws {
+        let (model, record) = try await started()
+
+        pty.sessions[0].exit(with: 0)
+
+        try await eventually("it ends") { sessions.session(record.id)?.endReason == .exited }
+        #expect(model.tabs.isEmpty)
+    }
+
+    @Test func aCrashLeavesItOpen() async throws {
+        let (model, record) = try await started()
+
+        pty.sessions[0].exit(with: 1)
+        try await eventually("the tab notices") { model.activeTab?.phase == .exited(1) }
+
+        #expect(sessions.session(record.id)?.endedAt == nil)
+    }
+
+    @Test func aSessionPickedUpAgainIsTheSameRecordInANewTab() async throws {
+        let (model, record) = try await started()
+        model.closeActiveTab()
+        let ended = try #require(sessions.session(record.id))
+
+        await model.resume(ended)
+
+        let tab = try #require(model.activeTab)
+        #expect(tab.id == record.id)
+        #expect(pty.specs.last?.arguments.last == "exec claude --resume \(record.id.uuidString.lowercased())")
+        let again = try #require(sessions.session(record.id))
+        #expect(again.endedAt == nil)
+        #expect(again.startedAt == record.startedAt)
+        #expect(sessions.recorded(in: repository).count == 1)
+    }
+
+    @Test func aSessionRenamedInTheHistoryKeepsItsNameWhenPickedUp() async throws {
+        let (model, record) = try await started()
+        model.closeActiveTab()
+        sessions.rename(record.id, to: "Scroll fix")
+
+        await model.resume(try #require(sessions.session(record.id)))
+
+        let tab = try #require(model.activeTab)
+        #expect(model.title(of: tab) == "Scroll fix")
+        #expect(sessions.session(record.id)?.name == "Scroll fix")
+    }
+
+    @Test func aTabsNameIsWrittenDown() async throws {
+        let (model, record) = try await started()
+
+        model.rename(try #require(model.activeTab), to: "Scroll fix")
+
+        #expect(sessions.session(record.id)?.name == "Scroll fix")
+        #expect(sessions.session(record.id)?.title == "Scroll fix")
+    }
+
+    @Test func aRunningSessionIsRenamedFromOutsideThePanel() async throws {
+        let (model, record) = try await started()
+        let focus = model.focusRequest
+
+        model.rename(record.id, to: "Scroll fix")
+
+        #expect(model.activeTab?.customName == "Scroll fix")
+        #expect(model.sessions.sessions.first?.title == "Scroll fix")
+        #expect(sessions.session(record.id)?.name == "Scroll fix")
+        // The sidebar asked: the keyboard stays where it is.
+        #expect(model.focusRequest == focus)
+    }
+
+    @Test func aSessionWithNoIDIsNotPickedUp() async throws {
+        let codex = try #require(Agent.presets.first { $0.id == "codex" })
+        let (model, record) = try await started(codex)
+        model.closeActiveTab()
+        let specs = pty.specs.count
+
+        await model.resume(try #require(sessions.session(record.id)))
+
+        // Not `codex resume --last`, which may be another session.
+        #expect(pty.specs.count == specs)
+        #expect(model.tabs.isEmpty)
+        #expect(sessions.session(record.id)?.endedAt != nil)
+    }
+
+    @Test func aSessionOfAnAgentThatIsGoneIsNotPickedUp() async throws {
+        let (model, record) = try await started()
+        model.closeActiveTab()
+        var orphan = try #require(sessions.session(record.id))
+        orphan.agentID = "custom-deleted"
+
+        await model.resume(orphan)
+
+        #expect(model.tabs.isEmpty)
+    }
+}

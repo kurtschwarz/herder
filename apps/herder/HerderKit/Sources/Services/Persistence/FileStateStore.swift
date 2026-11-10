@@ -15,7 +15,8 @@ import Foundation
 /// ~/Library/Application Support/Herder/
 /// ├── state.json                       # AppSnapshot
 /// ├── windows/<id>-<hash>.json         # WindowSnapshot, one per window
-/// └── workspaces/<name>-<hash>.json    # WorkspaceSnapshot, one per workspace
+/// ├── workspaces/<name>-<hash>.json    # WorkspaceSnapshot, one per workspace
+/// └── history/<name>-<hash>.json       # SessionHistorySnapshot, one per repository
 /// ```
 ///
 /// **Nothing here debounces.** The callers already do, and they differ on
@@ -117,6 +118,12 @@ public actor FileStateStore: StateStore {
             return root
                 .appending(path: "windows", directoryHint: .isDirectory)
                 .appending(path: "\(Self.fileName(for: id, fullKey: key)).json")
+        }
+
+        if let path = key.dropping(prefix: SessionHistorySnapshot.keyPrefix) {
+            return root
+                .appending(path: "history", directoryHint: .isDirectory)
+                .appending(path: "\(Self.fileName(for: path, fullKey: key)).json")
         }
 
         if let path = key.dropping(prefix: Self.workspacePrefix) {

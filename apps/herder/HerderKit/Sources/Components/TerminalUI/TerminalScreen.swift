@@ -59,6 +59,10 @@ public final class TerminalScreen {
     /// do when a key is pressed in a terminal that has nothing left to hear it.
     @ObservationIgnored public var onKeyWhileEnded: (() -> Void)?
 
+    /// Told each time the person presses Return: what a terminal can say of
+    /// someone having said something to the program in it.
+    @ObservationIgnored public var onSubmit: (() -> Void)?
+
     @ObservationIgnored let emulator: TerminalEmulator
     @ObservationIgnored private let session: any PTYSession
     @ObservationIgnored weak var view: TerminalNSView?
@@ -161,7 +165,10 @@ public final class TerminalScreen {
 
     // MARK: Input
 
-    func send(_ data: Data) {
+    /// Sends `data` to the process. `submits` when it is the Return key,
+    /// which is told by the key, not the bytes: a program can ask for Return
+    /// to be sent as something other than `\r`.
+    func send(_ data: Data, submits: Bool = false) {
         guard !data.isEmpty else { return }
         // Typing goes to the bottom of the scrollback, as in every terminal.
         if !emulator.scroll.isAtBottom {
@@ -169,10 +176,12 @@ public final class TerminalScreen {
             refresh()
         }
         input.yield(data)
+        if submits { onSubmit?() }
     }
 
+    /// Types `text`, as if at the keyboard: a `\r` in it is Return.
     public func send(text: String) {
-        send(Data(text.utf8))
+        send(Data(text.utf8), submits: text.contains("\r"))
     }
 
     /// Pastes `text`, bracketed if the program asked for that.

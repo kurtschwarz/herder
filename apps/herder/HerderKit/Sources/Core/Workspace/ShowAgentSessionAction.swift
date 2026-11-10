@@ -7,13 +7,13 @@ import Foundation
 /// itself. Shaped like ``StartAgentSessionAction``, and carried the same way.
 @MainActor
 public struct ShowAgentSessionAction {
-    private let handler: (AgentSessionSummary) -> Void
+    private let handler: (AgentSession) -> Void
 
-    public init(_ handler: @escaping (AgentSessionSummary) -> Void) {
+    public init(_ handler: @escaping (AgentSession) -> Void) {
         self.handler = handler
     }
 
-    public func callAsFunction(_ session: AgentSessionSummary) {
+    public func callAsFunction(_ session: AgentSession) {
         handler(session)
     }
 }

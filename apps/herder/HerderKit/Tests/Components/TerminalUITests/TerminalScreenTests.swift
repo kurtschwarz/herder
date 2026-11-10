@@ -42,6 +42,19 @@ import Testing
         try await eventually("the input") { session.input == "ls\r" }
     }
 
+    @Test func returnIsToldAndOtherInputIsNot() async throws {
+        let (screen, _) = make()
+        var submits = 0
+        screen.onSubmit = { submits += 1 }
+
+        screen.send(text: "ls")
+        screen.paste("a\rb")
+        #expect(submits == 0)
+
+        screen.send(text: "\r")
+        #expect(submits == 1)
+    }
+
     @Test func inputArrivesInTheOrderItWasGiven() async throws {
         let (screen, session) = make()
         let expected = (0..<200).map { "\($0)," }.joined()

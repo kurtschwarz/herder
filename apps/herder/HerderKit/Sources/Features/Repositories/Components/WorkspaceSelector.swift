@@ -1,3 +1,4 @@
+import AppKit
 import Core
 import DesignSystem
 import SwiftUI
@@ -64,7 +65,8 @@ private struct WorkspaceSelection: View {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(model.repositories) { repository in
                         WorkspaceOption(
-                            name: repository.name,
+                            repository: repository,
+                            model: model,
                             isOn: model.isShown(repository),
                             isEnabled: !model.isShown(repository) || model.canHide(repository)
                         ) { model.setShown(repository, !model.isShown(repository)) }
@@ -96,37 +98,77 @@ private struct WorkspaceSelection: View {
     }
 }
 
+/// One repository in the selector: ticked to show its sessions, and, with a
+/// right click, revealed, renamed or taken out of this window. The sidebar has
+/// no row of its own for a repository, so this is where those live.
 private struct WorkspaceOption: View {
-    let name: String
+    let repository: Repository
+    let model: RepositoriesModel
     let isOn: Bool
     let isEnabled: Bool
     let toggle: () -> Void
 
     @State private var isHovering = false
 
+    private var isRenaming: Bool { model.renaming == repository.id }
+
+    /// Not a `Button`: a text field in a button's label does not take the
+    /// keyboard, and a disabled button takes its context menu down with it,
+    /// which would leave the last repository on show with no way to rename or
+    /// remove it.
     var body: some View {
-        Button(action: toggle) {
-            HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
-                CheckBox(isOn: isOn)
-                Text(name)
+        HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
+            CheckBox(isOn: isOn)
+                .opacity(isEnabled ? 1 : 0.5)
+            if isRenaming {
+                RenameField(name: repository.name) { name in
+                    Task { await model.commitRename(repository, to: name) }
+                }
+            } else {
+                Text(repository.name)
                     .font(.system(size: 13))
-                    .foregroundStyle(Theme.Palette.text)
+                    .foregroundStyle(repository.isAvailable ? Theme.Palette.text : Theme.Palette.tertiaryText)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, Theme.Spacing.normal)
-            .frame(minHeight: 32)
-            .background {
-                RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                    .fill(isHovering && isEnabled ? Theme.Palette.control : .clear)
+            Spacer(minLength: 0)
+            if !repository.isAvailable {
+                PhIcon(Ph.warningFill, size: 12)
+                    .foregroundStyle(Theme.Palette.warning)
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
+        .padding(.horizontal, Theme.Spacing.normal)
+        .frame(minHeight: 32)
+        .background {
+            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                .fill(isHovering && isEnabled && !isRenaming ? Theme.Palette.control : .clear)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { if isEnabled, !isRenaming { toggle() } }
+        .accessibilityAddTraits(.isButton)
         .onHover { isHovering = $0 }
-        .help(isEnabled ? "" : "At least one workspace stays on the sidebar")
+        .help(help)
+        .contextMenu {
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([repository.url])
+            }
+            .disabled(!repository.isAvailable)
+
+            Button("Rename") { model.renaming = repository.id }
+
+            Divider()
+
+            // This window's list only: other windows keep it, and so does the
+            // app, which is why this is not a deletion.
+            Button("Remove from This Window", role: .destructive) {
+                model.remove(repository)
+            }
+        }
+    }
+
+    private var help: String {
+        if !repository.isAvailable { return "\(repository.path) can\u{2019}t be reached" }
+        return isEnabled ? repository.path : "At least one workspace stays on the sidebar"
     }
 }
 

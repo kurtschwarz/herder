@@ -44,6 +44,11 @@ public final class AppEnvironment {
     /// App-wide: Settings edits it and every window starts sessions from it.
     public let agents: AgentCatalog
 
+    /// Every agent session there has been. App-wide, so that two windows
+    /// listing one repository share one writer of its history. What each
+    /// window has open is the window's own: see ``makeWindow(id:restoring:)``.
+    public let sessions: AgentSessions
+
     /// Where windows' snapshots are kept, and which exist.
     let windows: WindowStore
 
@@ -182,6 +187,7 @@ public final class AppEnvironment {
         self.repositories = repositories
         self.windows = WindowStore(snapshots: snapshots, state: persistence.state)
         self.agents = AgentCatalog(state: persistence.state)
+        self.sessions = AgentSessions(git: git, state: persistence.state, clock: clock)
         self.worktrees = WorkspaceRegistry(
             files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
         )
@@ -213,7 +219,8 @@ public final class AppEnvironment {
             editor: EditorModel(store: worktrees, files: files, highlighter: highlighter),
             terminal: TerminalModel(pty: pty, clock: clock),
             agentPanel: AgentPanelModel(
-                pty: pty, commands: commands, clock: clock, catalog: agents, openSessions: OpenAgentSessions()
+                pty: pty, commands: commands, clock: clock, catalog: agents,
+                sessions: WindowAgentSessions(store: sessions, window: id)
             ),
             worktrees: worktrees,
             windows: windows,
