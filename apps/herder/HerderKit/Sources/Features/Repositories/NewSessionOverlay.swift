@@ -40,7 +40,6 @@ public struct NewSessionOverlay: View {
                         WorktreeActivity(open?.sessions(in: WorkspaceID(worktree.path)) ?? [])
                     },
                     selectRepository: { model.switchNewSession(to: $0) },
-                    addRepository: { Task { await model.addRepositoryForNewSession() } },
                     cancel: { model.cancelNewSession() },
                     submit: {
                         let agent = agentID.flatMap { catalog?.agent($0) }
@@ -68,7 +67,6 @@ private struct NewSessionCard: View {
     let activeWorktree: WorkspaceID?
     let activity: (GitWorktree) -> WorktreeActivity
     let selectRepository: (Repository) -> Void
-    let addRepository: () -> Void
     let cancel: () -> Void
     let submit: () -> Void
 
@@ -149,11 +147,6 @@ private struct NewSessionCard: View {
                         .foregroundStyle(Theme.Palette.secondaryText)
                 } action: { selectRepository(repository) }
             }
-
-            ChoiceChip(title: "Open folder\u{2026}", isDashed: true) {
-                PhIcon(Ph.folderSimplePlus, size: 16)
-                    .foregroundStyle(Theme.Palette.secondaryText)
-            } action: { addRepository() }
         }
     }
 
@@ -238,12 +231,10 @@ private struct NewSessionCard: View {
     }
 }
 
-/// A pill to pick one of several things: a workspace or an agent. Dashed for
-/// the one that is not a choice but a way to add another.
+/// A pill to pick one of several things: a workspace or an agent.
 private struct ChoiceChip<Leading: View>: View {
     let title: String
     var isSelected = false
-    var isDashed = false
     @ViewBuilder let leading: Leading
     let action: () -> Void
 
@@ -257,7 +248,7 @@ private struct ChoiceChip<Leading: View>: View {
                 leading
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(isDashed ? Theme.Palette.secondaryText : Theme.Palette.text)
+                    .foregroundStyle(Theme.Palette.text)
                     .lineLimit(1)
             }
             .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
@@ -265,18 +256,14 @@ private struct ChoiceChip<Leading: View>: View {
             .background {
                 shape.fill(
                     isSelected ? Theme.Palette.violet.opacity(0.15)
-                        : isHovering && !isDashed ? Theme.Palette.controlPressed : Theme.Palette.control
+                        : isHovering ? Theme.Palette.controlPressed : Theme.Palette.control
                 )
             }
             .overlay {
-                if isDashed {
-                    shape.strokeBorder(Theme.Palette.tertiaryText, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                } else {
-                    shape.strokeBorder(
-                        isSelected ? Theme.Palette.violet.opacity(0.8) : Theme.Palette.hairline,
-                        lineWidth: isSelected ? 1.5 : 1
-                    )
-                }
+                shape.strokeBorder(
+                    isSelected ? Theme.Palette.violet.opacity(0.8) : Theme.Palette.hairline,
+                    lineWidth: isSelected ? 1.5 : 1
+                )
             }
             .contentShape(shape)
         }
@@ -483,7 +470,7 @@ private struct WorktreeChoiceRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: Theme.Spacing.normal) {
                     Text(NewSessionModel.label(of: worktree))
-                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .foregroundStyle(Theme.Palette.text)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -491,7 +478,7 @@ private struct WorktreeChoiceRow: View {
                     if isActive { badge("current") }
                 }
                 Text((worktree.path.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.Palette.tertiaryText)
                     .lineLimit(1)
                     .truncationMode(.head)
@@ -531,6 +518,7 @@ private struct WorktreeChoiceRow: View {
             case .idle, .none: EmptyView()
             }
             Text(activity.label)
+                .font(.system(size: 12))
                 .foregroundStyle(activity == .none ? Theme.Palette.tertiaryText : Theme.Palette.secondaryText)
         }
     }

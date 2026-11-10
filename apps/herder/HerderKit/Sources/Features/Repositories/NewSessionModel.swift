@@ -50,11 +50,6 @@ final class NewSessionModel {
         self.branchName = branchName
     }
 
-    /// Says something went wrong outside this model's own work, such as a
-    /// folder that could not be added.
-    func fail(_ message: String) {
-        failure = message
-    }
 
     // MARK: - Loading
 

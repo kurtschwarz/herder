@@ -166,19 +166,6 @@ public final class RepositoriesModel {
         )
     }
 
-    /// Asks for a folder, adds it to this window and moves the open modal to
-    /// it. Cancelling the picker changes nothing; a folder that cannot be
-    /// added is said so in the modal.
-    func addRepositoryForNewSession() async {
-        guard newSession != nil, let url = await picker.pickFolder(startingAt: nil) else { return }
-        do {
-            let repository = try await list.add(url: url)
-            switchNewSession(to: repository)
-        } catch {
-            newSession?.fail(AddRepositoryModel.Refusal(error).message)
-        }
-    }
-
     /// Makes the worktree the modal describes, if it is a new one, closes it,
     /// and shows the worktree under its repository, which is put on show if it
     /// was not, so the session can be seen. Returns the worktree the session

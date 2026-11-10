@@ -263,7 +263,6 @@ import Testing
         await first.load()
         first.editBranchName("fix")
         first.baseBranch = "dev"
-        first.fail("old")
 
         model.switchNewSession(to: web)
 
@@ -285,40 +284,6 @@ import Testing
         model.switchNewSession(to: api)
 
         #expect(model.newSession === session)
-    }
-
-    @Test func openingAFolderAddsItAndMovesTheModalThere() async throws {
-        let api = try await addRepository("/code/api")
-        let web = URL(filePath: "/code/web")
-        git.seed(web, .mainWorkingTree)
-        picker.script(web)
-        model.beginNewSession(in: api)
-
-        await model.addRepositoryForNewSession()
-
-        #expect(model.repositories.map(\.name) == ["api", "web"])
-        #expect(model.newSession?.repositoryName == "web")
-    }
-
-    @Test func aFolderThatCannotBeAddedIsExplainedInTheModal() async throws {
-        let api = try await addRepository("/code/api")
-        picker.script(URL(filePath: "/code/api"))
-        model.beginNewSession(in: api)
-
-        await model.addRepositoryForNewSession()
-
-        #expect(model.newSession?.repositoryName == "api")
-        #expect(model.newSession?.failure == "That folder is already in the sidebar.")
-    }
-
-    @Test func cancellingTheFolderPickerChangesNothing() async throws {
-        let api = try await addRepository("/code/api")
-        model.beginNewSession(in: api)
-
-        await model.addRepositoryForNewSession()
-
-        #expect(model.newSession?.repositoryName == "api")
-        #expect(model.newSession?.failure == nil)
     }
 
     @Test func aSessionStartedInAHiddenRepositoryPutsItOnShow() async throws {
