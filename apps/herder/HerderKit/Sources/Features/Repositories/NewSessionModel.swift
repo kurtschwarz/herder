@@ -41,13 +41,24 @@ final class NewSessionModel {
 
     private var kind: GitRepositoryKind = .notARepository
 
+    /// The worktree to start on once the list is read, if it is one of this
+    /// repository's: the one the window has open.
+    private let preferredWorktree: URL?
+
     /// `branchName` carries what was typed over from the modal this replaces,
     /// when the person switches repository half way through.
-    init(repositoryName: String, repository: URL, git: any GitClient, branchName: String = "") {
+    init(
+        repositoryName: String,
+        repository: URL,
+        git: any GitClient,
+        branchName: String = "",
+        preferredWorktree: URL? = nil
+    ) {
         self.repositoryName = repositoryName
         self.repository = repository
         self.git = git
         self.branchName = branchName
+        self.preferredWorktree = preferredWorktree
     }
 
 
@@ -68,6 +79,17 @@ final class NewSessionModel {
         }
 
         if baseBranch.isEmpty { baseBranch = defaultBase() }
+        selectPreferredWorktree()
+    }
+
+    /// Starts on the open worktree, unless a branch name was carried over,
+    /// which says a new one is wanted, or something was picked meanwhile.
+    private func selectPreferredWorktree() {
+        guard choice == .newWorktree, branchName.isEmpty, let preferredWorktree else { return }
+        let key = PathKey(preferredWorktree)
+        if let match = worktrees.first(where: { PathKey($0.path) == key }) {
+            choice = .existing(match.id)
+        }
     }
 
     /// Where a new branch most likely starts: what the main working tree has

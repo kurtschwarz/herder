@@ -166,19 +166,26 @@ public final class RepositoriesModel {
         self.adding = nil
     }
 
-    func beginNewSession(in repository: Repository) {
+    /// The worktree the window had open when the modal opened, which it starts
+    /// on in whichever repository holds it.
+    private var newSessionActiveWorktree: URL?
+
+    func beginNewSession(in repository: Repository, active: URL? = nil) {
         guard !isModalPresented, repository.isAvailable else { return }
         newSessionRepository = repository
+        newSessionActiveWorktree = active
         newSession = NewSessionModel(
             repositoryName: repository.name,
             repository: URL(filePath: repository.path),
-            git: git
+            git: git,
+            preferredWorktree: active
         )
     }
 
     func cancelNewSession() {
         newSession = nil
         newSessionRepository = nil
+        newSessionActiveWorktree = nil
     }
 
     /// Moves the open modal to another repository. What was typed as a branch
@@ -192,7 +199,8 @@ public final class RepositoriesModel {
             repositoryName: repository.name,
             repository: URL(filePath: repository.path),
             git: git,
-            branchName: current.branchName
+            branchName: current.branchName,
+            preferredWorktree: newSessionActiveWorktree
         )
     }
 

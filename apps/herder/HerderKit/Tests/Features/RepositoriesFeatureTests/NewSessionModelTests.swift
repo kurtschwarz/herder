@@ -101,6 +101,42 @@ import Testing
         #expect(model.listedWorktrees.first?.path == repository)
     }
 
+    @Test func theOpenWorktreeIsChosenOnceRead() async {
+        seed()
+        let model = NewSessionModel(
+            repositoryName: "api", repository: repository, git: git,
+            preferredWorktree: repository.appending(path: "feature")
+        )
+
+        await model.load()
+
+        #expect(model.selectedWorktree?.checkout == .branch("feature"))
+    }
+
+    @Test func anOpenWorktreeFromElsewhereLeavesNewWorktree() async {
+        seed()
+        let model = NewSessionModel(
+            repositoryName: "api", repository: repository, git: git,
+            preferredWorktree: URL(filePath: "/code/web")
+        )
+
+        await model.load()
+
+        #expect(model.choice == .newWorktree)
+    }
+
+    @Test func aCarriedOverBranchNameOutranksTheOpenWorktree() async {
+        seed()
+        let model = NewSessionModel(
+            repositoryName: "api", repository: repository, git: git,
+            branchName: "fix", preferredWorktree: repository.appending(path: "feature")
+        )
+
+        await model.load()
+
+        #expect(model.choice == .newWorktree)
+    }
+
     @Test func aCarriedOverBranchNameIsKept() {
         let carried = NewSessionModel(repositoryName: "web", repository: repository, git: git, branchName: "agent/x")
 

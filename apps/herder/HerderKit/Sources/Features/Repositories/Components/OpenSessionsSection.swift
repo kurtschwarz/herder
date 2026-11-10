@@ -71,11 +71,15 @@ struct OpenSessionsSection: View {
         model.repositoryForNewSession(active: active?.id.url)
     }
 
-    /// Opens the modal, which has the workspace chips to say where.
+    /// Opens the modal on the worktree open now, where there is one.
+    private func beginNewSession() {
+        guard let repository = newSessionRepository else { return }
+        model.beginNewSession(in: repository, active: active?.id.url)
+    }
+
+    /// Opens the modal, which has the workspace selector to say where.
     private var newSessionButton: some View {
-        Button {
-            if let repository = newSessionRepository { model.beginNewSession(in: repository) }
-        } label: {
+        Button(action: beginNewSession) {
             PhIcon(Ph.plus, size: 12)
         }
         .buttonStyle(.icon(size: 20))
@@ -87,9 +91,7 @@ struct OpenSessionsSection: View {
     /// the plus, said in words.
     private var startSessionButton: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.Radius.control + 2, style: .continuous)
-        return Button {
-            if let repository = newSessionRepository { model.beginNewSession(in: repository) }
-        } label: {
+        return Button(action: beginNewSession) {
             HStack(spacing: Theme.Spacing.normal) {
                 PhIcon(Ph.plus, size: 14)
                 Text("Start a session")
