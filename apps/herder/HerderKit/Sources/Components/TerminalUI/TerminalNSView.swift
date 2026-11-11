@@ -401,8 +401,8 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
 
     /// The link under `point`, if the click it would be is a plain one: any
     /// modifier means something else is being asked for.
-    private func link(at point: NSPoint, for event: NSEvent) -> PendingLink? {
-        guard event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty else { return nil }
+    private func link(at point: NSPoint, modifiers: NSEvent.ModifierFlags) -> PendingLink? {
+        guard modifiers.intersection([.shift, .control, .option, .command]).isEmpty else { return nil }
         let column = Int(((point.x - inset.width) / cellSize.width).rounded(.down))
         let row = Int(((point.y - inset.height) / cellSize.height).rounded(.down))
         // Not clamped, as `cell(at:)` is: the margin is not a link.
@@ -414,7 +414,7 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         window?.makeFirstResponder(self)
         // A plain click on a link is the link's, and opens it when the button
         // comes up: after a drag it is a selection that started on a link.
-        pendingLink = event.clickCount == 1 ? link(at: convert(event.locationInWindow, from: nil), for: event) : nil
+        pendingLink = event.clickCount == 1 ? link(at: convert(event.locationInWindow, from: nil), modifiers: event.modifierFlags) : nil
         if pendingLink != nil, programOwnsMouse(event) { return }
         if programOwnsMouse(event) {
             pressedButton = .left
@@ -481,10 +481,26 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         updateCursor(for: event)
     }
 
-    /// A hand over what a click would open, as everywhere else.
     private func updateCursor(for event: NSEvent) {
-        let overLink = link(at: convert(event.locationInWindow, from: nil), for: event) != nil
-        (overLink ? NSCursor.pointingHand : NSCursor.arrow).set()
+        cursor(at: convert(event.locationInWindow, from: nil), modifiers: event.modifierFlags).set()
+    }
+
+    /// Sets the pointer for where the mouse is now, for when the program
+    /// changes its shape without the mouse having moved.
+    func refreshCursor() {
+        guard let window, window.isKeyWindow else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard bounds.contains(point), window.contentView?.hitTest(window.mouseLocationOutsideOfEventStream) === self
+        else { return }
+        cursor(at: point, modifiers: NSEvent.modifierFlags).set()
+    }
+
+    /// A hand over what a click would open, then what the program asked for
+    /// while it has the mouse, else the I-beam: a drag here selects text.
+    private func cursor(at point: NSPoint, modifiers: NSEvent.ModifierFlags) -> NSCursor {
+        if link(at: point, modifiers: modifiers) != nil { return .pointingHand }
+        if emulator.isTrackingMouse, !modifiers.contains(.option) { return emulator.mouseShape.cursor }
+        return .iBeam
     }
 
     override func scrollWheel(with event: NSEvent) {

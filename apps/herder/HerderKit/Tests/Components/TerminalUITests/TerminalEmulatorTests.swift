@@ -264,6 +264,25 @@ import Testing
         #expect(!terminal.isTrackingMouse)
     }
 
+    @Test func thePointerShapeStartsAsTheIBeam() {
+        #expect(emulator().mouseShape == .text)
+    }
+
+    @Test func aPointerShapeIsReported() {
+        let terminal = emulator()
+        feed(terminal, "\(esc)]22;pointer\(esc)\\")
+        #expect(terminal.mouseShape == .pointer)
+        feed(terminal, "\(esc)]22;default\(esc)\\")
+        #expect(terminal.mouseShape == .default)
+    }
+
+    @Test func aFullResetRestoresTheIBeam() {
+        let terminal = emulator()
+        feed(terminal, "\(esc)]22;pointer\(esc)\\")
+        feed(terminal, "\(esc)c")
+        #expect(terminal.mouseShape == .text)
+    }
+
     @Test func theAlternateScreenIsNoticed() {
         let terminal = emulator()
         #expect(!terminal.isOnAlternateScreen)

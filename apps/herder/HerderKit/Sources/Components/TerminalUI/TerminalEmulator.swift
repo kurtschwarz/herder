@@ -37,6 +37,10 @@ final class TerminalEmulator {
     private(set) var cells: [[TerminalCell]] = []
     private(set) var cursor: Cursor?
 
+    /// The pointer shape the program last asked for (OSC 22), as of the last
+    /// ``update()``. The I-beam until it asks, and again after a full reset.
+    private(set) var mouseShape: TerminalPointerShape = .text
+
     /// What each row's cells can be clicked to open, indexed by
     /// ``TerminalCell/link`` less one. Per row, so a row rebuilt on its own
     /// has no table to keep in step with the rest.
@@ -98,6 +102,9 @@ final class TerminalEmulator {
     /// Set when a resize or reset means the next ``update()`` has to rebuild
     /// every row, whatever the library says is dirty.
     private var needsFullRebuild = true
+
+    /// Set when a full reset has left the library with the last shape asked for.
+    private var needsShapeReset = false
 
     init(columns: Int, rows: Int, scrollbackLines: Int) {
         self.columns = columns
@@ -215,6 +222,17 @@ final class TerminalEmulator {
             terminal, GHOSTTY_TERMINAL_OPT_PROGRAM_STATUS, unsafeBitCast(programStatus, to: UnsafeRawPointer.self)
         )
 
+        // The library keeps the shape through a full reset, so the reset is
+        // noted here and the initial shape is asked for in `update()`: this
+        // is inside `ghostty_terminal_vt_write`, which cannot be written to.
+        let reset: GhosttyTerminalResetFn = { _, userdata in
+            guard let userdata else { return }
+            MainActor.assumeIsolated {
+                Unmanaged<TerminalEmulator>.fromOpaque(userdata).takeUnretainedValue().needsShapeReset = true
+            }
+        }
+        ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_RESET, unsafeBitCast(reset, to: UnsafeRawPointer.self))
+
         let clipboard: GhosttyTerminalClipboardWriteFn = { _, userdata, write in
             guard let userdata, let write else { return }
             // Text only, and only the first representation that is text.
@@ -288,6 +306,11 @@ final class TerminalEmulator {
     @discardableResult
     func update() -> Set<Int> {
         guard ghostty_render_state_update(renderState, terminal) == GHOSTTY_SUCCESS else { return [] }
+        if needsShapeReset {
+            needsShapeReset = false
+            write(Data("\u{1b}]22;text\u{1b}\\".utf8))
+        }
+        mouseShape = readMouseShape()
 
         var dirty = GHOSTTY_RENDER_STATE_DIRTY_FALSE
         ghostty_render_state_get(renderState, GHOSTTY_RENDER_STATE_DATA_DIRTY, &dirty)
@@ -560,6 +583,47 @@ final class TerminalEmulator {
         default: .block
         }
         return Cursor(column: Int(cursor.viewport_x), row: Int(cursor.viewport_y), style: style)
+    }
+
+    private func readMouseShape() -> TerminalPointerShape {
+        var shape = GHOSTTY_MOUSE_SHAPE_TEXT
+        ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_MOUSE_SHAPE, &shape)
+        return switch shape {
+        case GHOSTTY_MOUSE_SHAPE_CONTEXT_MENU: .contextMenu
+        case GHOSTTY_MOUSE_SHAPE_HELP: .help
+        case GHOSTTY_MOUSE_SHAPE_POINTER: .pointer
+        case GHOSTTY_MOUSE_SHAPE_PROGRESS: .progress
+        case GHOSTTY_MOUSE_SHAPE_WAIT: .wait
+        case GHOSTTY_MOUSE_SHAPE_CELL: .cell
+        case GHOSTTY_MOUSE_SHAPE_CROSSHAIR: .crosshair
+        case GHOSTTY_MOUSE_SHAPE_TEXT: .text
+        case GHOSTTY_MOUSE_SHAPE_VERTICAL_TEXT: .verticalText
+        case GHOSTTY_MOUSE_SHAPE_ALIAS: .alias
+        case GHOSTTY_MOUSE_SHAPE_COPY: .copy
+        case GHOSTTY_MOUSE_SHAPE_MOVE: .move
+        case GHOSTTY_MOUSE_SHAPE_NO_DROP: .noDrop
+        case GHOSTTY_MOUSE_SHAPE_NOT_ALLOWED: .notAllowed
+        case GHOSTTY_MOUSE_SHAPE_GRAB: .grab
+        case GHOSTTY_MOUSE_SHAPE_GRABBING: .grabbing
+        case GHOSTTY_MOUSE_SHAPE_ALL_SCROLL: .allScroll
+        case GHOSTTY_MOUSE_SHAPE_COL_RESIZE: .colResize
+        case GHOSTTY_MOUSE_SHAPE_ROW_RESIZE: .rowResize
+        case GHOSTTY_MOUSE_SHAPE_N_RESIZE: .nResize
+        case GHOSTTY_MOUSE_SHAPE_E_RESIZE: .eResize
+        case GHOSTTY_MOUSE_SHAPE_S_RESIZE: .sResize
+        case GHOSTTY_MOUSE_SHAPE_W_RESIZE: .wResize
+        case GHOSTTY_MOUSE_SHAPE_NE_RESIZE: .neResize
+        case GHOSTTY_MOUSE_SHAPE_NW_RESIZE: .nwResize
+        case GHOSTTY_MOUSE_SHAPE_SE_RESIZE: .seResize
+        case GHOSTTY_MOUSE_SHAPE_SW_RESIZE: .swResize
+        case GHOSTTY_MOUSE_SHAPE_EW_RESIZE: .ewResize
+        case GHOSTTY_MOUSE_SHAPE_NS_RESIZE: .nsResize
+        case GHOSTTY_MOUSE_SHAPE_NESW_RESIZE: .neswResize
+        case GHOSTTY_MOUSE_SHAPE_NWSE_RESIZE: .nwseResize
+        case GHOSTTY_MOUSE_SHAPE_ZOOM_IN: .zoomIn
+        case GHOSTTY_MOUSE_SHAPE_ZOOM_OUT: .zoomOut
+        default: .default
+        }
     }
 
     private func reportedTitle() -> String {
