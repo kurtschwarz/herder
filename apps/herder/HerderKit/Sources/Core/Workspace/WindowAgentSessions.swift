@@ -26,14 +26,15 @@ public final class WindowAgentSessions {
     /// The window these are open in.
     public let window: UUID
 
-    /// In the order the panel lists them.
+    /// In the order the panel lists them. Includes an ended session whose tab
+    /// is open to be read; the sidebar lists that one under Closed instead.
     public private(set) var sessions: [AgentSession] = []
 
     /// Most recently active first, for the sidebar; ``sessions`` keeps the
     /// panel's order. Sessions active at the same moment go newest start
     /// first, and after that stay in the panel's order.
     public var sessionsByRecency: [AgentSession] {
-        sessions.enumerated().sorted { lhs, rhs in
+        sessions.enumerated().filter { !$0.element.isEnded }.sorted { lhs, rhs in
             let (a, b) = (lhs.element, rhs.element)
             let (activeA, activeB) = (a.live?.lastActivity ?? a.lastSeenAt, b.live?.lastActivity ?? b.lastSeenAt)
             if activeA != activeB { return activeA > activeB }
@@ -50,9 +51,10 @@ public final class WindowAgentSessions {
         self.window = window
     }
 
-    /// The sessions open in `workspace`, in the order they were opened.
+    /// The sessions open in `workspace`, in the order they were opened. An
+    /// ended one with a tab open is being read, not worked in: it is left out.
     public func sessions(in workspace: WorkspaceID) -> [AgentSession] {
-        sessions.filter { $0.worktree == workspace }
+        sessions.filter { $0.worktree == workspace && !$0.isEnded }
     }
 
     /// Replaces what is open with `reports`, in that order, and which is in

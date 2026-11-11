@@ -160,19 +160,116 @@ import Testing
         #expect(sessions.session(record.id)?.endedAt == nil)
     }
 
-    @Test func aSessionPickedUpAgainIsTheSameRecordInANewTab() async throws {
-        let (model, record) = try await started()
+    /// Opens `record`, ended, in a new tab, as clicking it in the sidebar does.
+    func reading(_ model: AgentPanelModel, _ record: AgentSession) async throws -> AgentSession {
         model.closeActiveTab()
         let ended = try #require(sessions.session(record.id))
-
         await model.resume(ended)
+        return ended
+    }
+
+    @Test func readingAnEndedSessionOpensItsTabAndLeavesItEnded() async throws {
+        let (model, record) = try await started()
+        let ended = try await reading(model, record)
 
         let tab = try #require(model.activeTab)
         #expect(tab.id == record.id)
         #expect(pty.specs.last?.arguments.last == "exec claude --resume \(record.id.uuidString.lowercased())")
+        #expect(sessions.session(record.id) == ended)
+        #expect(sessions.recorded(in: repository).count == 1)
+        // Listed by the window, but not as one in progress.
+        #expect(model.sessions.sessions.map(\.id) == [record.id])
+        #expect(model.sessions.sessionsByRecency.isEmpty)
+        #expect(model.sessions.sessions(in: WorkspaceID(root)).isEmpty)
+    }
+
+    @Test func theAgentWorkingOrAskingInAReadingTabDoesNotReopenIt() async throws {
+        let (model, record) = try await started()
+        let ended = try await reading(model, record)
+
+        let screen = try #require(model.activeTab?.screen)
+        screen.send(text: "scrolling\u{1B}[A")
+        await model.show(model.workspace)
+        await sessions.flushSaves()
+
+        #expect(sessions.session(record.id) == ended)
+    }
+
+    @Test func returnInAReadingTabReopensItAndKeepsItsStart() async throws {
+        let (model, record) = try await started()
+        _ = try await reading(model, record)
+
+        model.activeTab?.screen?.send(text: "go on\r")
+
+        try await eventually("it reopens") { sessions.session(record.id)?.endedAt == nil }
         let again = try #require(sessions.session(record.id))
-        #expect(again.endedAt == nil)
+        #expect(again.endReason == nil)
         #expect(again.startedAt == record.startedAt)
+        #expect(model.sessions.sessionsByRecency.map(\.id) == [record.id])
+        #expect(sessions.recorded(in: repository).count == 1)
+    }
+
+    @Test func closingAReadingTabKeepsTheOriginalEnd() async throws {
+        let (model, record) = try await started()
+        let ended = try await reading(model, record)
+
+        model.closeActiveTab()
+
+        #expect(sessions.session(record.id) == ended)
+        #expect(model.tabs.isEmpty)
+    }
+
+    @Test func theAgentQuittingInAReadingTabKeepsTheOriginalEnd() async throws {
+        let (model, record) = try await started()
+        let ended = try await reading(model, record)
+
+        pty.sessions.last?.exit(with: 0)
+
+        try await eventually("the tab goes") { model.tabs.isEmpty }
+        #expect(sessions.session(record.id) == ended)
+    }
+
+    @Test func readingASessionWhoseTabIsOpenBringsItForward() async throws {
+        let (model, record) = try await started()
+        let ended = try await reading(model, record)
+        let other = try #require(Agent.presets.first { $0.id == "claude-code" })
+        await model.startSession(other)
+        #expect(model.activeTab?.id != record.id)
+        let specs = pty.specs.count
+
+        await model.resume(ended)
+
+        #expect(model.activeTab?.id == record.id)
+        #expect(model.tabs.filter { $0.id == record.id }.count == 1)
+        #expect(pty.specs.count == specs)
+        #expect(sessions.session(record.id) == ended)
+    }
+
+    @Test func aSessionBeingReadCannotBeDeletedButCanBeRenamed() async throws {
+        let (model, record) = try await started()
+        _ = try await reading(model, record)
+
+        sessions.delete(record.id)
+        sessions.rename(record.id, to: "Scroll fix")
+        model.rename(record.id, to: "Scroll fix")
+
+        #expect(sessions.session(record.id) != nil)
+        #expect(sessions.session(record.id)?.name == "Scroll fix")
+        #expect(sessions.session(record.id)?.endedAt != nil)
+        #expect(model.title(of: try #require(model.activeTab)) == "Scroll fix")
+
+        model.closeActiveTab()
+        sessions.delete(record.id)
+        #expect(sessions.session(record.id) == nil)
+    }
+
+    @Test func aSessionPickedUpAgainIsTheSameRecordInANewTab() async throws {
+        let (model, record) = try await started()
+        _ = try await reading(model, record)
+        model.activeTab?.screen?.send(text: "go on\r")
+
+        try await eventually("it reopens") { sessions.session(record.id)?.endedAt == nil }
+        #expect(sessions.session(record.id)?.startedAt == record.startedAt)
         #expect(sessions.recorded(in: repository).count == 1)
     }
 

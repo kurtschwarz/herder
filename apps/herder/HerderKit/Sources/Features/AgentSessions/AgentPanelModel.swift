@@ -238,20 +238,24 @@ public final class AgentPanelModel {
     }
 
     /// Brings a session from the history back in a new tab of its own, in the
-    /// workspace showing, which must be the worktree it ran in. It is the
-    /// same session again: open now, and still begun when it was.
+    /// workspace showing, which must be the worktree it ran in, or in front
+    /// if it has one already. It is the same session again, but only to be
+    /// read: the record stays ended until the person says something in the
+    /// tab (see ``watch(_:in:)``).
     ///
     /// Refused for one that cannot be picked up: its agent is gone, or gave
     /// no id to resume it by. The sidebar says so; the last session in the
     /// worktree is not a stand-in, because it may be another.
     public func resume(_ session: AgentSession) async {
-        guard let workspace, workspace.id == session.worktree,
-              let agent = catalog.agent(session.agentID), agent.isRunnable,
-              let sessionID = session.sessionID,
-              !(tabsByWorkspace[workspace.id] ?? []).contains(where: { $0.id == session.id })
+        guard let workspace, workspace.id == session.worktree else { return }
+        if tabsByWorkspace[workspace.id]?.contains(where: { $0.id == session.id }) == true {
+            reveal(session.id, in: workspace.id)
+            return
+        }
+        guard let agent = catalog.agent(session.agentID), agent.isRunnable,
+              let sessionID = session.sessionID
         else { return }
         catalog.markUsed(agent)
-        sessions.store.reopen(session.id)
         let tab = AgentTab(
             id: session.id, agent: agent, number: nextNumber(of: agent, in: workspace.id), name: session.name,
             restored: true,
@@ -482,13 +486,17 @@ public final class AgentPanelModel {
     }
 
     /// The person said something to the terminal UI, which is when its
-    /// session goes into the history. Or it stopped by itself: quitting it
+    /// session goes into the history, or comes back out of it if it was
+    /// ended and opened to be read. Or it stopped by itself: quitting it
     /// ends the tab, as quitting a shell does; anything else stays up with
     /// what it said, and a way to start it again.
     private func watch(_ tab: AgentTab, in id: WorkspaceID) {
         tab.onConverse = { [weak self] tab in
             guard let self, let workspace = workspaceObjects[id]?.workspace else { return }
             recordStart(of: tab, in: workspace)
+            // A session opened only to be read is closed until now.
+            sessions.store.reopen(tab.id)
+            publish()
         }
         tab.onExit = { [weak self] tab, code in
             guard let self else { return }
