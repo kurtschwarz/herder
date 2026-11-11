@@ -62,7 +62,9 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
     public struct Live: Sendable, Equatable {
         public var state: State
 
-        /// When it last wrote anything, or was opened.
+        /// When it was opened, last worked, or last changed what it says it
+        /// is doing. For a program that says nothing, when it last wrote
+        /// anything.
         public var lastActivity: Date
 
         public init(state: State, lastActivity: Date) {

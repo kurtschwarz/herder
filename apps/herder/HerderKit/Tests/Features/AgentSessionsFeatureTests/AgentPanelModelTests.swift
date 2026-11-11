@@ -341,6 +341,37 @@ import Testing
         try await eventually("it rests") { open.sessions(in: workspace.id).first?.state == .idle }
     }
 
+    @Test func aRedrawIsNotActivityForAProgramThatReportsItsStatus() async throws {
+        let (model, workspace, _) = try await shown(sessions: 1)
+        func lastActivity() -> Date? { open.sessions(in: workspace.id).first?.live?.lastActivity }
+
+        pty.sessions[0].emit("\u{1b}]7501;state=idle\u{07}")
+        try await eventually("it rests") { model.activeTab?.screen?.programStatuses.isEmpty == false }
+        try await Task.sleep(for: .milliseconds(50))
+        let rested = try #require(lastActivity())
+
+        // What it draws when another session on the worktree edits a file.
+        pty.sessions[0].emit("redrawn")
+        try await eventually("it is written") { model.activeTab?.screen?.outputCount ?? 0 > 1 }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(lastActivity() == rested)
+
+        pty.sessions[0].emit("\u{1b}]7501;state=working\u{07}")
+        try await eventually("it works") { (lastActivity() ?? .distantPast) > rested }
+    }
+
+    @Test func anyOutputIsActivityForAProgramThatSaysNothing() async throws {
+        let (model, workspace, _) = try await shown(sessions: 1)
+        func lastActivity() -> Date? { open.sessions(in: workspace.id).first?.live?.lastActivity }
+        try await eventually("it is listed") { lastActivity() != nil }
+        let opened = try #require(lastActivity())
+
+        pty.sessions[0].emit("thinking")
+
+        try await eventually("it is active") { (lastActivity() ?? .distantPast) > opened }
+        withExtendedLifetime(model) {}
+    }
+
     @Test func aCrashIsListedWithItsStatus() async throws {
         // Held to the end: the model is what samples the screen and hears the
         // exit, and nothing else keeps it alive.
