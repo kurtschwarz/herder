@@ -625,7 +625,8 @@ public final class AgentPanelModel {
                         fallbackTitle: title(of: tab),
                         sessionID: tab.sessionID,
                         state: tab.state,
-                        lastActivity: tab.lastActivity
+                        lastActivity: tab.lastActivity,
+                        startedAt: tab.startedAt
                     )
                 }
             }

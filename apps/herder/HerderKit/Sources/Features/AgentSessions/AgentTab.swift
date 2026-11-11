@@ -82,7 +82,8 @@ final class AgentTab: Identifiable {
 
     /// When it was opened, last worked, or last changed what it says it is
     /// doing. For a program that says nothing, when it last wrote anything.
-    private(set) var lastActivity = Date()
+    /// `nil` for a restored tab until it is first attached.
+    private(set) var lastActivity: Date?
 
     /// Whether the last sample saw output of any kind, typed or not.
     @ObservationIgnored private var wroteLastSample = false
@@ -122,6 +123,7 @@ final class AgentTab: Identifiable {
         self.isPinned = pinned
         self.sessionID = sessionID
         self.startedAt = startedAt
+        self.lastActivity = restored ? nil : Date()
         self.hasStarted = restored
         self.phase = restored ? .waiting : .starting
     }

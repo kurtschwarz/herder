@@ -19,9 +19,24 @@ struct OpenSessionsSection: View {
     @Environment(\.renameAgentSession) private var renameAgentSession
     @Environment(\.closeAgentSession) private var closeAgentSession
 
+    /// The order the list was in when the pointer came onto it, while it is
+    /// there. A session that starts meanwhile goes to the top.
+    @State private var heldOrder: [UUID]?
+
+    private func held(_ sessions: [AgentSession]) -> [AgentSession] {
+        guard let heldOrder else { return sessions }
+        let rank = Dictionary(heldOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return sessions.enumerated()
+            .sorted { lhs, rhs in
+                let (a, b) = (rank[lhs.element.id] ?? -1, rank[rhs.element.id] ?? -1)
+                return a != b ? a < b : lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
     var body: some View {
         let labels = model.worktreeLabels(of: repositories)
-        let sessions = open?.sessions.filter { labels[$0.worktree] != nil } ?? []
+        let sessions = held(open?.sessionsByRecency.filter { labels[$0.worktree] != nil } ?? [])
         let focused = open?.focused
         VStack(alignment: .leading, spacing: 0) {
             header(count: sessions.count)
@@ -33,16 +48,22 @@ struct OpenSessionsSection: View {
                 notice("Couldn\u{2019}t read \(repository.name)\u{2019}s worktrees", help: repository.path)
             }
 
-            ForEach(sessions) { session in
-                AgentSessionRow(
-                    session: session,
-                    branch: labels[session.worktree] ?? session.worktree.root.name,
-                    isSelected: active?.id == session.worktree && focused == session.id,
-                    show: { showAgentSession(session) },
-                    rename: { renameAgentSession(session, to: $0) },
-                    close: { closeAgentSession(session) }
-                )
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(sessions) { session in
+                    AgentSessionRow(
+                        session: session,
+                        branch: labels[session.worktree] ?? session.worktree.root.name,
+                        isSelected: active?.id == session.worktree && focused == session.id,
+                        show: { showAgentSession(session) },
+                        rename: { renameAgentSession(session, to: $0) },
+                        close: { closeAgentSession(session) }
+                    )
+                }
             }
+            .animation(.default, value: sessions.map(\.id))
+            // Rows hold still under the pointer, so one never moves away
+            // from a click, and catch up when it leaves.
+            .onHover { heldOrder = $0 ? sessions.map(\.id) : nil }
 
             if sessions.isEmpty {
                 startSessionButton
