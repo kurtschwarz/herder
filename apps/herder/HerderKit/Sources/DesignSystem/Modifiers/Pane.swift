@@ -47,11 +47,18 @@ extension View {
 
     /// Draws this view as a floating pane made of Liquid Glass, the same material
     /// as the window backdrop, instead of the solid pane fill.
+    ///
+    /// The glass goes behind the content rather than around it. Content inside a
+    /// `glassEffect` is hosted under a zero-sized view, which clips it out of the
+    /// window's drag region: an AppKit view in it that refuses to move the window,
+    /// as a terminal does, is dragged by its background anyway.
     public func glassPaneBackground() -> some View {
-        glassEffect(
-            .regular.tint(Theme.Palette.windowTint),
-            in: RoundedRectangle(cornerRadius: Theme.Radius.pane, style: .continuous)
-        )
+        background {
+            Color.clear.glassEffect(
+                .regular.tint(Theme.Palette.windowTint),
+                in: RoundedRectangle(cornerRadius: Theme.Radius.pane, style: .continuous)
+            )
+        }
     }
 }
 
