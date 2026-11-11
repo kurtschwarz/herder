@@ -19,9 +19,17 @@
       semanticCommitType: 'ci',
       semanticCommitScope: 'deps',
     },
+    // release-please only releases for feat, fix and breaking commits, so
+    // these must be `fix` for the shipped app to pick up the new toolchain or
+    // lockfile, as it does for a crate bump.
     {
       matchManagers: ['rust-toolchain'],
-      semanticCommitType: 'build',
+      semanticCommitType: 'fix',
+      semanticCommitScope: 'deps',
+    },
+    {
+      matchUpdateTypes: ['lockFileMaintenance'],
+      semanticCommitType: 'fix',
       semanticCommitScope: 'deps',
     },
     // tree-sitter-highlight depends on tree-sitter at the same version, and
