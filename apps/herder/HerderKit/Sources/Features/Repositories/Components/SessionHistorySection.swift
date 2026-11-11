@@ -10,6 +10,9 @@ struct SessionHistorySection: View {
     let sources: [RepositoriesModel.HistorySource]
 
     @Environment(AgentSessions.self) private var history: AgentSessions?
+    @Environment(WindowAgentSessions.self) private var open: WindowAgentSessions?
+    @Environment(Workspace.self) private var active: Workspace?
+    @Environment(\.renameAgentSession) private var renameAgentSession
 
     private var keys: [PathKey] { sources.map(\.key) }
 
@@ -86,7 +89,13 @@ struct SessionHistorySection: View {
                     record: record,
                     repository: repositories[record.id],
                     worktreeExists: worktrees.contains(record.worktree),
-                    rename: { history?.rename(record.id, to: $0) },
+                    isSelected: active?.id == record.worktree && open?.focused == record.id,
+                    canDelete: history?.isOpen(record.id) != true,
+                    rename: {
+                        history?.rename(record.id, to: $0)
+                        // Its tab, if it is open to be read, shows the new name.
+                        renameAgentSession(record, to: $0)
+                    },
                     delete: { history?.delete(record.id) }
                 )
             }
@@ -113,6 +122,12 @@ private struct HistoryRow: View {
     let repository: String?
 
     let worktreeExists: Bool
+
+    /// Its tab is the one in front.
+    let isSelected: Bool
+
+    /// Whether no window has a tab open for it.
+    let canDelete: Bool
     let rename: (String) -> Void
     let delete: () -> Void
 
@@ -173,7 +188,11 @@ private struct HistoryRow: View {
         .padding(.vertical, Theme.Spacing.normal - 2)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .fill(isHovering && reason == nil && !isRenaming ? Theme.Palette.control : .clear)
+                .fill(isSelected || (isHovering && reason == nil && !isRenaming) ? Theme.Palette.control : .clear)
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                        .strokeBorder(Theme.Palette.violet.opacity(isSelected ? 0.7 : 0), lineWidth: 1)
+                }
         }
         .opacity(reason == nil || isRenaming ? 1 : 0.5)
         .contentShape(Rectangle())
@@ -187,6 +206,7 @@ private struct HistoryRow: View {
             Divider()
 
             Button("Delete", role: .destructive, action: delete)
+                .disabled(!canDelete)
         }
     }
 

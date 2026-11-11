@@ -183,7 +183,10 @@ public final class AgentSessions {
             if let title = report.title { session.title = title }
             session.name = report.name
             if let sessionID = report.sessionID { session.sessionID = sessionID }
-            if report.state.isRunning, now.timeIntervalSince(session.lastSeenAt) >= Self.seenGranularity {
+            // An ended session being read is not running as far as the history
+            // is concerned: it stays as it was until it is reopened.
+            if report.state.isRunning, !session.isEnded,
+               now.timeIntervalSince(session.lastSeenAt) >= Self.seenGranularity {
                 session.lastSeenAt = now
             }
             guard session != before else { continue }
@@ -246,11 +249,18 @@ public final class AgentSessions {
         }
     }
 
+    /// Whether any window has a tab open for the session, running or being
+    /// read.
+    public func isOpen(_ id: UUID) -> Bool {
+        openByWindow.values.contains { $0.contains(id) }
+    }
+
     /// Takes an ended session out of the history, and its file. What was said
     /// in it stays with its agent. One still open is left alone: its tab
-    /// would only write it down again.
+    /// would only write it down again. So is an ended one that a window has a
+    /// tab open for, to read.
     public func delete(_ id: UUID) {
-        guard let key = repositoryOfSession[id], sessions[id]?.isEnded == true else { return }
+        guard let key = repositoryOfSession[id], sessions[id]?.isEnded == true, !isOpen(id) else { return }
         sessions[id] = nil
         repositoryOfSession[id] = nil
         scheduleSave(key)

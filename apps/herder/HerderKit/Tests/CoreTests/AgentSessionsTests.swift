@@ -363,6 +363,34 @@ import TestSupport
         #expect(sessions.session(open.id) != nil)
     }
 
+    @Test func anEndedSessionWithATabOpenInAnyWindowIsNotDeleted() async {
+        let sessions = makeSessions()
+        let reading = session()
+        await sessions.begin(reading, in: repository)
+        sessions.end(reading.id, because: .closed)
+        sessions.note([report(reading.id, state: .paused)], window: otherWindow)
+
+        sessions.delete(reading.id)
+        #expect(sessions.isOpen(reading.id))
+        #expect(sessions.session(reading.id) != nil)
+
+        sessions.note([], window: otherWindow)
+        sessions.delete(reading.id)
+        #expect(sessions.session(reading.id) == nil)
+    }
+
+    @Test func anEndedSessionBeingReadKeepsItsLastSeenWhileItsAgentRuns() async {
+        let sessions = makeSessions()
+        let reading = session()
+        await sessions.begin(reading, in: repository)
+        sessions.end(reading.id, because: .closed, at: launch.addingTimeInterval(20))
+        let ended = sessions.session(reading.id)
+
+        sessions.note([report(reading.id, state: .working)], window: window, at: launch.addingTimeInterval(500))
+
+        #expect(sessions.session(reading.id) == ended)
+    }
+
     @Test func aSessionWrittenDownWhileTheFileIsReadingIsNotLost() async {
         let first = makeSessions()
         let old = session()
