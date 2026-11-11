@@ -62,6 +62,7 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
 
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
+    override var mouseDownCanMoveWindow: Bool { false }
     override var acceptsFirstResponder: Bool { true }
 
     // MARK: Layout
