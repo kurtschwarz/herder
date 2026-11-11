@@ -333,7 +333,7 @@ public final class AgentPanelModel {
             sessionID: mintsSessionID(of: tab.agent) ? tab.sessionName : tab.sessionID,
             worktree: workspace.id,
             branch: branch,
-            title: historyTitle(of: tab),
+            title: subject(of: tab),
             name: tab.customName,
             startedAt: started
         )
@@ -348,10 +348,6 @@ public final class AgentPanelModel {
     private func mintsSessionID(of agent: Agent) -> Bool {
         !agent.looksUpSessions
             && [agent.command, agent.resumeCommand].contains { $0?.contains(Agent.sessionToken) == true }
-    }
-
-    private func historyTitle(of tab: AgentTab) -> String {
-        subject(of: tab)
     }
 
     func select(_ tab: AgentTab) {
