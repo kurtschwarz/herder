@@ -69,6 +69,8 @@ struct AgentHeader: View {
                 .foregroundStyle(Theme.Palette.text)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { isRenaming = true }
         }
     }
 
