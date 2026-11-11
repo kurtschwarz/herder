@@ -71,6 +71,32 @@ test("a message is one line, without control characters, and cut to fit", () => 
   assert.ok(long.endsWith("…"))
 })
 
+test("the shown session's title is sent, on one line", () => {
+  const sent = fields(report(status({ ...quiet, title: "Fix the\nbuild" })))
+  assert.deepEqual(Object.keys(sent), ["state", "app", "title"])
+  assert.equal(decoded(sent.title!), "Fix the build")
+})
+
+test("a title is cut to 192 bytes and ends in an ellipsis", () => {
+  const long = decoded(fields(report(status({ ...quiet, title: "é".repeat(300) }))).title!)
+  assert.ok(Buffer.byteLength(long, "utf8") <= 192)
+  assert.ok(long.endsWith("…"))
+  assert.equal(Array.from(long).length, 95)
+  const fits = "a".repeat(192)
+  assert.equal(decoded(fields(report(status({ ...quiet, title: fits }))).title!), fits)
+})
+
+test("a title opencode has not set is left out", () => {
+  for (const title of [undefined, "", "  ", "New session - 2026-11-11T10:20:30.123Z", "Child session - 2026-11-11T10:20:30.123Z"]) {
+    assert.equal(fields(report(status({ ...quiet, title }))).title, undefined, String(title))
+  }
+  assert.ok(fields(report(status({ ...quiet, title: "New session about caching" }))).title)
+})
+
+test("the home screen has no title", () => {
+  assert.equal(fields(report({ state: "idle" })).title, undefined)
+})
+
 test("every value is in the protocol's character set", () => {
   const sent = fields(report({ state: "blocked", kind: "question", message: "Ünïcödé? ✓ 🙂" }))
   for (const value of Object.values(sent)) assert.match(value, /^[A-Za-z0-9_.,+/=-]*$/)

@@ -211,9 +211,14 @@ final class AgentTab: Identifiable {
         }
     }
 
-    /// What the program called itself, without the spinner or mark many put
-    /// in front of it. `nil` until it says something with a word in it.
+    /// What the program called itself. The title of its root status record
+    /// (OSC 7501) is a label and used as it is; failing that, the terminal
+    /// title, without the spinner or mark many put in front of it. `nil`
+    /// until it says something with a word in it.
     var programTitle: String? {
+        let label = screen?.programStatuses.first { $0.id.isEmpty }?.title
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let label, !label.isEmpty { return label }
         guard let title = screen?.title else { return nil }
         let trimmed = title.drop { !$0.isLetter && !$0.isNumber }
             .trimmingCharacters(in: .whitespaces)

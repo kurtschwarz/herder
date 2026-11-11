@@ -320,6 +320,32 @@ import Testing
         withExtendedLifetime(model) {}
     }
 
+    @Test func theRootStatusTitleNamesItBeforeTheTerminalTitle() async throws {
+        let (model, workspace, _) = try await shown(sessions: 1)
+
+        pty.sessions[0].emit("\u{1b}]0;OC | Old\u{07}")
+        try await eventually("the terminal title arrives") { open.sessions(in: workspace.id).first?.title == "OC | Old" }
+
+        // "✳ Fix the build", as base64: a label, so its mark stays.
+        let label = Data("\u{2733} Fix the build".utf8).base64EncodedString()
+        pty.sessions[0].emit("\u{1b}]7501;state=idle:title=\(label)\u{07}")
+
+        try await eventually("the label arrives") { open.sessions(in: workspace.id).first?.title == "\u{2733} Fix the build" }
+        withExtendedLifetime(model) {}
+    }
+
+    @Test func aTitleOnlyAChildRecordHasDoesNotNameIt() async throws {
+        let (model, workspace, _) = try await shown(sessions: 1)
+
+        let label = Data("Build".utf8).base64EncodedString()
+        pty.sessions[0].emit("\u{1b}]0;Fix the build\u{07}")
+        pty.sessions[0].emit("\u{1b}]7501;id=build:state=working:title=\(label)\u{07}")
+
+        try await eventually("the report arrives") { model.activeTab?.screen?.programStatuses.isEmpty == false }
+        try await eventually("the title arrives") { open.sessions(in: workspace.id).first?.title == "Fix the build" }
+        withExtendedLifetime(model) {}
+    }
+
     @Test func onlyAReportedStatusIsBelieved() async throws {
         let (model, workspace, _) = try await shown(sessions: 1)
 
