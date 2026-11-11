@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/kurtschwarz/herder/compare/herder-v0.2.3...herder-v0.2.4) (2026-11-11)
+
+
+### Bug Fixes
+
+* **herder:** close a session from the sidebar ([#24](https://github.com/kurtschwarz/herder/issues/24)) ([27eebda](https://github.com/kurtschwarz/herder/commit/27eebda23545515c564cefab8004d102f0db03a1))
+
 ## [0.2.3](https://github.com/kurtschwarz/herder/compare/herder-v0.2.2...herder-v0.2.3) (2026-11-11)
 
 
