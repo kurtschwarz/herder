@@ -335,9 +335,24 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
+    private var clipboardPaste: ClipboardPaste? {
+        let pasteboard = NSPasteboard.general
+        let urls = pasteboard.readObjects(
+            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL] ?? []
+        return ClipboardPaste.choose(
+            fileURLs: urls,
+            text: pasteboard.string(forType: .string),
+            hasImage: pasteboard.canReadObject(forClasses: [NSImage.self])
+        )
+    }
+
     @objc func paste(_ sender: Any?) {
-        guard let text = NSPasteboard.general.string(forType: .string) else { return }
-        screen.paste(text)
+        switch clipboardPaste {
+        case .paths(let text), .text(let text): screen.paste(text)
+        case .image: screen.pasteImage()
+        case nil: break
+        }
     }
 
     @objc override func selectAll(_ sender: Any?) {
@@ -348,7 +363,7 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
         switch item.action {
         case #selector(copy(_:)): screen.selectedText?.isEmpty == false
-        case #selector(paste(_:)): NSPasteboard.general.string(forType: .string) != nil
+        case #selector(paste(_:)): clipboardPaste != nil
         default: true
         }
     }
@@ -457,9 +472,7 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] ?? []
         guard !urls.isEmpty else { return false }
-        // Quoted the way a shell wants it, with a space after, as a drop on any terminal does.
-        let words = urls.map { "'" + $0.path(percentEncoded: false).replacing("'", with: "'\\''") + "'" }
-        screen.paste(words.joined(separator: " ") + " ")
+        screen.paste(ClipboardPaste.quoted(urls))
         return true
     }
 }

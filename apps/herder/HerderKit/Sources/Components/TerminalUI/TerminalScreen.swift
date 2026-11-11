@@ -189,6 +189,13 @@ public final class TerminalScreen {
         send(emulator.encodePaste(text))
     }
 
+    /// Presses Ctrl+V, which is how an agent is told to read an image off the
+    /// clipboard itself. Goes through the key encoder, since a program in the
+    /// kitty keyboard mode does not take the bare `0x16`.
+    func pasteImage() {
+        send(emulator.encode(key: 9, action: .press, modifiers: [.control], text: nil, unshifted: 0x76))
+    }
+
     /// The text on the screen now, a line to a row, without trailing blanks.
     public var visibleText: String {
         emulator.cells
