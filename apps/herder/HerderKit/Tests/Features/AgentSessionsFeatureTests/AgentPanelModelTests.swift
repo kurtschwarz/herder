@@ -167,6 +167,17 @@ import Testing
         #expect(model.tabs.isEmpty)
     }
 
+    @Test func aSessionIsClosedFromOutsideThePanel() async throws {
+        let (model, _, _) = try await shown(sessions: 2)
+        let first = model.tabs[0]
+
+        model.close(first.id)
+
+        #expect(pty.sessions[0].wasTerminated)
+        #expect(model.tabs.map(\.id) == [model.activeTab?.id])
+        #expect(!model.tabs.contains { $0.id == first.id })
+    }
+
     @Test func closingTheTabShowingBringsItsNeighbourForward() async throws {
         let (model, _, _) = try await shown(sessions: 3)
         model.select(model.tabs[1])
