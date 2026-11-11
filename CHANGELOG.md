@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.5](https://github.com/kurtschwarz/herder/compare/herder-v0.2.4...herder-v0.2.5) (2026-11-11)
+
+
+### Bug Fixes
+
+* **herder:** draw session history as a timeline ([#37](https://github.com/kurtschwarz/herder/issues/37)) ([67e5e82](https://github.com/kurtschwarz/herder/commit/67e5e829632243d4a73310e75847ff0aef27a2ed)), closes [#34](https://github.com/kurtschwarz/herder/issues/34)
+* **herder:** sort the sidebar's open sessions by recent activity ([#35](https://github.com/kurtschwarz/herder/issues/35)) ([bdec9ac](https://github.com/kurtschwarz/herder/commit/bdec9ac6885457319c9e3717c83b258f7f51b0ad))
+
 ## [0.2.4](https://github.com/kurtschwarz/herder/compare/herder-v0.2.3...herder-v0.2.4) (2026-11-11)
 
 
