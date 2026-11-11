@@ -144,8 +144,10 @@ public final class TerminalScreen {
 
     func refresh() {
         refreshPending = false
+        let shape = emulator.mouseShape
         let changed = emulator.update()
         view?.invalidate(rows: changed)
+        if emulator.mouseShape != shape { view?.refreshCursor() }
     }
 
     private func finish() {
