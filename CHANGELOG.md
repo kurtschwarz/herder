@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/kurtschwarz/herder/compare/herder-v0.2.1...herder-v0.2.2) (2026-11-10)
+
+
+### Bug Fixes
+
+* **herder:** zoom a moved window back into place ([#19](https://github.com/kurtschwarz/herder/issues/19)) ([8d85792](https://github.com/kurtschwarz/herder/commit/8d8579270a4c779fc2ac3dcede656442a50b4eb4))
+
 ## [0.2.1](https://github.com/kurtschwarz/herder/compare/herder-v0.2.0...herder-v0.2.1) (2026-11-10)
 
 
