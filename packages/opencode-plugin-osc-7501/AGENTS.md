@@ -26,6 +26,11 @@ One record, the root, for the session on screen and its subagents together:
 - `done`: the last run finished. An interrupted run is `idle`, as the spec asks.
 - `idle`: anything else, and the home screen.
 
+Every report for a shown session also carries its `title`, which Herder uses to
+name the tab instead of opencode's terminal title (`OC | …`). It is left out
+when opencode has not set a real one (its `New session - <timestamp>` fallback),
+and the home screen never has one. It is cut to the protocol's 192 bytes.
+
 Waiting on the person beats working, which beats how the last run ended. It
 writes only when the report changes, and clears everything when it stops.
 

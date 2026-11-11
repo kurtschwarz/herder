@@ -41,6 +41,7 @@ export default Plugin.define({
         permissions: family.flatMap((id) => context.data.session.permission.list(id) ?? []),
         forms: family.flatMap((id) => context.data.session.form.list(id) ?? []),
         finished: finished.get(root),
+        title: context.data.session.get(root)?.title,
       })))
     }
 
