@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.7](https://github.com/kurtschwarz/herder/compare/herder-v0.2.6...herder-v0.2.7) (2026-11-11)
+
+
+### Bug Fixes
+
+* **deps:** release on lockfile and toolchain bumps ([#44](https://github.com/kurtschwarz/herder/issues/44)) ([0e54334](https://github.com/kurtschwarz/herder/commit/0e54334a31cd7b3fec323000c21b4c2623777ae0))
+* **herder:** keep closed sessions closed until used ([#43](https://github.com/kurtschwarz/herder/issues/43)) ([b9dc6d5](https://github.com/kurtschwarz/herder/commit/b9dc6d5333dea1317a190e7ba36b26c972b0c4c9)), closes [#33](https://github.com/kurtschwarz/herder/issues/33)
+
 ## [0.2.6](https://github.com/kurtschwarz/herder/compare/herder-v0.2.5...herder-v0.2.6) (2026-11-11)
 
 
