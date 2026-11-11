@@ -7,7 +7,6 @@ import TestSupport
 /// What one window has open: listed from the app-wide records, with what each
 /// tab is doing over them, and never shared with another window.
 @Suite(.timeLimit(.minutes(1))) @MainActor struct WindowAgentSessionsTests {
-    let git = StubGitClient()
     let state = InMemoryStateStore()
     let clock = VirtualClockClient()
     let main = URL(filePath: "/code/api")
@@ -15,11 +14,7 @@ import TestSupport
     let store: AgentSessions
 
     init() {
-        git.seed(
-            worktrees: [GitWorktree(path: main, checkout: .branch("main"), isMainWorkingTree: true)],
-            at: main
-        )
-        store = AgentSessions(git: git, state: state, clock: clock, launchedAt: launch)
+        store = AgentSessions(state: state, clock: clock, launchedAt: launch)
     }
 
     var repository: PathKey { PathKey(main) }
@@ -65,7 +60,7 @@ import TestSupport
     @Test func whatATabIsDoingIsListedHereAndNotInTheStore() async {
         let open = WindowAgentSessions(store: store)
         let written = session()
-        await store.begin(written)
+        await store.begin(written, in: repository)
 
         open.publish([report(written.id, state: .working)], focused: nil)
 
@@ -91,7 +86,7 @@ import TestSupport
         let open = WindowAgentSessions(store: store)
         let written = session()
         open.publish([report(written.id)], focused: written.id)
-        await store.begin(written)
+        await store.begin(written, in: repository)
 
         open.publish([], focused: nil)
 
@@ -104,7 +99,7 @@ import TestSupport
     @Test func aPausedTabIsListedWithTheTitleWrittenDown() async {
         let open = WindowAgentSessions(store: store)
         let written = session(title: "Review tab dedupe")
-        await store.begin(written)
+        await store.begin(written, in: repository)
 
         open.publish([report(written.id, title: nil, state: .paused)], focused: nil)
 
@@ -114,9 +109,9 @@ import TestSupport
     /// A tab restored before its repository's file was read takes the title
     /// written down from the next report after the file is read.
     @Test func aTabRestoredBeforeItsFileIsReadTakesItsRecordsTitle() async {
-        let first = AgentSessions(git: git, state: state, clock: clock, launchedAt: launch)
+        let first = AgentSessions(state: state, clock: clock, launchedAt: launch)
         let old = session(title: "Review tab dedupe")
-        await first.begin(old)
+        await first.begin(old, in: repository)
         await first.flushSaves()
 
         let open = WindowAgentSessions(store: store)
@@ -136,10 +131,10 @@ import TestSupport
         var old = session()
         old.startedAt = launch.addingTimeInterval(-5000)
         old.lastSeenAt = launch.addingTimeInterval(-4000)
-        await store.begin(old)
+        await store.begin(old, in: repository)
         WindowAgentSessions(store: store).publish([report(old.id, state: .paused)], focused: nil)
 
-        await store.reconcile(WorkspaceID(main), claimed: [])
+        await store.reconcile(WorkspaceID(main), in: repository, claimed: [])
 
         #expect(store.session(old.id)?.endedAt == nil)
     }
@@ -148,7 +143,7 @@ import TestSupport
         let open = WindowAgentSessions(store: store)
         let written = session()
         open.publish([report(written.id, state: .working)], focused: written.id)
-        await store.begin(written)
+        await store.begin(written, in: repository)
         await store.flushSaves()
 
         let stored = try #require(

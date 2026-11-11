@@ -19,7 +19,7 @@ import Testing
     let root = URL(filePath: "/code/api")
 
     init() {
-        sessions = AgentSessions(git: git, state: state, clock: clock)
+        sessions = AgentSessions(state: state, clock: clock)
     }
 
     var repository: PathKey { PathKey(root) }

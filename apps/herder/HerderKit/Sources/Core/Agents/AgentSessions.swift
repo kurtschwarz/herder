@@ -79,7 +79,6 @@ public final class AgentSessions {
     /// a minute is close enough for that.
     static let seenGranularity: TimeInterval = 60
 
-    private let git: any GitClient
     private let state: any StateStore
     private let clock: any ClockClient
 
@@ -98,36 +97,14 @@ public final class AgentSessions {
     /// The sessions each window has a tab open for, so a crash's leftovers can
     /// be told from a tab another window has. Not observed: nothing draws it.
     @ObservationIgnored private var openByWindow: [UUID: Set<UUID>] = [:]
-    @ObservationIgnored private var repositoryOfWorkspace: [WorkspaceID: PathKey] = [:]
     @ObservationIgnored private var loaded: Set<PathKey> = []
     @ObservationIgnored private var loading: [PathKey: Task<Void, Never>] = [:]
     @ObservationIgnored private var saves: [PathKey: Task<Void, Never>] = [:]
 
-    public init(git: any GitClient, state: any StateStore, clock: any ClockClient, launchedAt: Date = .now) {
-        self.git = git
+    public init(state: any StateStore, clock: any ClockClient, launchedAt: Date = .now) {
         self.state = state
         self.clock = clock
         self.launchedAt = launchedAt
-    }
-
-    // MARK: - Which repository
-
-    /// The key a repository's history is kept under: its main working tree.
-    /// Without one — a bare repository — the first worktree by path, which is
-    /// the best a layout with nothing to name it allows.
-    public static func repositoryKey(for worktrees: [GitWorktree], fallback: PathKey) -> PathKey {
-        if let main = worktrees.first(where: \.isMainWorkingTree) { return PathKey(main.path) }
-        return worktrees.map { PathKey($0.path) }.min() ?? fallback
-    }
-
-    /// The repository `workspace` is a worktree of, from what git says about
-    /// it. A folder git knows nothing about is a repository of its own.
-    func repositoryKey(of workspace: WorkspaceID) async -> PathKey {
-        if let known = repositoryOfWorkspace[workspace] { return known }
-        let worktrees = (try? await git.worktrees(at: workspace.url)) ?? []
-        let key = Self.repositoryKey(for: worktrees, fallback: workspace.root)
-        repositoryOfWorkspace[workspace] = key
-        return key
     }
 
     // MARK: - Reading
@@ -212,11 +189,12 @@ public final class AgentSessions {
 
     // MARK: - Writing down
 
-    /// Writes down a session whose agent has just run, in `session.worktree`.
-    /// Does nothing for one already written down, here or in its file: a
-    /// resumed session is the one it was.
-    public func begin(_ session: AgentSession) async {
-        let key = await repositoryKey(of: session.worktree)
+    /// Writes down a session whose agent has just run, under `key`: the
+    /// folder of the repository its worktree belongs to, which is what every
+    /// window listing that repository reads it by. Does nothing for one
+    /// already written down, here or in its file: a resumed session is the
+    /// one it was.
+    public func begin(_ session: AgentSession, in key: PathKey) async {
         await load(key)
         guard repositoryOfSession[session.id] == nil else { return }
         repositoryOfSession[session.id] = key
@@ -274,8 +252,7 @@ public final class AgentSessions {
     /// stopped before it wrote down that they were closed. Each is dated by
     /// the last time it was seen. Sessions seen since this launch began, or
     /// with a tab open in any window, are left alone.
-    public func reconcile(_ workspace: WorkspaceID, claimed: Set<UUID>) async {
-        let key = await repositoryKey(of: workspace)
+    public func reconcile(_ workspace: WorkspaceID, in key: PathKey, claimed: Set<UUID>) async {
         await load(key)
         let open = openByWindow.values.reduce(into: claimed) { $0.formUnion($1) }
         var next = sessions

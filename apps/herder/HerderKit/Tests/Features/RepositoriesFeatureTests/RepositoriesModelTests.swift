@@ -453,6 +453,45 @@ import Testing
         #expect(source.worktrees.count == 2)
     }
 
+    /// A bare repository has no main working tree, so what git says cannot name
+    /// its history: the folder it was added as does, and does not move when a
+    /// worktree is added.
+    @Test func aBareRepositorysHistoryIsKeyedByItsFolder() async throws {
+        let repository = try await addRepository("/code/bare")
+        let worktrees = [
+            GitWorktree(path: URL(filePath: "/code/bare/b"), checkout: .branch("b"), isMainWorkingTree: false),
+            GitWorktree(path: URL(filePath: "/code/bare/main"), checkout: .branch("main"), isMainWorkingTree: false),
+        ]
+        git.seed(worktrees: worktrees, at: URL(filePath: "/code/bare"))
+        await model.refresh([repository])
+        let before = try #require(model.historySources(of: [repository]).first)
+
+        git.seed(
+            worktrees: worktrees + [GitWorktree(path: URL(filePath: "/code/bare/a"), checkout: .branch("a"), isMainWorkingTree: false)],
+            at: URL(filePath: "/code/bare")
+        )
+        await model.refresh([repository])
+        let after = try #require(model.historySources(of: [repository]).first)
+
+        #expect(before.key == PathKey(URL(filePath: "/code/bare")))
+        #expect(after.key == before.key)
+    }
+
+    /// Whichever worktree a session runs in, it is kept under its repository.
+    @Test func aWorktreeIsKeptUnderItsRepositorysFolder() async throws {
+        _ = try await addRepository("/code/api")
+        git.seed(worktrees: [
+            GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
+            GitWorktree(path: URL(filePath: "/code/api-feature"), checkout: .branch("feature"), isMainWorkingTree: false),
+        ], at: URL(filePath: "/code/api"))
+
+        // Not read yet, as when a window restores its tabs: git is asked.
+        let key = await model.historyKey(of: WorkspaceID(URL(filePath: "/code/api-feature")))
+
+        #expect(key == PathKey(URL(filePath: "/code/api")))
+        #expect(await model.historyKey(of: WorkspaceID(URL(filePath: "/code/elsewhere"))) == nil)
+    }
+
     /// Before its worktrees are read, a repository's history is still found
     /// under its own folder; nothing in it can be resumed yet.
     @Test func aRepositoryNotYetReadIsKeyedByItsFolder() async throws {

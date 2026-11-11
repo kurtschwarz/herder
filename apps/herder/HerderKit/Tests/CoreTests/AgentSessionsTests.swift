@@ -7,7 +7,6 @@ import TestSupport
 /// Every agent session: what each window has open, what is written down, how
 /// a session ends, and what is read back.
 @Suite(.timeLimit(.minutes(1))) @MainActor struct AgentSessionsTests {
-    let git = StubGitClient()
     let state = InMemoryStateStore()
     let clock = VirtualClockClient()
     let main = URL(filePath: "/code/api")
@@ -16,17 +15,8 @@ import TestSupport
     let window = UUID()
     let otherWindow = UUID()
 
-    init() {
-        let worktrees = [
-            GitWorktree(path: main, checkout: .branch("main"), isMainWorkingTree: true),
-            GitWorktree(path: linked, checkout: .branch("feature"), isMainWorkingTree: false),
-        ]
-        git.seed(worktrees: worktrees, at: linked)
-        git.seed(worktrees: worktrees, at: main)
-    }
-
     func makeSessions(launchedAt: Date? = nil) -> AgentSessions {
-        AgentSessions(git: git, state: state, clock: clock, launchedAt: launchedAt ?? launch)
+        AgentSessions(state: state, clock: clock, launchedAt: launchedAt ?? launch)
     }
 
     func session(
@@ -63,19 +53,36 @@ import TestSupport
     @Test func everyWorktreeOfARepositoryIsOneHistory() async {
         let sessions = makeSessions()
 
-        await sessions.begin(session(in: main))
-        await sessions.begin(session(in: linked))
+        await sessions.begin(session(in: main), in: repository)
+        await sessions.begin(session(in: linked), in: repository)
 
         #expect(sessions.recorded(in: repository).count == 2)
     }
 
-    @Test func aBareRepositoryIsKeyedByItsFirstWorktree() {
-        let worktrees = [
-            GitWorktree(path: URL(filePath: "/code/b"), checkout: .branch("b"), isMainWorkingTree: false),
-            GitWorktree(path: URL(filePath: "/code/a"), checkout: .branch("a"), isMainWorkingTree: false),
-        ]
-        let key = AgentSessions.repositoryKey(for: worktrees, fallback: PathKey(URL(filePath: "/code")))
-        #expect(key == PathKey(URL(filePath: "/code/a")))
+    /// Whichever window wrote a repository's history, another listing the same
+    /// folder reads it: the app has one store, keyed by the folder.
+    @Test func aSecondWindowListsTheSameRepositorysHistory() async {
+        let first = makeSessions()
+        let ended = session(in: linked)
+        await first.begin(ended, in: repository)
+        first.end(ended.id, because: .closed)
+        await first.flushSaves()
+
+        let second = makeSessions(launchedAt: launch.addingTimeInterval(1000))
+        await second.load(repository)
+
+        #expect(second.ended(in: repository).map(\.id) == [ended.id])
+    }
+
+    @Test func repositoriesKeepSeparateHistories() async {
+        let sessions = makeSessions()
+        let other = PathKey(URL(filePath: "/code/web"))
+
+        await sessions.begin(session(in: main), in: repository)
+        await sessions.begin(session(in: URL(filePath: "/code/web")), in: other)
+
+        #expect(sessions.recorded(in: repository).count == 1)
+        #expect(sessions.recorded(in: other).count == 1)
     }
 
     // MARK: Ending
@@ -83,7 +90,7 @@ import TestSupport
     @Test func aSessionIsOpenUntilItEnds() async {
         let sessions = makeSessions()
         let open = session()
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
 
         #expect(sessions.ended(in: repository).isEmpty)
 
@@ -99,7 +106,7 @@ import TestSupport
     @Test func aSessionThatEndedKeepsItsFirstEnd() async {
         let sessions = makeSessions()
         let open = session()
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
 
         sessions.end(open.id, because: .exited, at: launch.addingTimeInterval(100))
         sessions.end(open.id, because: .closed, at: launch.addingTimeInterval(200))
@@ -122,7 +129,7 @@ import TestSupport
     @Test func whatATabIsDoingIsNotKeptHere() async {
         let sessions = makeSessions()
         let open = session()
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
 
         sessions.note([report(open.id, state: .working)], window: window)
 
@@ -134,7 +141,7 @@ import TestSupport
     @Test func aReportThatChangesNothingWrittenDownChangesNothing() async {
         let sessions = makeSessions()
         let open = session()
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
         let before = sessions.sessions
 
         sessions.note([report(open.id, state: .working)], window: window, at: open.startedAt.addingTimeInterval(5))
@@ -146,8 +153,8 @@ import TestSupport
         let sessions = makeSessions()
         let early = session(title: "early")
         let late = session(title: "late")
-        await sessions.begin(early)
-        await sessions.begin(late)
+        await sessions.begin(early, in: repository)
+        await sessions.begin(late, in: repository)
 
         sessions.end(late.id, because: .closed, at: launch.addingTimeInterval(100))
         sessions.end(early.id, because: .closed, at: launch.addingTimeInterval(200))
@@ -158,7 +165,7 @@ import TestSupport
     @Test func resumingReopensTheSameSessionAndKeepsItsStart() async {
         let sessions = makeSessions()
         let open = session()
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
         sessions.end(open.id, because: .closed, at: launch.addingTimeInterval(100))
 
         sessions.reopen(open.id, at: launch.addingTimeInterval(300))
@@ -175,7 +182,7 @@ import TestSupport
     @Test func aTitleThatChangedIsKept() async {
         let sessions = makeSessions()
         let open = session(title: "Claude Code")
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
 
         sessions.note([report(open.id, title: "Review tab dedupe")], window: window)
 
@@ -187,7 +194,7 @@ import TestSupport
     @Test func aPausedTabKeepsTheTitleWrittenDown() async {
         let sessions = makeSessions()
         let open = session(title: "Review tab dedupe")
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
 
         sessions.note([report(open.id, title: nil, state: .paused)], window: window)
 
@@ -198,7 +205,7 @@ import TestSupport
         let sessions = makeSessions()
         var open = session()
         open.sessionID = nil
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
 
         sessions.note([report(open.id, sessionID: "ses_abc")], window: window)
         sessions.note([report(open.id, sessionID: nil)], window: window)
@@ -209,7 +216,7 @@ import TestSupport
     @Test func lastSeenMovesOnlyOncePerMinuteAndOnlyWhileRunning() async {
         let sessions = makeSessions()
         let open = session()
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
 
         sessions.note([report(open.id)], window: window, at: open.startedAt.addingTimeInterval(30))
         #expect(sessions.session(open.id)?.lastSeenAt == open.startedAt)
@@ -230,10 +237,10 @@ import TestSupport
         lost.lastSeenAt = launch.addingTimeInterval(-4000)
         var kept = session(started: launch.addingTimeInterval(-5000))
         kept.lastSeenAt = launch.addingTimeInterval(-4000)
-        await sessions.begin(lost)
-        await sessions.begin(kept)
+        await sessions.begin(lost, in: repository)
+        await sessions.begin(kept, in: repository)
 
-        await sessions.reconcile(WorkspaceID(main), claimed: [kept.id])
+        await sessions.reconcile(WorkspaceID(main), in: repository, claimed: [kept.id])
 
         #expect(sessions.session(lost.id)?.endedAt == lost.lastSeenAt)
         #expect(sessions.session(lost.id)?.endReason == .unknown)
@@ -243,9 +250,9 @@ import TestSupport
     @Test func aSessionSeenThisLaunchIsNotAnOrphan() async {
         let sessions = makeSessions()
         let fresh = session(started: launch.addingTimeInterval(10))
-        await sessions.begin(fresh)
+        await sessions.begin(fresh, in: repository)
 
-        await sessions.reconcile(WorkspaceID(main), claimed: [])
+        await sessions.reconcile(WorkspaceID(main), in: repository, claimed: [])
 
         #expect(sessions.session(fresh.id)?.endedAt == nil)
     }
@@ -255,10 +262,10 @@ import TestSupport
         let sessions = makeSessions()
         var old = session(started: launch.addingTimeInterval(-5000))
         old.lastSeenAt = launch.addingTimeInterval(-4000)
-        await sessions.begin(old)
+        await sessions.begin(old, in: repository)
         sessions.note([report(old.id, state: .paused)], window: otherWindow)
 
-        await sessions.reconcile(WorkspaceID(main), claimed: [])
+        await sessions.reconcile(WorkspaceID(main), in: repository, claimed: [])
 
         #expect(sessions.session(old.id)?.endedAt == nil)
     }
@@ -267,9 +274,9 @@ import TestSupport
         let sessions = makeSessions()
         var elsewhere = session(in: linked, started: launch.addingTimeInterval(-5000))
         elsewhere.lastSeenAt = launch.addingTimeInterval(-4000)
-        await sessions.begin(elsewhere)
+        await sessions.begin(elsewhere, in: repository)
 
-        await sessions.reconcile(WorkspaceID(main), claimed: [])
+        await sessions.reconcile(WorkspaceID(main), in: repository, claimed: [])
 
         #expect(sessions.session(elsewhere.id)?.endedAt == nil)
     }
@@ -279,7 +286,7 @@ import TestSupport
     @Test func whatIsWrittenDownIsThereAfterARelaunch() async {
         let sessions = makeSessions()
         let open = session()
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
         sessions.end(open.id, because: .exited, at: launch.addingTimeInterval(100))
         await sessions.flushSaves()
 
@@ -294,8 +301,8 @@ import TestSupport
         let sessions = makeSessions()
         let deleted = session()
         let kept = session()
-        await sessions.begin(deleted)
-        await sessions.begin(kept)
+        await sessions.begin(deleted, in: repository)
+        await sessions.begin(kept, in: repository)
         sessions.end(deleted.id, because: .closed, at: launch.addingTimeInterval(100))
         sessions.end(kept.id, because: .closed, at: launch.addingTimeInterval(100))
         await sessions.flushSaves()
@@ -312,7 +319,7 @@ import TestSupport
     @Test func aRenamedSessionKeepsItsNameAfterARelaunch() async {
         let sessions = makeSessions()
         let ended = session()
-        await sessions.begin(ended)
+        await sessions.begin(ended, in: repository)
         sessions.end(ended.id, because: .closed, at: launch.addingTimeInterval(100))
 
         sessions.rename(ended.id, to: "  Scroll fix  ")
@@ -327,7 +334,7 @@ import TestSupport
     @Test func aBlankNameChangesNothing() async {
         let sessions = makeSessions()
         let ended = session()
-        await sessions.begin(ended)
+        await sessions.begin(ended, in: repository)
         sessions.end(ended.id, because: .closed)
 
         sessions.rename(ended.id, to: " ")
@@ -339,7 +346,7 @@ import TestSupport
     @Test func anOpenSessionIsNotRenamedHere() async {
         let sessions = makeSessions()
         let open = session()
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
 
         sessions.rename(open.id, to: "Scroll fix")
 
@@ -349,7 +356,7 @@ import TestSupport
     @Test func anOpenSessionIsNotDeleted() async {
         let sessions = makeSessions()
         let open = session()
-        await sessions.begin(open)
+        await sessions.begin(open, in: repository)
 
         sessions.delete(open.id)
 
@@ -359,12 +366,12 @@ import TestSupport
     @Test func aSessionWrittenDownWhileTheFileIsReadingIsNotLost() async {
         let first = makeSessions()
         let old = session()
-        await first.begin(old)
+        await first.begin(old, in: repository)
         await first.flushSaves()
 
         let relaunched = makeSessions()
         let new = session()
-        async let begun: Void = relaunched.begin(new)
+        async let begun: Void = relaunched.begin(new, in: repository)
         async let loaded: Void = relaunched.load(repository)
         _ = await (begun, loaded)
 
@@ -372,8 +379,8 @@ import TestSupport
     }
 
     @Test func aRepositoryIsKeyedByItsPath() {
-        // The key is the path of the main working tree, which is all that
-        // survives removing a repository and adding it back.
+        // The key is the path of the folder the repository was added as,
+        // which is all that survives removing it and adding it back.
         #expect(SessionHistorySnapshot.persistenceKey(for: repository) == "history:/code/api")
     }
 
