@@ -48,6 +48,21 @@ struct SessionHistorySection: View {
                 AllHistoryRow(count: digest.total)
             }
         }
+        .backgroundPreferenceValue(HistoryDotCenters.self) { centers in
+            GeometryReader { proxy in
+                let points = centers.map { proxy[$0] }
+                if let first = points.min(by: { $0.y < $1.y }),
+                   let last = points.max(by: { $0.y < $1.y }),
+                   first.y < last.y
+                {
+                    Path { path in
+                        path.move(to: first)
+                        path.addLine(to: CGPoint(x: first.x, y: last.y))
+                    }
+                    .stroke(Theme.Palette.hairline, lineWidth: 1)
+                }
+            }
+        }
         .task(id: keys) {
             guard let history else { return }
             for key in keys { await history.load(key) }
@@ -76,6 +91,15 @@ struct SessionHistorySection: View {
                 )
             }
         }
+    }
+}
+
+/// Where each row's dot is, so the list can draw one line through them all.
+private struct HistoryDotCenters: PreferenceKey {
+    static let defaultValue: [Anchor<CGPoint>] = []
+
+    static func reduce(value: inout [Anchor<CGPoint>], nextValue: () -> [Anchor<CGPoint>]) {
+        value.append(contentsOf: nextValue())
     }
 }
 
@@ -113,8 +137,9 @@ private struct HistoryRow: View {
         let reason = unavailable
         HStack(alignment: .top, spacing: Theme.Spacing.normal + 2) {
             Circle()
-                .fill(Theme.Palette.accent)
+                .fill(Theme.Palette.tertiaryText)
                 .frame(width: 8, height: 8)
+                .anchorPreference(key: HistoryDotCenters.self, value: .center) { [$0] }
                 .padding(.top, 5)
 
             VStack(alignment: .leading, spacing: 1) {
