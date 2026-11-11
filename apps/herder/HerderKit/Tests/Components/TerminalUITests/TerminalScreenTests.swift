@@ -77,6 +77,20 @@ import Testing
         try await eventually("the paste") { session.input == "\u{1b}[200~ls\u{1b}[201~" }
     }
 
+    @Test func anImagePasteIsControlVInLegacyMode() async throws {
+        let (screen, session) = make()
+        screen.pasteImage()
+        try await eventually("the key") { session.input == "\u{16}" }
+    }
+
+    @Test func anImagePasteIsControlVAsTheKittyProtocolEncodesIt() async throws {
+        let (screen, session) = make()
+        session.emit("\u{1b}[>1u")
+        try await eventually("the mode") { !screen.emulator.encode(key: 9, action: .press, modifiers: [.control], text: nil, unshifted: 0x76).elementsEqual(Data([0x16])) }
+        screen.pasteImage()
+        try await eventually("the key") { session.input == "\u{1b}[118;5u" }
+    }
+
     @Test func theScreenKnowsWhenTheOutputEnded() async throws {
         let (screen, session) = make()
         #expect(!screen.hasEnded)
