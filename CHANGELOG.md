@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.3](https://github.com/kurtschwarz/herder/compare/herder-v0.2.2...herder-v0.2.3) (2026-11-11)
+
+
+### Bug Fixes
+
+* **herder:** ignore redraws in session activity ([#23](https://github.com/kurtschwarz/herder/issues/23)) ([ad511d3](https://github.com/kurtschwarz/herder/commit/ad511d3885d19431823c831ecb344bd6b08d5bb3))
+* **herder:** key session history by repository folder ([#21](https://github.com/kurtschwarz/herder/issues/21)) ([df82bd4](https://github.com/kurtschwarz/herder/commit/df82bd4feb733f8198afbce68c8cd53259c99614))
+
 ## [0.2.2](https://github.com/kurtschwarz/herder/compare/herder-v0.2.1...herder-v0.2.2) (2026-11-10)
 
 
