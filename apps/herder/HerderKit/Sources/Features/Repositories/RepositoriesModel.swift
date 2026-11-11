@@ -272,17 +272,38 @@ public final class RepositoriesModel {
     }
 
     /// Where the history of each of `repositories` is kept, and the worktrees
-    /// it has now. One whose worktrees have not been read is keyed by its own
-    /// folder, which is its main working tree unless it is bare, and has no
-    /// worktree its sessions could be resumed in.
+    /// it has now. Always under the folder the repository was added as, which
+    /// every window listing it agrees on; one whose worktrees have not been
+    /// read has no worktree its sessions could be resumed in.
     func historySources(of repositories: [Repository]) -> [HistorySource] {
         repositories.filter(\.isAvailable).map { repository in
             let worktrees = if case .loaded(let listed)? = listings[repository.id] { listed } else { [GitWorktree]() }
             return HistorySource(
                 name: repository.name,
-                key: AgentSessions.repositoryKey(for: worktrees, fallback: PathKey(repository.url)),
+                key: PathKey(repository.url),
                 worktrees: Set(worktrees.map { WorkspaceID($0.path) })
             )
         }
+    }
+
+    /// The history key of the repository this window lists that `workspace`
+    /// is a worktree of: the folder it was added as. Asks git when the
+    /// worktrees have not been read yet, as when a window restores its tabs;
+    /// failing that, a folder inside one. `nil` when none is.
+    public func historyKey(of workspace: WorkspaceID) async -> PathKey? {
+        for repository in repositories where repository.isAvailable {
+            let worktrees: [GitWorktree]
+            if case .loaded(let listed)? = listings[repository.id] {
+                worktrees = listed
+            } else {
+                worktrees = (try? await git.worktrees(at: repository.url)) ?? []
+            }
+            if worktrees.contains(where: { WorkspaceID($0.path) == workspace }) { return PathKey(repository.url) }
+        }
+        let path = workspace.url.path(percentEncoded: false)
+        return repositories.first { repository in
+            let root = repository.url.path(percentEncoded: false)
+            return path == root || path.hasPrefix(root.hasSuffix("/") ? root : root + "/")
+        }.map { PathKey($0.url) }
     }
 }

@@ -23,7 +23,7 @@ import Testing
 
     init() {
         catalog = AgentCatalog(state: InMemoryStateStore())
-        open = WindowAgentSessions(store: AgentSessions(git: git, state: state, clock: clock))
+        open = WindowAgentSessions(store: AgentSessions(state: state, clock: clock))
     }
 
     func makeRegistry() -> WorkspaceRegistry {

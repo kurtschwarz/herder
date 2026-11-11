@@ -187,7 +187,7 @@ public final class AppEnvironment {
         self.repositories = repositories
         self.windows = WindowStore(snapshots: snapshots, state: persistence.state)
         self.agents = AgentCatalog(state: persistence.state)
-        self.sessions = AgentSessions(git: git, state: persistence.state, clock: clock)
+        self.sessions = AgentSessions(state: persistence.state, clock: clock)
         self.worktrees = WorkspaceRegistry(
             files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
         )
@@ -211,17 +211,20 @@ public final class AppEnvironment {
     /// windows must not share an editor.
     func makeWindow(id: UUID = UUID(), restoring snapshot: WindowSnapshot? = nil) -> WindowEnvironment {
         let list = WindowRepositories(store: repositories, members: snapshot?.repositories ?? [])
+        let repositoryList = RepositoriesModel(repositories: list, git: git, picker: folderPicker)
+        let panel = AgentPanelModel(
+            pty: pty, commands: commands, clock: clock, catalog: agents,
+            sessions: WindowAgentSessions(store: sessions, window: id)
+        )
+        panel.historyKey = { [weak repositoryList] in await repositoryList?.historyKey(of: $0) }
         return WindowEnvironment(
             id: id,
             repositories: list,
-            repositoryList: RepositoriesModel(repositories: list, git: git, picker: folderPicker),
+            repositoryList: repositoryList,
             fileTree: FileTreeModel(store: worktrees),
             editor: EditorModel(store: worktrees, files: files, highlighter: highlighter),
             terminal: TerminalModel(pty: pty, clock: clock),
-            agentPanel: AgentPanelModel(
-                pty: pty, commands: commands, clock: clock, catalog: agents,
-                sessions: WindowAgentSessions(store: sessions, window: id)
-            ),
+            agentPanel: panel,
             worktrees: worktrees,
             windows: windows,
             restoring: snapshot

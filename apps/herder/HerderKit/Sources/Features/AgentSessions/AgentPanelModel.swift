@@ -37,6 +37,11 @@ public final class AgentPanelModel {
     /// written down as it starts and ends.
     public let sessions: WindowAgentSessions
 
+    /// The key a worktree's history is kept under: its repository's folder.
+    /// Set by whoever knows the window's repositories; a worktree none of
+    /// them owns is kept under its own folder.
+    @ObservationIgnored public var historyKey: (WorkspaceID) async -> PathKey? = { _ in nil }
+
     @ObservationIgnored private var sampling: Task<Void, Never>?
 
     /// Tabs whose session is being looked up, so one lookup runs at a time.
@@ -162,7 +167,9 @@ public final class AgentPanelModel {
         let state = workspace.uiState(AgentPanelUIState.self)
         // Even with no tabs: that is what ends a session whose tab was lost.
         let claimed = Set(state.tabs.map(\.id))
-        Task { [store = sessions.store] in await store.reconcile(id, claimed: claimed) }
+        Task { [store = sessions.store, historyKey] in
+            await store.reconcile(id, in: await historyKey(id) ?? id.root, claimed: claimed)
+        }
         guard !state.tabs.isEmpty else { return }
         let tabs = state.tabs.map {
             AgentTab(
@@ -315,7 +322,9 @@ public final class AgentPanelModel {
             name: tab.customName,
             startedAt: started
         )
-        Task { [store = sessions.store] in await store.begin(session) }
+        Task { [store = sessions.store, historyKey] in
+            await store.begin(session, in: await historyKey(session.worktree) ?? session.worktree.root)
+        }
     }
 
     /// Whether Herder gives the agent the session's id, so it is known from
