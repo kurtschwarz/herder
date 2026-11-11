@@ -6,21 +6,19 @@ import Foundation
 /// find out, which is what keeps this free of I/O: `and/or` is a candidate
 /// here and not a link until the disk agrees.
 public enum TerminalLinkDetector {
-    // CONCURRENCY: immutable once made, and `NSRegularExpression` and
-    // `NSDataDetector` are documented as safe to use from any thread.
-    private nonisolated(unsafe) static let urlPattern = try! NSRegularExpression(
+    private static let urlPattern = try! NSRegularExpression(
         pattern: #"[A-Za-z][A-Za-z0-9+.\-]*://[^\s<>"'`]+"#
     )
-    private nonisolated(unsafe) static let detector = try! NSDataDetector(
+    private static let detector = try! NSDataDetector(
         types: NSTextCheckingResult.CheckingType.link.rawValue
     )
-    private nonisolated(unsafe) static let tokenPattern = try! NSRegularExpression(
+    private static let tokenPattern = try! NSRegularExpression(
         pattern: #"[^\s"'`<>()\[\]{}|,;=*]+"#
     )
-    private nonisolated(unsafe) static let locationPattern = try! NSRegularExpression(
+    private static let locationPattern = try! NSRegularExpression(
         pattern: #"^(.+?)(?::(\d+)(?::(\d+))?)?$"#
     )
-    private nonisolated(unsafe) static let fileNamePattern = try! NSRegularExpression(
+    private static let fileNamePattern = try! NSRegularExpression(
         pattern: #"^[\w.@+\-]+\.[A-Za-z0-9]+$"#
     )
 
