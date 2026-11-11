@@ -3,8 +3,8 @@ import DesignSystem
 import SwiftUI
 import TerminalUI
 
-/// The agent panel: a header with the open sessions' tabs, and the terminal UI
-/// of the one showing. Fills the pane it is put in, and draws no surface of its
+/// The agent panel: a header describing the session in front, and its terminal
+/// UI. Fills the pane it is put in, and draws no surface of its
 /// own: the window gives it one.
 public struct AgentPanel: View {
     private let model: AgentPanelModel

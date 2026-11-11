@@ -166,9 +166,7 @@ private struct AgentSessionRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.normal + 2) {
-            Circle()
-                .fill(dotColor)
-                .frame(width: 8, height: 8)
+            AgentStateDot(state)
                 .padding(.top, 5)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -241,16 +239,6 @@ private struct AgentSessionRow: View {
 
     private var isUrgent: Bool {
         if case .needsInput = state { true } else { false }
-    }
-
-    private var dotColor: Color {
-        switch state {
-        case .working: Theme.Palette.success
-        case .needsInput: Theme.Palette.warning
-        case .exited(let code) where code != 0: Theme.Palette.danger
-        case .failed: Theme.Palette.danger
-        case .paused, .starting, .idle, .exited: Theme.Palette.tertiaryText
-        }
     }
 
     /// The second line: the agent, and what it seems to be up to.

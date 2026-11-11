@@ -50,6 +50,9 @@ struct PreviewGitClient: GitClient {
         let root = PathKey(worktree)
         return GitWorktreeStatus(root: root, entries: [root.appending("Package.swift"): .ignored])
     }
+    func changeSummary(in worktree: URL) async throws -> GitChangeSummary? {
+        GitChangeSummary(insertions: 107, deletions: 19)
+    }
     func worktrees(at url: URL) async throws -> [GitWorktree] {
         [
             GitWorktree(path: url, checkout: .branch("main"), isMainWorkingTree: true),

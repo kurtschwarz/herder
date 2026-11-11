@@ -18,6 +18,9 @@ public final class StubGitClient: GitClient {
     private let checkouts = Mutex<[String: GitWorktree.Checkout?]>([:])
     private let statuses = Mutex<[String: [String: GitStatus]]>([:])
     private let statusAsked = Mutex<[URL]>([])
+    private let summaries = Mutex<[String: GitChangeSummary?]>([:])
+    private let changesAsked = Mutex<[URL]>([])
+    private let changesFail = Mutex(false)
     private let statusFails = Mutex(false)
     private let statusHeld = Mutex(false)
     private let statusWaiter = Mutex<CheckedContinuation<Void, Never>?>(nil)
@@ -147,6 +150,28 @@ public final class StubGitClient: GitClient {
             root: root,
             entries: Dictionary(uniqueKeysWithValues: seeded.map { (root.appending($0.key), $0.value) })
         )
+    }
+
+    /// Declares the change summary for the working tree at `worktree`. Replaces
+    /// any earlier seed; unseeded, there is none.
+    public func seed(changes: GitChangeSummary?, in worktree: URL) {
+        summaries.withLock { $0[FolderKey.of(worktree)] = changes }
+    }
+
+    /// Makes `changeSummary(in:)` throw, as it would if git could not run.
+    public func failChangeLookups(_ fails: Bool = true) {
+        changesFail.withLock { $0 = fails }
+    }
+
+    /// Every working tree `changeSummary(in:)` has been asked about, in order.
+    public var changeLookups: [URL] {
+        changesAsked.withLock { $0 }
+    }
+
+    public func changeSummary(in worktree: URL) async throws -> GitChangeSummary? {
+        changesAsked.withLock { $0.append(worktree) }
+        if changesFail.withLock({ $0 }) { throw GitClientError.commandFailed("git could not run") }
+        return summaries.withLock { $0[FolderKey.of(worktree)] } ?? nil
     }
 
     public func repositoryKind(at url: URL) async throws -> GitRepositoryKind {

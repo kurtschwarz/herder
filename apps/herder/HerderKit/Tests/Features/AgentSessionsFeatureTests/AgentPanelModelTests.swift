@@ -554,52 +554,34 @@ import Testing
         #expect(reopened.activeTab.map { reopened.title(of: $0) } == "Fix the build")
     }
 
-    // MARK: Pinning and moving
+    // MARK: Saved state from before the tab bar went
 
-    @Test func aPinnedTabGoesToTheFrontAndTheSidebarFollows() async throws {
-        let (model, _, _) = try await shown(sessions: 3)
-        let ids = model.tabs.map(\.id)
-        let active = model.activeTab?.id
+    @Test func savedTabsStillLoadWithAPinnedFieldNobodyReadsAnyMore() throws {
+        let tab = AgentPanelUIState.Tab(
+            id: UUID(), agent: try #require(Agent.presets.first), number: 2, name: "Fix the build",
+            session: nil, started: nil
+        )
+        var stored = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(tab)) as? [String: Any]
+        )
+        // As an earlier build wrote it.
+        stored["pinned"] = true
+        let data = try JSONSerialization.data(withJSONObject: ["tabs": [stored], "active": tab.id.uuidString])
 
-        model.togglePin(model.tabs[2])
+        let state = AgentPanelUIState()
+        try state.restore(from: data)
 
-        #expect(model.tabs.map(\.id) == [ids[2], ids[0], ids[1]])
-        #expect(model.tabs.map(\.isPinned) == [true, false, false])
-        #expect(open.sessions.map(\.id) == [ids[2], ids[0], ids[1]])
-        #expect(model.activeTab?.id == active)
+        #expect(state.tabs == [tab])
+        #expect(state.active == tab.id)
     }
 
-    @Test func aMoveStaysOnItsSideOfThePinnedTabs() async throws {
-        let (model, _, _) = try await shown(sessions: 3)
-        model.togglePin(model.tabs[0])
-        let ids = model.tabs.map(\.id)
+    @Test func theSubjectIsTheNameThenTheProgramTitleThenTheAgentsName() async throws {
+        let (model, _, _) = try await shown(sessions: 1)
+        let tab = try #require(model.activeTab)
+        #expect(model.subject(of: tab) == model.title(of: tab))
 
-        model.move(model.tabs[2], to: 0)
-        #expect(model.tabs.map(\.id) == [ids[0], ids[2], ids[1]])
-
-        model.move(model.tabs[0], to: 2)
-        #expect(model.tabs.map(\.id) == [ids[0], ids[2], ids[1]])
-    }
-
-    @Test func aPinAndAnOrderAreRememberedWithTheTabs() async throws {
-        let registry = makeRegistry()
-        let model = makeModel()
-        let workspace = try await workspace(root, in: registry)
-        await model.show(workspace)
-        await model.startSession()
-        await model.startSession()
-        await model.startSession()
-        let ids = model.tabs.map(\.id)
-        model.togglePin(model.tabs[1])
-        model.move(model.tabs[2], to: 1)
-        model.terminateAll()
-        await workspace.saveSnapshot()
-
-        let reopened = makeModel()
-        await reopened.show(try await self.workspace(root, in: makeRegistry()))
-
-        #expect(reopened.tabs.map(\.id) == [ids[1], ids[2], ids[0]])
-        #expect(reopened.tabs.map(\.isPinned) == [true, false, false])
+        model.rename(tab, to: "Fix the build")
+        #expect(model.subject(of: tab) == "Fix the build")
     }
 
     // MARK: Agents that name their own sessions

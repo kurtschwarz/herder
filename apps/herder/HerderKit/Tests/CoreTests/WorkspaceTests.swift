@@ -225,6 +225,41 @@ import Testing
         #expect(state.checkout == .branch("feature"))
     }
 
+    @Test func theChangeSummaryIsReadOnRefreshAndFollowsTheDrain() async throws {
+        git.seed(changes: GitChangeSummary(insertions: 107, deletions: 19), in: root)
+        let state = try await start(with: [file("a.txt")])
+        #expect(state.changes == GitChangeSummary(insertions: 107, deletions: 19))
+
+        // A commit writes the git directory, with nothing in the tree moving.
+        git.seed(changes: GitChangeSummary(insertions: 2, deletions: 0), in: root)
+        watcher.change([root.appending(path: ".git")])
+        await settle()
+
+        #expect(state.changes == GitChangeSummary(insertions: 2, deletions: 0))
+    }
+
+    @Test func theChangeSummaryGoesWhenThereIsNothingToCompareWith() async throws {
+        git.seed(changes: GitChangeSummary(insertions: 1, deletions: 1), in: root)
+        let state = try await start(with: [file("a.txt")])
+
+        git.seed(changes: nil, in: root)
+        watcher.change([root.appending(path: ".git")])
+        await settle()
+
+        #expect(state.changes == nil)
+    }
+
+    @Test func aChangeSummaryGitCannotReadKeepsTheLastOne() async throws {
+        git.seed(changes: GitChangeSummary(insertions: 5, deletions: 6), in: root)
+        let state = try await start(with: [file("a.txt")])
+
+        git.failChangeLookups()
+        watcher.change([root.appending(path: ".git")])
+        await settle()
+
+        #expect(state.changes == GitChangeSummary(insertions: 5, deletions: 6))
+    }
+
     @Test func aFolderGitCannotReadHasNoCheckout() async throws {
         let state = try await start(with: [file("a.txt")])
 

@@ -220,6 +220,37 @@ public struct LiveGitClient: GitClient {
         return GitWorktreeStatus(root: root, entries: Self.parse(output, under: root))
     }
 
+    /// `git diff --shortstat` against the merge-base, which compares the
+    /// working tree itself and so counts staged and unstaged changes to
+    /// tracked files together.
+    @concurrent
+    public func changeSummary(in worktree: URL) async throws -> GitChangeSummary? {
+        guard try await gitDirectory(of: worktree) != nil else { return nil }
+        let root = PathKey(worktree).path
+
+        func succeeds(_ arguments: [String]) throws -> Bool {
+            try runGit(["-C", root] + arguments, allowing: [1]).0 == 0
+        }
+
+        let (originCode, originHead) = try runGit(
+            ["-C", root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], allowing: [1]
+        )
+        guard let base = GitDefaultBranch.resolve(
+            originHead: originCode == 0 ? originHead.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
+            exists: { (try? succeeds(["rev-parse", "--verify", "--quiet", "\($0)^{commit}"])) ?? false }
+        ) else { return nil }
+
+        // No merge-base is a history that shares nothing with the default
+        // branch, or no commit yet: nothing to measure from.
+        let (code, mergeBase) = try runGit(["-C", root, "merge-base", "HEAD", base], allowing: [1])
+        let fork = mergeBase.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard code == 0, !fork.isEmpty else { return nil }
+
+        let (diffCode, stat) = try runGit(["-C", root, "diff", "--shortstat", fork], allowing: [])
+        guard diffCode == 0 else { return nil }
+        return GitChangeSummary.parse(shortstat: stat)
+    }
+
     // MARK: - Reading porcelain v2
 
     /// Every record is NUL-terminated, and a rename's original path is a record
