@@ -69,6 +69,48 @@ final class Buffer: NSObject, NSTextViewDelegate {
         gutter?.textDidChange(to: text)
     }
 
+    // MARK: - Going to a place
+
+    /// Puts the caret at `line` and `column`, both counting from one, and
+    /// brings it into view. A place past the end of its line, or of the text,
+    /// is the end of that line, or of the text.
+    func reveal(line: Int, column: Int?) {
+        let location = Self.offset(line: line, column: column, in: storage.string)
+        let range = NSRange(location: location, length: 0)
+        _ = pane
+        textView?.setSelectedRange(range)
+        scrollTarget = range
+        scrollIfLaidOut()
+    }
+
+    /// Where the caret is, once there is a view to have one.
+    var selectedRange: NSRange? { textView?.selectedRange() }
+
+    /// The UTF-16 offset of `line` and `column` in `text`.
+    static func offset(line: Int, column: Int?, in text: String) -> Int {
+        let string = text as NSString
+        var start = 0
+        for _ in 1..<max(line, 1) {
+            let next = NSMaxRange(string.lineRange(for: NSRange(location: start, length: 0)))
+            // Past the last line, the last line.
+            if next >= string.length { break }
+            start = next
+        }
+        var contentsEnd = 0
+        string.getLineStart(nil, end: nil, contentsEnd: &contentsEnd, for: NSRange(location: start, length: 0))
+        return min(start + max((column ?? 1) - 1, 0), contentsEnd)
+    }
+
+    /// Where to scroll to once the pane has a size to scroll in: it is made
+    /// when it is first shown, and has none until it is laid out.
+    private var scrollTarget: NSRange?
+
+    private func scrollIfLaidOut() {
+        guard let range = scrollTarget, let textView, pane.bounds.height > 0 else { return }
+        scrollTarget = nil
+        textView.scrollRangeToVisible(range)
+    }
+
     /// Colours the text as rendering attributes on the layout manager, not as
     /// attributes of the storage: they are not part of the text, so they are
     /// never an edit and never reach the undo stack.
@@ -182,7 +224,9 @@ final class Buffer: NSObject, NSTextViewDelegate {
         }
         self.textView = textView
         self.gutter = gutter
-        return CodePane(scrollView: scrollView, gutter: gutter, highlight: highlight)
+        let pane = CodePane(scrollView: scrollView, gutter: gutter, highlight: highlight)
+        pane.onLayout = { [weak self] in self?.scrollIfLaidOut() }
+        return pane
     }
 
     /// The view that takes the keyboard when this tab is shown.

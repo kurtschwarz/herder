@@ -98,6 +98,9 @@ final class AgentTab: Identifiable {
     /// Told when the process exits, with how.
     @ObservationIgnored var onExit: ((AgentTab, Int32) -> Void)?
 
+    /// Asked for when a file named in its output is clicked.
+    @ObservationIgnored var onOpenFile: ((URL, Int?, Int?) -> Void)?
+
     /// Told the first time the person says something to its agent.
     @ObservationIgnored var onConverse: ((AgentTab) -> Void)?
 
@@ -140,8 +143,9 @@ final class AgentTab: Identifiable {
         do {
             let session = try await pty.spawn(spec)
             process = session
-            let screen = TerminalScreen(session: session, size: spec.size)
+            let screen = TerminalScreen(session: session, size: spec.size, workingDirectory: spec.workingDirectory)
             screen.onSubmit = { [weak self] in self?.converse() }
+            screen.onOpenFile = { [weak self] url, line, column in self?.onOpenFile?(url, line, column) }
             self.screen = screen
             hasStarted = true
             if startedAt == nil { startedAt = Date() }

@@ -25,4 +25,8 @@ struct TerminalCell: Equatable {
     var background: Theme.Terminal.RGB?
     var attributes: Attributes = []
     var isSelected = false
+
+    /// Which of its row's links this cell is part of, counting from one, or
+    /// zero for none. See ``TerminalEmulator/link(atColumn:row:)``.
+    var link = 0
 }

@@ -43,7 +43,7 @@ final class TerminalTab: Identifiable {
     init(session: any PTYSession, size: PTYSize, directory: URL) {
         self.session = session
         self.directory = directory
-        screen = TerminalScreen(session: session, size: size)
+        screen = TerminalScreen(session: session, size: size, workingDirectory: directory)
     }
 
     deinit {

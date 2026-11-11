@@ -48,6 +48,11 @@ public final class TerminalModel {
     /// Why the last shell would not start, until it is dismissed.
     public private(set) var spawnFailure: String?
 
+    /// Asked for when a file named in a shell's output is clicked: the file,
+    /// and the line and column the text gave. Whoever composes the window
+    /// decides where it opens, as a feature cannot reach the editor.
+    @ObservationIgnored public var onOpenFile: ((URL, Int?, Int?) -> Void)?
+
     static let limits = PanelHeight.Limits(
         defaultHeight: Theme.Size.defaultTerminalHeight,
         minimumPanel: Theme.Size.minTerminalHeight,
@@ -168,6 +173,7 @@ public final class TerminalModel {
             let session = try await pty.spawn(spec)
             let tab = TerminalTab(session: session, size: spec.size, directory: id.url)
             tab.onExit = { [weak self] tab, code in self?.shellExited(tab, code: code, in: id) }
+            tab.screen.onOpenFile = { [weak self] url, line, column in self?.onOpenFile?(url, line, column) }
             tab.start(clock: clock)
             tabsByWorkspace[id, default: []].append(tab)
             activeByWorkspace[id] = tab.id

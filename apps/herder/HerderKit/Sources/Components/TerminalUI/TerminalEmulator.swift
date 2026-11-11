@@ -37,6 +37,24 @@ final class TerminalEmulator {
     private(set) var cells: [[TerminalCell]] = []
     private(set) var cursor: Cursor?
 
+    /// What each row's cells can be clicked to open, indexed by
+    /// ``TerminalCell/link`` less one. Per row, so a row rebuilt on its own
+    /// has no table to keep in step with the rest.
+    private var links: [[TerminalLink]] = []
+
+    /// Whether each row carries on into the next, which makes the two one
+    /// line of text as far as finding a link goes.
+    private var wrapsToNextRow: [Bool] = []
+
+    /// Where a relative path is taken from: the shell's directory, as it last
+    /// said, else where it started.
+    var workingDirectory: URL?
+
+    var homeDirectory = FileManager.default.homeDirectoryForCurrentUser
+
+    /// A path is a link only if something is there. Replaced by tests.
+    var fileExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) }
+
     /// What the terminal answers back to the program: a device-attributes
     /// reply, a cursor-position report. Goes to the pty.
     var onReply: ((Data) -> Void)?
@@ -281,6 +299,8 @@ final class TerminalEmulator {
         let rebuildAll = needsFullRebuild || cells.count != rows
         if rebuildAll {
             cells = Array(repeating: Array(repeating: TerminalCell(), count: columns), count: rows)
+            links = Array(repeating: [], count: rows)
+            wrapsToNextRow = Array(repeating: false, count: rows)
             needsFullRebuild = false
         }
 
@@ -305,6 +325,10 @@ final class TerminalEmulator {
             }
         }
 
+        // Links found in the text, which can run over several rows, so a row
+        // that did not change can still need drawing again.
+        changed.formUnion(detectLinks(in: changed))
+
         let newCursor = readCursor()
         if newCursor != cursor {
             // The old and the new cell both need drawing.
@@ -322,6 +346,18 @@ final class TerminalEmulator {
         guard ghostty_render_state_row_get(rowIterator, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &rowCells) == GHOSTTY_SUCCESS else {
             return
         }
+
+        // Only a row the library says has a hyperlink is asked about each
+        // cell's, which is a call per cell.
+        var rawRow: GhosttyRow = 0
+        var wraps = false
+        var hasHyperlink = false
+        if ghostty_render_state_row_get(rowIterator, GHOSTTY_RENDER_STATE_ROW_DATA_RAW, &rawRow) == GHOSTTY_SUCCESS {
+            ghostty_row_get(rawRow, GHOSTTY_ROW_DATA_WRAP, &wraps)
+            ghostty_row_get(rawRow, GHOSTTY_ROW_DATA_HYPERLINK, &hasHyperlink)
+        }
+        wrapsToNextRow[y] = wraps
+        links[y] = []
 
         var x = 0
         while ghostty_render_state_row_cells_next(rowCells), x < columns {
@@ -373,7 +409,137 @@ final class TerminalEmulator {
             ghostty_render_state_row_cells_get(rowCells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_SELECTED, &selected)
             cell.isSelected = selected
 
+            if hasHyperlink {
+                var rawCell: GhosttyCell = 0
+                var linked = false
+                if ghostty_render_state_row_cells_get(rowCells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW, &rawCell) == GHOSTTY_SUCCESS {
+                    ghostty_cell_get(rawCell, GHOSTTY_CELL_DATA_HAS_HYPERLINK, &linked)
+                }
+                if linked, let target = hyperlinkTarget(column: x, row: y) {
+                    cell.link = linkID(for: TerminalLink(target: target, isDetected: false), inRow: y)
+                }
+            }
+
             cells[y][x] = cell
+        }
+    }
+
+    // MARK: Links
+
+    /// What a click on this cell opens, if anything.
+    func link(atColumn column: Int, row: Int) -> TerminalLink.Target? {
+        guard cells.indices.contains(row), cells[row].indices.contains(column) else { return nil }
+        let id = cells[row][column].link
+        guard id > 0, links[row].indices.contains(id - 1) else { return nil }
+        return links[row][id - 1].target
+    }
+
+    /// The URI a program marked this cell with (OSC 8), as something to open.
+    private func hyperlinkTarget(column: Int, row: Int) -> TerminalLink.Target? {
+        guard var reference = reference(column: column, row: row) else { return nil }
+        var length = 0
+        _ = ghostty_grid_ref_hyperlink_uri(&reference, nil, 0, &length)
+        guard length > 0 else { return nil }
+        var bytes = [UInt8](repeating: 0, count: length)
+        guard ghostty_grid_ref_hyperlink_uri(&reference, &bytes, length, &length) == GHOSTTY_SUCCESS else { return nil }
+        guard let url = URL(string: String(decoding: bytes.prefix(length), as: UTF8.self)) else { return nil }
+        // `file://host/path`, as `ls --hyperlink` writes it, is a file here.
+        return url.isFileURL ? .file(URL(filePath: url.path(percentEncoded: false)), line: nil, column: nil) : .url(url)
+    }
+
+    private func linkID(for link: TerminalLink, inRow row: Int) -> Int {
+        if let index = links[row].firstIndex(of: link) { return index + 1 }
+        links[row].append(link)
+        return links[row].count
+    }
+
+    /// Finds the links in the text of every line that has a row in `rows`,
+    /// and returns the rows whose links are not what they were.
+    ///
+    /// Done when rows are read, not when they are drawn. A line is the rows
+    /// that wrap into one another, so a URL that runs onto the next row is one
+    /// link.
+    private func detectLinks(in rows: Set<Int>) -> Set<Int> {
+        var changed: Set<Int> = []
+        var done: Set<Int> = []
+        for row in rows.sorted() where row < cells.count && !done.contains(row) {
+            var first = row
+            while first > 0, wrapsToNextRow[first - 1] { first -= 1 }
+            var last = row
+            while last < cells.count - 1, wrapsToNextRow[last] { last += 1 }
+            done.formUnion(first...last)
+            changed.formUnion(detectLinks(inRows: first...last))
+        }
+        return changed
+    }
+
+    private func detectLinks(inRows lines: ClosedRange<Int>) -> Set<Int> {
+        let before = lines.map { (cells[$0].map(\.link), links[$0]) }
+        for row in lines { dropDetectedLinks(inRow: row) }
+
+        // One string for the line, and which cell each of its UTF-16 units
+        // came from. A blank cell is a space, so words stay apart.
+        var text = ""
+        var cellOfUnit: [(row: Int, column: Int)] = []
+        for row in lines {
+            for (column, cell) in cells[row].enumerated() {
+                let character = cell.text.isEmpty ? " " : cell.text
+                text += character
+                cellOfUnit.append(contentsOf: repeatElement((row: row, column: column), count: character.utf16.count))
+            }
+        }
+
+        // Nearly every line has neither, and none of the three kinds of link
+        // can be without one of them.
+        if text.contains(where: { $0 == "/" || $0 == ":" }) {
+            for candidate in TerminalLinkDetector.candidates(in: text) {
+                // What the program marked is left as it is: only that is
+                // still set, as the detected links were dropped above.
+                guard !candidate.range.contains(where: { cells[cellOfUnit[$0].row][cellOfUnit[$0].column].link != 0 }),
+                      let target = target(for: candidate.kind)
+                else { continue }
+                var ids: [Int: Int] = [:]
+                for unit in candidate.range {
+                    let (row, column) = cellOfUnit[unit]
+                    let id = ids[row] ?? linkID(for: TerminalLink(target: target, isDetected: true), inRow: row)
+                    ids[row] = id
+                    cells[row][column].link = id
+                }
+            }
+        }
+
+        var changed: Set<Int> = []
+        for (index, row) in lines.enumerated() where before[index] != (cells[row].map(\.link), links[row]) {
+            changed.insert(row)
+        }
+        return changed
+    }
+
+    /// Throws away what was found in a row's text, keeping what the program
+    /// marked, so the line can be looked at again.
+    private func dropDetectedLinks(inRow row: Int) {
+        guard links[row].contains(where: \.isDetected) else { return }
+        var kept: [TerminalLink] = []
+        var renumbered: [Int: Int] = [:]
+        for (index, link) in links[row].enumerated() where !link.isDetected {
+            kept.append(link)
+            renumbered[index + 1] = kept.count
+        }
+        for column in cells[row].indices where cells[row][column].link != 0 {
+            cells[row][column].link = renumbered[cells[row][column].link] ?? 0
+        }
+        links[row] = kept
+    }
+
+    private func target(for kind: TerminalLinkCandidate.Kind) -> TerminalLink.Target? {
+        switch kind {
+        case .url(let url):
+            return .url(url)
+        case .path(let reference):
+            guard let url = reference.resolved(against: workingDirectory, home: homeDirectory), fileExists(url) else {
+                return nil
+            }
+            return .file(url, line: reference.line, column: reference.column)
         }
     }
 
