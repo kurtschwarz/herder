@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.6](https://github.com/kurtschwarz/herder/compare/herder-v0.2.5...herder-v0.2.6) (2026-11-11)
+
+
+### Bug Fixes
+
+* **herder:** paste images and files with Cmd+V ([#38](https://github.com/kurtschwarz/herder/issues/38)) ([0937a96](https://github.com/kurtschwarz/herder/commit/0937a96eb696d48a2dabd0dd75492d4859bb9caf)), closes [#27](https://github.com/kurtschwarz/herder/issues/27)
+* **herder:** read restored open folders on launch ([#41](https://github.com/kurtschwarz/herder/issues/41)) ([d6a897a](https://github.com/kurtschwarz/herder/commit/d6a897aab6d7f08119987267a4768c3be2d6273a)), closes [#40](https://github.com/kurtschwarz/herder/issues/40)
+
 ## [0.2.5](https://github.com/kurtschwarz/herder/compare/herder-v0.2.4...herder-v0.2.5) (2026-11-11)
 
 
