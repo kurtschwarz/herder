@@ -80,12 +80,14 @@ final class AgentTab: Identifiable {
     private(set) var screen: TerminalScreen?
     private(set) var generation = 0
 
-    /// When it last wrote anything, or was opened.
+    /// When it was opened, last worked, or last changed what it says it is
+    /// doing. For a program that says nothing, when it last wrote anything.
     private(set) var lastActivity = Date()
 
     /// Whether the last sample saw output of any kind, typed or not.
     @ObservationIgnored private var wroteLastSample = false
     @ObservationIgnored private var seenOutput = 0
+    @ObservationIgnored private var sampledState: AgentSession.State?
 
     /// Whether the person has said anything to its agent since this launch
     /// opened or restored the tab: pressed Return in it. A tab opened and
@@ -146,6 +148,7 @@ final class AgentTab: Identifiable {
             lastActivity = Date()
             generation += 1
             phase = .running
+            sampledState = state
             watching = Task { [weak self] in
                 let code = await session.waitForExit()
                 // Hung up on by a later attach, which is not an exit.
@@ -166,13 +169,20 @@ final class AgentTab: Identifiable {
     /// Looks at what the terminal did since the last look. Run about once a
     /// second. Says whether it just went quiet after writing anything, which
     /// is when a turn has most likely ended.
+    ///
+    /// Output alone is not activity for a program that reports its status:
+    /// a terminal UI redraws when anything near it changes, so every session
+    /// on one worktree writes when any of them edits a file.
     @discardableResult
     func sample(now: Date) -> Bool {
         guard let screen else { return false }
         let output = screen.outputCount
         let wrote = output != seenOutput
         seenOutput = output
-        if wrote { lastActivity = now }
+        let state = state
+        let reports = !screen.programStatuses.isEmpty
+        if state != sampledState || state == .working || (wrote && !reports) { lastActivity = now }
+        sampledState = state
         let wentQuiet = wroteLastSample && !wrote
         wroteLastSample = wrote
         return wentQuiet
