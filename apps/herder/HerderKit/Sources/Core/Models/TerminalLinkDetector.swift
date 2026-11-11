@@ -1,47 +1,5 @@
 import Foundation
 
-/// A file path as it was written in terminal output, with the place in it that
-/// was named, if any: `src/foo.swift:42:7`.
-public struct TerminalPathReference: Equatable, Sendable {
-    /// As written, without the line and column.
-    public var path: String
-    public var line: Int?
-    public var column: Int?
-
-    public init(path: String, line: Int?, column: Int?) {
-        self.path = path
-        self.line = line
-        self.column = column
-    }
-
-    /// Where the path points. Relative paths are taken from `directory`, and
-    /// do not resolve without one. Whether anything is there is not asked.
-    public func resolved(against directory: URL?, home: URL) -> URL? {
-        if path.hasPrefix("/") { return URL(filePath: path).standardizedFileURL }
-        if path == "~" { return home }
-        if path.hasPrefix("~/") { return home.appending(path: String(path.dropFirst(2))).standardizedFileURL }
-        return directory?.appending(path: path).standardizedFileURL
-    }
-}
-
-/// A stretch of terminal text that may be a link.
-public struct TerminalLinkCandidate: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable {
-        case url(URL)
-        case path(TerminalPathReference)
-    }
-
-    public var kind: Kind
-
-    /// Where it is in the text searched, in UTF-16 units, to match `NSString`.
-    public var range: Range<Int>
-
-    public init(kind: Kind, range: Range<Int>) {
-        self.kind = kind
-        self.range = range
-    }
-}
-
 /// Finds what looks like a link in a line of terminal text.
 ///
 /// Only looks at the text. Whether a path names anything is the caller's to
