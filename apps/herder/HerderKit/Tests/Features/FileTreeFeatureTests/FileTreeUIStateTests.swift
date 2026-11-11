@@ -127,4 +127,50 @@ import Testing
 
         #expect(after.uiState(FileTreeUIState.self).expanded == [PathKey(canonical: "/code/api/Sources")])
     }
+
+    private func restoredRegistry(expanded: Set<PathKey>) async throws -> WorkspaceRegistry {
+        let before = try #require(await registry.open(WorkspaceID(root)))
+        before.uiState(FileTreeUIState.self).expanded = expanded
+        let snapshot = before.snapshot
+        let fresh = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
+        let after = try #require(await fresh.open(WorkspaceID(root)))
+        after.restore(from: snapshot)
+        return fresh
+    }
+
+    // MARK: - Restored folders
+
+    /// The bug: a restored folder drew open with no listing, so the first click
+    /// closed it and only the second read it.
+    @Test func aRestoredOpenFolderShowsItsChildrenAndOneToggleClosesIt() async throws {
+        let sources = dir("Sources")
+        let nested = dir("Nested", in: sources.url)
+        files.seed(children: [sources], of: root)
+        files.seed(children: [nested], of: sources.url)
+        files.seed(children: [DirectoryEntry(url: nested.url.appending(path: "A.swift"), isDirectory: false)], of: nested.url)
+        let fresh = try await restoredRegistry(expanded: [PathKey(sources.url), PathKey(nested.url)])
+        let model = FileTreeModel(store: fresh)
+
+        await model.setRoot(root)
+
+        #expect(model.isExpanded(sources.url))
+        #expect(model.rows.map(\.depth) == [0, 1, 2])
+
+        await model.toggle(nested.url)
+        #expect(!model.isExpanded(nested.url))
+        #expect(model.rows.count == 2)
+    }
+
+    @Test func aRestoredFolderThatNoLongerExistsIsSkippedSilently() async throws {
+        files.seed(children: [dir("Sources")], of: root)
+        files.seed(children: [], of: root.appending(path: "Sources"))
+        let gone = root.appending(path: "Gone")
+        let fresh = try await restoredRegistry(expanded: [PathKey(root.appending(path: "Sources")), PathKey(gone)])
+        let model = FileTreeModel(store: fresh)
+
+        await model.setRoot(root)
+
+        #expect(model.listing(of: gone) == nil)
+        #expect(!model.rows.contains { $0.kind == .unreadable })
+    }
 }

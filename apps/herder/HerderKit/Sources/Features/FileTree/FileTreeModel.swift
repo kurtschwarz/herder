@@ -148,7 +148,24 @@ public final class FileTreeModel {
         // Held before the first read, so the folders show as they are read
         // rather than all at once once git has answered as well.
         worktree = state
+        await readRestoredFolders()
         await state?.refresh()
+    }
+
+    /// Reads the folders restored as open, which nothing has read yet after a
+    /// launch: without a listing a folder draws open with nothing in it, and
+    /// the first click closes it instead of showing it.
+    ///
+    /// Parents before children, so a folder is looked for in a listing that is
+    /// already there. One that is gone (deleted or renamed since the last
+    /// session) is skipped rather than read, or it would be cached as
+    /// unreadable.
+    private func readRestoredFolders() async {
+        guard let worktree else { return }
+        await worktree.open(worktree.root)
+        for folder in expanded.sorted() where worktree.exists(folder) == true {
+            await worktree.open(folder)
+        }
     }
 
     /// Whether the app is in front. Suspends drains for every workspace while
