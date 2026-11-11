@@ -424,6 +424,12 @@ public final class AgentPanelModel {
         remove(tab, from: id)
     }
 
+    /// Closes the tab of session `id`, from outside the panel: the sidebar.
+    public func close(_ id: UUID) {
+        guard let tab = tabsByWorkspace.values.joined().first(where: { $0.id == id }) else { return }
+        close(tab)
+    }
+
     private func remove(_ tab: AgentTab, from id: WorkspaceID) {
         guard var tabs = tabsByWorkspace[id], let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tabs.remove(at: index)

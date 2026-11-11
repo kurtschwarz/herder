@@ -33,4 +33,8 @@ extension EnvironmentValues {
     /// How a feature asks this window to name an open agent session. See
     /// ``RenameAgentSessionAction``; carried here for the reason above.
     @Entry public var renameAgentSession: RenameAgentSessionAction = .inert
+
+    /// How a feature asks this window to close an open agent session. See
+    /// ``CloseAgentSessionAction``; carried here for the reason above.
+    @Entry public var closeAgentSession: CloseAgentSessionAction = .inert
 }

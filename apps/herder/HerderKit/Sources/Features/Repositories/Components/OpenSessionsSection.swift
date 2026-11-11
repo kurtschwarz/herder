@@ -17,6 +17,7 @@ struct OpenSessionsSection: View {
     @Environment(Workspace.self) private var active: Workspace?
     @Environment(\.showAgentSession) private var showAgentSession
     @Environment(\.renameAgentSession) private var renameAgentSession
+    @Environment(\.closeAgentSession) private var closeAgentSession
 
     var body: some View {
         let labels = model.worktreeLabels(of: repositories)
@@ -38,7 +39,8 @@ struct OpenSessionsSection: View {
                     branch: labels[session.worktree] ?? session.worktree.root.name,
                     isSelected: active?.id == session.worktree && focused == session.id,
                     show: { showAgentSession(session) },
-                    rename: { renameAgentSession(session, to: $0) }
+                    rename: { renameAgentSession(session, to: $0) },
+                    close: { closeAgentSession(session) }
                 )
             }
 
@@ -129,13 +131,14 @@ struct OpenSessionsSection: View {
 
 /// One session: what it is called and how long since it last did anything,
 /// under that what it seems to be doing, and the worktree it is in. Right
-/// click to rename it.
+/// click to rename or close it.
 private struct AgentSessionRow: View {
     let session: AgentSession
     let branch: String
     let isSelected: Bool
     let show: () -> Void
     let rename: (String) -> Void
+    let close: () -> Void
 
     @State private var isHovering = false
     @State private var isRenaming = false
@@ -204,6 +207,8 @@ private struct AgentSessionRow: View {
         .help(session.agentName)
         .contextMenu {
             Button("Rename") { isRenaming = true }
+            Divider()
+            Button("Close", action: close)
         }
     }
 
