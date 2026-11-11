@@ -26,11 +26,85 @@ import TestSupport
         )
     }
 
-    func report(_ id: UUID, title: String? = nil, state: AgentSession.State = .idle) -> AgentSessions.Report {
+    func report(
+        _ id: UUID,
+        title: String? = nil,
+        state: AgentSession.State = .idle,
+        lastActivity: Date? = nil,
+        startedAt: Date? = nil
+    ) -> AgentSessions.Report {
         AgentSessions.Report(
             id: id, worktree: WorkspaceID(main), agentID: "claude-code", agentName: "Claude Code",
-            title: title, fallbackTitle: "Claude Code", sessionID: nil, state: state, lastActivity: launch
+            title: title, fallbackTitle: "Claude Code", sessionID: nil, state: state,
+            lastActivity: lastActivity ?? (state == .paused ? nil : launch), startedAt: startedAt
         )
+    }
+
+    func minutes(_ count: Double) -> Date { launch.addingTimeInterval(count * 60) }
+
+    @Test func sessionsByRecencyListsTheMostRecentlyActiveFirst() {
+        let open = WindowAgentSessions(store: store)
+        let old = UUID()
+        let newest = UUID()
+        let middle = UUID()
+
+        open.publish([
+            report(old, lastActivity: minutes(1)),
+            report(newest, lastActivity: minutes(9)),
+            report(middle, lastActivity: minutes(5)),
+        ], focused: old)
+
+        #expect(open.sessionsByRecency.map(\.id) == [newest, middle, old])
+        #expect(open.sessions.map(\.id) == [old, newest, middle])
+    }
+
+    @Test func sessionsActiveAtTheSameMomentListTheNewestStartFirst() async {
+        let open = WindowAgentSessions(store: store)
+        var older = session()
+        older.startedAt = minutes(1)
+        var newer = session()
+        newer.startedAt = minutes(2)
+        await store.begin(older, in: repository)
+        await store.begin(newer, in: repository)
+
+        open.publish([
+            report(older.id, lastActivity: minutes(5)),
+            report(newer.id, lastActivity: minutes(5)),
+        ], focused: nil)
+
+        #expect(open.sessionsByRecency.map(\.id) == [newer.id, older.id])
+    }
+
+    @Test func aRestoredTabIsAsActiveAsItsRecordLastSawIt() async {
+        let open = WindowAgentSessions(store: store)
+        var restored = session()
+        restored.lastSeenAt = minutes(3)
+        await store.begin(restored, in: repository)
+        let working = UUID()
+
+        open.publish([
+            report(restored.id, state: .paused),
+            report(working, state: .working, lastActivity: minutes(4)),
+        ], focused: nil)
+
+        #expect(open.sessionsByRecency.map(\.id) == [working, restored.id])
+        #expect(open.sessions.first?.live?.lastActivity == minutes(3))
+    }
+
+    @Test func aRestoredTabWithoutARecordIsAsActiveAsItWasStarted() {
+        let open = WindowAgentSessions(store: store)
+        let started = UUID()
+        let never = UUID()
+        let working = UUID()
+
+        open.publish([
+            report(never, state: .paused),
+            report(started, state: .paused, startedAt: minutes(2)),
+            report(working, state: .working, lastActivity: minutes(1)),
+        ], focused: nil)
+
+        #expect(open.sessionsByRecency.map(\.id) == [started, working, never])
+        #expect(open.sessionsByRecency.last?.live?.lastActivity == .distantPast)
     }
 
     @Test func aWindowListsWhatItReportedInItsOrder() {

@@ -44,7 +44,13 @@ public final class AgentSessions {
 
         public var sessionID: String?
         public var state: AgentSession.State
-        public var lastActivity: Date
+
+        /// `nil` for a tab that has not run since the app opened, which has
+        /// nothing of its own to say: see ``WindowAgentSessions/publish(_:focused:at:)``.
+        public var lastActivity: Date?
+
+        /// When the tab's agent was first started, if it was.
+        public var startedAt: Date?
 
         public init(
             id: UUID,
@@ -56,7 +62,8 @@ public final class AgentSessions {
             fallbackTitle: String,
             sessionID: String?,
             state: AgentSession.State,
-            lastActivity: Date
+            lastActivity: Date?,
+            startedAt: Date? = nil
         ) {
             self.id = id
             self.worktree = worktree
@@ -68,6 +75,7 @@ public final class AgentSessions {
             self.sessionID = sessionID
             self.state = state
             self.lastActivity = lastActivity
+            self.startedAt = startedAt
         }
     }
 
