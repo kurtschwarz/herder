@@ -44,4 +44,12 @@ public protocol GitClient: Sendable {
     /// patterns and the repository's own exclude file all count. No entries for
     /// a folder outside any repository.
     func status(in worktree: URL) async throws -> GitWorktreeStatus
+
+    /// Lines inserted and deleted in the working tree at `worktree` since it
+    /// forked from the repository's default branch (see ``GitDefaultBranch``):
+    /// committed and uncommitted changes to tracked files alike, which is `git
+    /// diff --shortstat` against the merge-base. Untracked files are not
+    /// counted. `nil` for a folder that is not a working tree, or when there is
+    /// no default branch to compare with.
+    func changeSummary(in worktree: URL) async throws -> GitChangeSummary?
 }

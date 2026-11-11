@@ -93,6 +93,12 @@ public final class Workspace {
     /// first read finishes, or when git could not say.
     public private(set) var checkout: GitWorktree.Checkout?
 
+    /// Lines inserted and deleted since the worktree forked from the
+    /// repository's default branch, as of the last read. `nil` until the first
+    /// read finishes, or when there is nothing to compare with: no default
+    /// branch, or not a git worktree.
+    public private(set) var changes: GitChangeSummary?
+
     /// False once the worktree's folder has gone from under the watcher, which
     /// `git worktree remove` in a terminal does. Nothing tries to render a
     /// half-dead tree after that.
@@ -306,6 +312,14 @@ public final class Workspace {
             checkout = derived
         }
 
+        // Same drain, same signal: an edit, a commit and a switch of branch
+        // all reach here. A failed lookup keeps the last answer, as the status
+        // below does.
+        do {
+            let derived = try await git.changeSummary(in: root.url)
+            if isAvailable, changes != derived { changes = derived }
+        } catch {}
+
         let answer: GitWorktreeStatus
         do {
             answer = try await git.status(in: root.url)
@@ -506,6 +520,7 @@ public final class Workspace {
         isAvailable = false
         listings = [:]
         status = .empty
+        changes = nil
         dirty = []
         needsFullScan = false
         stop()

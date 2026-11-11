@@ -86,6 +86,54 @@ import Testing
         })
     }
 
+    @Test func changeSummaryCountsCommittedAndUncommittedLinesAgainstTheMergeBase() async throws {
+        let repo = try makeRepository("changes")
+        try git("checkout", "-b", "feature", in: repo)
+        try Data("x\na\nb\n".utf8).write(to: repo.appending(path: "README.md"))
+        try git("commit", "-am", "more", in: repo)
+        // Main moves on after the fork, which the merge-base ignores.
+        try git("checkout", "main", in: repo)
+        try Data("x\nmain only\n".utf8).write(to: repo.appending(path: "other.txt"))
+        try git("add", ".", in: repo)
+        try git("commit", "-m", "main moves", in: repo)
+        try git("checkout", "feature", in: repo)
+        // Staged and unstaged, both tracked.
+        try Data("a\nb\nc\nd\n".utf8).write(to: repo.appending(path: "README.md"))
+        try Data("new\n".utf8).write(to: repo.appending(path: "added.txt"))
+        try git("add", "added.txt", in: repo)
+        // Untracked: not counted.
+        try Data("ignored\nby\nthe\ncount\n".utf8).write(to: repo.appending(path: "untracked.txt"))
+
+        let summary = try await client.changeSummary(in: repo)
+
+        // README: x -> a b c d is 4 inserted, 1 deleted; added.txt: 1 inserted.
+        #expect(summary == GitChangeSummary(insertions: 5, deletions: 1))
+    }
+
+    @Test func changeSummaryFallsBackToMaster() async throws {
+        let repo = try makeDirectory("master-repo")
+        try git("init", "--initial-branch=master", in: repo)
+        try configureIdentity(in: repo)
+        try commitSomething(in: repo)
+        try Data("x\ny\n".utf8).write(to: repo.appending(path: "README.md"))
+
+        #expect(try await client.changeSummary(in: repo) == GitChangeSummary(insertions: 2, deletions: 1))
+    }
+
+    @Test func changeSummaryIsNilWithoutADefaultBranch() async throws {
+        let repo = try makeDirectory("trunk-repo")
+        try git("init", "--initial-branch=trunk", in: repo)
+        try configureIdentity(in: repo)
+        try commitSomething(in: repo)
+
+        #expect(try await client.changeSummary(in: repo) == nil)
+    }
+
+    @Test func changeSummaryIsNilOutsideAWorktree() async throws {
+        let plain = try makeDirectory("plain-changes")
+        #expect(try await client.changeSummary(in: plain) == nil)
+    }
+
     @Test func statusFindsWhatGitIgnoresIncludingNestedRulesAndNegations() async throws {
         let repo = try makeRepository("repo")
         try Data("*.log\nbuild/\n!keep.log\n".utf8).write(to: repo.appending(path: ".gitignore"))

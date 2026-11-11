@@ -196,6 +196,7 @@ private struct PreviewGit: GitClient {
     func gitDirectory(of url: URL) async throws -> URL? { nil }
     func checkout(of url: URL) async throws -> GitWorktree.Checkout? { nil }
     func status(in worktree: URL) async throws -> GitWorktreeStatus { GitWorktreeStatus(root: PathKey(worktree)) }
+    func changeSummary(in worktree: URL) async throws -> GitChangeSummary? { nil }
 }
 
 private struct PreviewWatcher: FileWatcherClient {

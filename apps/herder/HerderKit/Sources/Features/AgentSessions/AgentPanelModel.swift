@@ -131,6 +131,12 @@ public final class AgentPanelModel {
         return tab.number > 1 ? "\(tab.agent.displayName) \(tab.number)" : tab.agent.displayName
     }
 
+    /// What the header and the sidebar call a session: the person's name, else
+    /// the title the program reports, else ``title(of:)``.
+    func subject(of tab: AgentTab) -> String {
+        tab.customName ?? tab.programTitle ?? title(of: tab)
+    }
+
     // MARK: Showing a workspace
 
     /// Points the panel at `workspace`'s sessions, remembered ones included,
@@ -179,7 +185,7 @@ public final class AgentPanelModel {
         let tabs = state.tabs.map {
             AgentTab(
                 id: $0.id, agent: $0.agent, number: $0.number, name: $0.name,
-                pinned: $0.pinned ?? false, restored: true, sessionID: $0.session, startedAt: $0.started
+                restored: true, sessionID: $0.session, startedAt: $0.started
             )
         }
         for tab in tabs {
@@ -327,7 +333,7 @@ public final class AgentPanelModel {
             sessionID: mintsSessionID(of: tab.agent) ? tab.sessionName : tab.sessionID,
             worktree: workspace.id,
             branch: branch,
-            title: historyTitle(of: tab),
+            title: subject(of: tab),
             name: tab.customName,
             startedAt: started
         )
@@ -342,10 +348,6 @@ public final class AgentPanelModel {
     private func mintsSessionID(of agent: Agent) -> Bool {
         !agent.looksUpSessions
             && [agent.command, agent.resumeCommand].contains { $0?.contains(Agent.sessionToken) == true }
-    }
-
-    private func historyTitle(of tab: AgentTab) -> String {
-        tab.customName ?? tab.programTitle ?? title(of: tab)
     }
 
     func select(_ tab: AgentTab) {
@@ -378,32 +380,6 @@ public final class AgentPanelModel {
         remember(id)
         publish()
         return true
-    }
-
-    /// Pins a tab or lets it go. Pinned tabs sit together at the front, in the
-    /// order they were pinned; the rest keep their order behind them. The tab
-    /// showing stays the one showing.
-    func togglePin(_ tab: AgentTab) {
-        guard let id = workspace(holding: tab), var tabs = tabsByWorkspace[id],
-              let index = tabs.firstIndex(where: { $0.id == tab.id })
-        else { return }
-        tab.setPinned(!tab.isPinned)
-        TabOrder.repin(&tabs, at: index, isPinned: \.isPinned)
-        tabsByWorkspace[id] = tabs
-        remember(id)
-        publish()
-    }
-
-    /// Puts a tab at `index`, on its own side of the pinned tabs. The tab
-    /// showing stays the one showing.
-    func move(_ tab: AgentTab, to index: Int) {
-        guard let id = workspace(holding: tab), var tabs = tabsByWorkspace[id],
-              let from = tabs.firstIndex(where: { $0.id == tab.id }),
-              TabOrder.move(&tabs, from: from, to: index, isPinned: \.isPinned)
-        else { return }
-        tabsByWorkspace[id] = tabs
-        remember(id)
-        publish()
     }
 
     private func workspace(holding tab: AgentTab) -> WorkspaceID? {
@@ -556,7 +532,7 @@ public final class AgentPanelModel {
         let tabs = (tabsByWorkspace[id] ?? []).map {
             AgentPanelUIState.Tab(
                 id: $0.id, agent: $0.agent, number: $0.number, name: $0.customName,
-                pinned: $0.isPinned ? true : nil, session: $0.sessionID, started: $0.startedAt
+                session: $0.sessionID, started: $0.startedAt
             )
         }
         let active = activeByWorkspace[id]
