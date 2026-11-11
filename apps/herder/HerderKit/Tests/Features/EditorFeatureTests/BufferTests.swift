@@ -145,6 +145,33 @@ import Testing
         print("colour after one keystroke took \(keystroke)")
     }
 
+    // MARK: Going to a place
+
+    @Test func aLineAndColumnAreAnOffsetInTheText() {
+        let text = "one\ntwo\nthree four\n"
+        #expect(Buffer.offset(line: 1, column: nil, in: text) == 0)
+        #expect(Buffer.offset(line: 2, column: nil, in: text) == 4)
+        #expect(Buffer.offset(line: 3, column: 3, in: text) == 10)
+        #expect(Buffer.offset(line: 3, column: 1, in: text) == 8)
+    }
+
+    @Test func aColumnPastTheEndOfItsLineIsTheEndOfTheLine() {
+        let text = "one\ntwo\nthree four\n"
+        #expect(Buffer.offset(line: 2, column: 99, in: text) == 7)
+        #expect(Buffer.offset(line: 3, column: 99, in: text) == 18)
+    }
+
+    @Test func aLinePastTheEndOfTheTextIsTheLastLine() {
+        #expect(Buffer.offset(line: 99, column: 2, in: "one\ntwo") == 5)
+        #expect(Buffer.offset(line: 5, column: nil, in: "") == 0)
+    }
+
+    @Test func revealingPutsTheCaretThere() {
+        let buffer = Buffer(text: "one\ntwo\nthree four\n")
+        buffer.reveal(line: 3, column: 3)
+        #expect(buffer.selectedRange == NSRange(location: 10, length: 0))
+    }
+
     /// Tokens for text the buffer no longer holds change nothing, so there is
     /// nothing to draw either.
     @Test func tokensForOtherTextDoNotTouchTheView() {

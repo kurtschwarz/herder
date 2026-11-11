@@ -97,6 +97,25 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
         #expect(model.breadcrumb == ["api", "a.txt"])
     }
 
+    @Test func openingAtALineAndColumnPutsTheCaretThere() async throws {
+        _ = try await start(with: ["a.txt"])
+        files.seed(path("a.txt"), "one\ntwo\nthree four\n")
+
+        await model.open(root.appending(path: "a.txt"), line: 3, column: 3)
+
+        #expect(model.activeBuffer?.selectedRange == NSRange(location: 10, length: 0))
+    }
+
+    @Test func openingTheFileAlreadyShowingAtALineMovesTheCaret() async throws {
+        _ = try await start(with: ["a.txt"])
+        files.seed(path("a.txt"), "one\ntwo\nthree four\n")
+        await model.open(root.appending(path: "a.txt"))
+
+        await model.open(root.appending(path: "a.txt"), line: 2, column: nil)
+
+        #expect(model.activeBuffer?.selectedRange == NSRange(location: 4, length: 0))
+    }
+
     @Test func theLanguageIsNamedForAFileAGrammarClaimsAndNilForOneNoneDoes() async throws {
         _ = try await start(with: ["a.txt", "b.swift"])
 

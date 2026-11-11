@@ -159,6 +159,15 @@ public final class EditorModel {
         await open(PathKey(canonical: url.path(percentEncoded: false)), remembering: true)
     }
 
+    /// Shows `url` with the caret at `line` and `column`, counting from one,
+    /// even if the file was already showing.
+    public func open(_ url: URL, line: Int?, column: Int?) async {
+        let key = PathKey(canonical: url.path(percentEncoded: false))
+        await open(key, remembering: true)
+        guard let line, key == fileKey else { return }
+        activeBuffer?.reveal(line: line, column: column)
+    }
+
     /// Shows the tab for `key`. Nothing for a path with no tab: a tab bar can
     /// only ask for what it is drawing.
     func activate(_ key: PathKey) async {

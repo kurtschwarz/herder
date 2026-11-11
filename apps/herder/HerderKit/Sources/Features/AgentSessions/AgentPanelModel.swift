@@ -42,6 +42,11 @@ public final class AgentPanelModel {
     /// them owns is kept under its own folder.
     @ObservationIgnored public var historyKey: (WorkspaceID) async -> PathKey? = { _ in nil }
 
+    /// Asked for when a file named in a session's output is clicked: the
+    /// file, and the line and column the text gave. A feature cannot reach the
+    /// editor, so whoever composes the window decides where it opens.
+    @ObservationIgnored public var onOpenFile: ((URL, Int?, Int?) -> Void)?
+
     @ObservationIgnored private var sampling: Task<Void, Never>?
 
     /// Tabs whose session is being looked up, so one lookup runs at a time.
@@ -491,6 +496,7 @@ public final class AgentPanelModel {
     /// ends the tab, as quitting a shell does; anything else stays up with
     /// what it said, and a way to start it again.
     private func watch(_ tab: AgentTab, in id: WorkspaceID) {
+        tab.onOpenFile = { [weak self] url, line, column in self?.onOpenFile?(url, line, column) }
         tab.onConverse = { [weak self] tab in
             guard let self, let workspace = workspaceObjects[id]?.workspace else { return }
             recordStart(of: tab, in: workspace)

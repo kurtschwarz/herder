@@ -11,6 +11,9 @@ final class CodePane: NSView {
     let gutter: LineNumberGutter
     let highlight: CurrentLineHighlight
 
+    /// Told after each layout, for what waits on there being a size.
+    var onLayout: () -> Void = {}
+
     init(scrollView: NSScrollView, gutter: LineNumberGutter, highlight: CurrentLineHighlight) {
         self.scrollView = scrollView
         self.gutter = gutter
@@ -35,5 +38,6 @@ final class CodePane: NSView {
             width: max(0, bounds.width - Theme.Size.gutter),
             height: bounds.height
         )
+        onLayout()
     }
 }

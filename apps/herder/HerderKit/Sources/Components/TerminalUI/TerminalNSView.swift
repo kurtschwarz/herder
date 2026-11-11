@@ -35,6 +35,15 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     /// Where a drag that is selecting began.
     private var anchor: (column: Int, row: Int)?
     private var pressedButton: MouseButton?
+
+    /// A link the button went down on, and the cell it was in. Opened when the
+    /// button comes up in the same cell.
+    private struct PendingLink {
+        var target: TerminalLink.Target
+        var column: Int
+        var row: Int
+    }
+    private var pendingLink: PendingLink?
     private var scrollRemainder: CGFloat = 0
 
     init(screen: TerminalScreen, inset: NSSize) {
@@ -172,6 +181,8 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         init(_ cell: TerminalCell) {
             foreground = cell.foreground
             attributes = cell.attributes
+            // Links are always underlined, so they can be told from text.
+            if cell.link != 0 { attributes.insert(.underline) }
         }
     }
 
@@ -387,8 +398,23 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         screen.send(bytes)
     }
 
+    /// The link under `point`, if the click it would be is a plain one: any
+    /// modifier means something else is being asked for.
+    private func link(at point: NSPoint, for event: NSEvent) -> PendingLink? {
+        guard event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty else { return nil }
+        let column = Int(((point.x - inset.width) / cellSize.width).rounded(.down))
+        let row = Int(((point.y - inset.height) / cellSize.height).rounded(.down))
+        // Not clamped, as `cell(at:)` is: the margin is not a link.
+        guard let target = emulator.link(atColumn: column, row: row) else { return nil }
+        return PendingLink(target: target, column: column, row: row)
+    }
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        // A plain click on a link is the link's, and opens it when the button
+        // comes up: after a drag it is a selection that started on a link.
+        pendingLink = event.clickCount == 1 ? link(at: convert(event.locationInWindow, from: nil), for: event) : nil
+        if pendingLink != nil, programOwnsMouse(event) { return }
         if programOwnsMouse(event) {
             pressedButton = .left
             report(.press, .left, event)
@@ -410,6 +436,10 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if let pending = pendingLink {
+            let point = cell(at: convert(event.locationInWindow, from: nil))
+            if (point.column, point.row) != (pending.column, pending.row) { pendingLink = nil }
+        }
         if pressedButton != nil, programOwnsMouse(event) {
             report(.motion, .left, event)
             return
@@ -421,6 +451,11 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if let pending = pendingLink {
+            pendingLink = nil
+            let point = cell(at: convert(event.locationInWindow, from: nil))
+            if (point.column, point.row) == (pending.column, pending.row) { screen.open(pending.target) }
+        }
         if pressedButton != nil {
             pressedButton = nil
             if programOwnsMouse(event) { report(.release, .left, event) }
@@ -437,7 +472,18 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        updateCursor(for: event)
         if programOwnsMouse(event) { report(.motion, nil, event) }
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        updateCursor(for: event)
+    }
+
+    /// A hand over what a click would open, as everywhere else.
+    private func updateCursor(for event: NSEvent) {
+        let overLink = link(at: convert(event.locationInWindow, from: nil), for: event) != nil
+        (overLink ? NSCursor.pointingHand : NSCursor.arrow).set()
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -461,7 +507,7 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(
-            rect: bounds, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self
+            rect: bounds, options: [.mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect], owner: self
         ))
     }
 

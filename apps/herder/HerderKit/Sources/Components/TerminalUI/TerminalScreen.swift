@@ -63,6 +63,11 @@ public final class TerminalScreen {
     /// someone having said something to the program in it.
     @ObservationIgnored public var onSubmit: (() -> Void)?
 
+    /// Asked for when a click lands on a file, with the line and column the
+    /// text named, if it did. Where a file opens is not the terminal's to say,
+    /// so a screen with nobody to ask hands it to the system.
+    @ObservationIgnored public var onOpenFile: ((URL, Int?, Int?) -> Void)?
+
     @ObservationIgnored let emulator: TerminalEmulator
     @ObservationIgnored private let session: any PTYSession
     @ObservationIgnored weak var view: TerminalNSView?
@@ -72,19 +77,26 @@ public final class TerminalScreen {
     @ObservationIgnored private var refreshPending = false
     @ObservationIgnored private var size: PTYSize
 
-    public init(session: any PTYSession, size: PTYSize) {
+    /// `workingDirectory` is where the process starts: what a relative path in
+    /// its output is taken from until it says where it has got to.
+    public init(session: any PTYSession, size: PTYSize, workingDirectory: URL? = nil) {
         self.session = session
         self.size = size
         emulator = TerminalEmulator(
             columns: Int(size.columns), rows: Int(size.rows), scrollbackLines: Self.scrollbackLines
         )
+        emulator.workingDirectory = workingDirectory
 
         let (stream, continuation) = AsyncStream<Data>.makeStream()
         input = continuation
 
         emulator.onReply = { [input] data in input.yield(data) }
         emulator.onBell = { [weak self] in self?.bellCount += 1 }
-        emulator.onWorkingDirectory = { [weak self] in self?.reportedDirectory = $0 }
+        emulator.onWorkingDirectory = { [weak self, emulator] directory in
+            self?.reportedDirectory = directory
+            // A report that says nothing usable leaves the last place known.
+            if let directory { emulator.workingDirectory = directory }
+        }
         emulator.onTitle = { [weak self] in self?.title = $0.isEmpty ? nil : $0 }
         emulator.onProgramStatus = { [weak self] in self?.record($0) }
         emulator.onClipboardWrite = { text in
@@ -205,6 +217,18 @@ public final class TerminalScreen {
 
     /// What is selected, for the clipboard.
     public var selectedText: String? { emulator.selectedText }
+
+    // MARK: Links
+
+    /// Opens what a click landed on.
+    func open(_ target: TerminalLink.Target) {
+        switch target {
+        case .url(let url):
+            NSWorkspace.shared.open(url)
+        case .file(let url, let line, let column):
+            if let onOpenFile { onOpenFile(url, line, column) } else { NSWorkspace.shared.open(url) }
+        }
+    }
 
     // MARK: Size
 
