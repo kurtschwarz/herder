@@ -9,7 +9,7 @@ struct AgentsSettings: View {
 
     var body: some View {
         SettingsPaneContent(pane: .agents) {
-            Text("Each agent is a command run in your login shell, in the root of the worktree a session starts in. The resume command picks a session up again after its window was closed; without one, it starts afresh. \(Agent.sessionToken) in either stands for the session\u{2019}s id: one Herder makes up, or, for an agent that names its own sessions, the one its session lookup finds.")
+            Text("Each agent is a command run in your login shell, in the root of the worktree a session starts in. The resume command picks a session up again after its window was closed; without one, it starts afresh. \(Agent.sessionToken) in either stands for the session\u{2019}s id: one Herder makes up, or, for an agent that names its own sessions, the one its session lookup finds. An agent\u{2019}s environment variables are set for its terminal alone, over the app\u{2019}s own.")
                 .font(.callout)
                 .foregroundStyle(Theme.Palette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -73,6 +73,12 @@ private struct CustomAgentRow: View {
                 commandField("Command, e.g. aider --model sonnet", text: binding(\.command))
                 commandField("Resume command (optional), e.g. aider --restore-chat-history", text: optionalBinding(\.resumeCommand))
                 commandField("Session lookup (optional), lists the agent\u{2019}s sessions", text: optionalBinding(\.sessionLookup))
+                Text("Environment")
+                    .font(.callout)
+                    .foregroundStyle(Theme.Palette.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, Theme.Spacing.tight)
+                EnvironmentEditor(agent: agent, catalog: catalog)
             }
 
             HoverIconButton(icon: Ph.trash, help: "Remove \(agent.displayName)") {

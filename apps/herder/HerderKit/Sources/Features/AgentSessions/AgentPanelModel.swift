@@ -459,12 +459,13 @@ public final class AgentPanelModel {
         recordStart(of: tab, in: workspace)
     }
 
-    /// The app's environment with the agent's over it. A preset's comes from
-    /// the preset as it is now, not the tab's copy: it is Herder's choice, not
-    /// the person's, so a tab saved before it changed takes the change too.
+    /// The app's environment with the agent's over it. The agent's comes from
+    /// the catalog as it is now, not the tab's copy: a preset's is Herder's
+    /// choice and a custom agent's is edited in Settings, so a tab saved
+    /// before either changed takes the change too. The tab's copy is for an
+    /// agent that has since been deleted.
     private func environment(for agent: Agent) -> [String: String] {
-        let preset = Agent.presets.first { $0.id == agent.id }
-        return environment.merging((preset ?? agent).environment ?? [:]) { $1 }
+        environment.merging((catalog.agent(agent.id) ?? agent).environment ?? [:]) { $1 }
     }
 
     /// The person said something to the terminal UI, which is when its
