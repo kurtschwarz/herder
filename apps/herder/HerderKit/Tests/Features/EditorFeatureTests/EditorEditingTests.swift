@@ -36,6 +36,7 @@ import Testing
         store.display(WorkspaceID(root), from: window)
         let state = try #require(await store.open(WorkspaceID(root)))
         await state.refresh()
+        await model.restore(in: state)
         return state
     }
 
@@ -163,6 +164,7 @@ import Testing
         let state = try #require(await store.open(WorkspaceID(root)))
         await state.open(PathKey(canonical: path("sub")))
         await state.refresh()
+        await model.restore(in: state)
         await model.open(url("sub/a.txt"))
         try type("!")
 

@@ -74,6 +74,7 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
         store.display(WorkspaceID(root), from: window)
         let state = try #require(await store.open(WorkspaceID(root)))
         await state.refresh()
+        await model.restore(in: state)
         return state
     }
 
@@ -235,7 +236,8 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
     @Test func theTextIsShownBeforeItIsColoured() async throws {
         let slow = SlowSyntaxHighlighter()
         let model = EditorModel(store: store, files: files, highlighter: slow)
-        _ = try await start(with: ["A.swift"])
+        let started = try await start(with: ["A.swift"])
+        await model.restore(in: started)
         files.seed(path("A.swift"), "let x = 1\n")
 
         // Not awaited: `open` returns once the file is coloured, and the point
@@ -265,6 +267,7 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
         let slow = SlowSyntaxHighlighter()
         let model = EditorModel(store: store, files: files, highlighter: slow)
         let state = try await start(with: ["A.swift", "sub"])
+        await model.restore(in: state)
         files.seed(path("A.swift"), "let x = 1\n")
         slow.finish(with: [SyntaxToken(range: NSRange(location: 0, length: 3), kind: .keyword)])
         await model.open(root.appending(path: "A.swift"))
@@ -308,7 +311,8 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
     @Test func tokensForTextThatIsNoLongerShownAreDropped() async throws {
         let slow = SlowSyntaxHighlighter()
         let model = EditorModel(store: store, files: files, highlighter: slow)
-        _ = try await start(with: ["A.swift"])
+        let started = try await start(with: ["A.swift"])
+        await model.restore(in: started)
         let old = "let verylongname = 1\n"
         files.seed(path("A.swift"), old)
         let opening = Task { await model.open(root.appending(path: "A.swift")) }
@@ -352,7 +356,8 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
 
     @Test func aHighlighterThatFindsNothingStillShowsTheText() async throws {
         let plainModel = EditorModel(store: store, files: files, highlighter: NoSyntaxHighlighter())
-        _ = try await start(with: ["A.swift"])
+        let started = try await start(with: ["A.swift"])
+        await plainModel.restore(in: started)
         files.seed(path("A.swift"), "let x = 1\n")
 
         await plainModel.open(root.appending(path: "A.swift"))

@@ -194,14 +194,21 @@ final class WindowEnvironment {
     /// Opens a file a terminal printed the name of. In the editor if it is in
     /// a worktree this window holds, at the line and column the text named;
     /// anywhere else, or a folder, in whatever the system opens it with.
+    ///
+    /// A file in another worktree switches the window to it. The editor is told
+    /// first and holds the request until the switch gets there, for the same
+    /// reason as ``startAgentSession(in:agent:)``.
     func openTerminalFile(_ url: URL, line: Int?, column: Int?) {
         let key = PathKey(url)
         let isFolder = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
-        guard !isFolder, openWorkspaces.contains(where: { key.isInside($0.root) }) else {
+        guard !isFolder, let id = openWorkspaces.first(where: { key.isInside($0.root) }) else {
             NSWorkspace.shared.open(url)
             return
         }
-        Task { await editor.open(key.url, line: line, column: column) }
+        Task {
+            await editor.requestOpen(key.url, line: line, column: column)
+            activate(id)
+        }
     }
 
     /// Keeps the tree's highlight on the tab showing, so clicking a tab,
