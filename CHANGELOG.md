@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/kurtschwarz/herder/compare/herder-v0.2.7...herder-v0.3.0) (2026-11-12)
+
+
+### Features
+
+* **herder:** always offer Start a session in Working & Waiting ([#57](https://github.com/kurtschwarz/herder/issues/57)) ([6515ea1](https://github.com/kurtschwarz/herder/commit/6515ea100a5046c57c07ad0757307cbf5de3d8ea)), closes [#56](https://github.com/kurtschwarz/herder/issues/56)
+* **herder:** follow program pointer shapes (OSC 22) ([#54](https://github.com/kurtschwarz/herder/issues/54)) ([49b3687](https://github.com/kurtschwarz/herder/commit/49b36874dd0a0d022a944fbb0535636b7243a7d2)), closes [#52](https://github.com/kurtschwarz/herder/issues/52)
+* **herder:** name opencode tabs from OSC 7501 title ([#51](https://github.com/kurtschwarz/herder/issues/51)) ([9964e17](https://github.com/kurtschwarz/herder/commit/9964e17c742cc93a0d90bb2764b518eba0276e9d)), closes [#31](https://github.com/kurtschwarz/herder/issues/31)
+* **herder:** open links in terminal output ([#47](https://github.com/kurtschwarz/herder/issues/47)) ([b9c76eb](https://github.com/kurtschwarz/herder/commit/b9c76eb4e08193c5620b1fed5d32298dd3b8f013)), closes [#46](https://github.com/kurtschwarz/herder/issues/46)
+* **herder:** replace agent tab bar with session header ([#55](https://github.com/kurtschwarz/herder/issues/55)) ([26f59fc](https://github.com/kurtschwarz/herder/commit/26f59fc0d0c219488c1fac56d36433d9f60d826e)), closes [#53](https://github.com/kurtschwarz/herder/issues/53)
+
+
+### Bug Fixes
+
+* **herder:** stop terminal drags moving the window ([#50](https://github.com/kurtschwarz/herder/issues/50)) ([5fc306b](https://github.com/kurtschwarz/herder/commit/5fc306bd428d4102043dae0948eea9f0a2118e9c)), closes [#49](https://github.com/kurtschwarz/herder/issues/49)
+
 ## [0.2.7](https://github.com/kurtschwarz/herder/compare/herder-v0.2.6...herder-v0.2.7) (2026-11-11)
 
 
