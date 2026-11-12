@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.3](https://github.com/kurtschwarz/herder/compare/herder-v0.3.2...herder-v0.3.3) (2026-11-12)
+
+
+### Bug Fixes
+
+* **deps:** update rust to v1.100.0 ([#70](https://github.com/kurtschwarz/herder/issues/70)) ([13b39ef](https://github.com/kurtschwarz/herder/commit/13b39ef89414cd37f3d3ab98a0eff439cce0f8f3))
+* **herder:** keep traffic lights in place after leaving full screen ([#68](https://github.com/kurtschwarz/herder/issues/68)) ([536a224](https://github.com/kurtschwarz/herder/commit/536a2246c692afa433dc4cd3cee400b32743c950)), closes [#67](https://github.com/kurtschwarz/herder/issues/67)
+
 ## [0.3.2](https://github.com/kurtschwarz/herder/compare/herder-v0.3.1...herder-v0.3.2) (2026-11-12)
 
 
