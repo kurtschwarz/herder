@@ -32,18 +32,18 @@ struct WindowChrome: NSViewRepresentable {
     /// opened on.
     var followsActiveSpace = false
 
-    /// Holds the resize observer for as long as the view is alive.
+    /// Holds the layout observers for as long as the view is alive.
     final class Coordinator {
-        var observer: NSObjectProtocol?
+        var observers: [NSObjectProtocol] = []
         var closeObserver: NSObjectProtocol?
         var doubleClickMonitor: Any?
         var onClose: () -> Void = {}
         var closeGuard: CloseGuard?
 
-        // Isolated so it can reach `observer`, which this module's default
+        // Isolated so it can reach `observers`, which this module's default
         // `MainActor` isolation otherwise puts out of a nonisolated deinit's reach.
         isolated deinit {
-            if let observer {
+            for observer in observers {
                 NotificationCenter.default.removeObserver(observer)
             }
             if let closeObserver {
@@ -110,15 +110,22 @@ struct WindowChrome: NSViewRepresentable {
         }
 
         // AppKit lays the buttons back out when the window resizes, so the
-        // adjustment has to be reapplied rather than set once.
-        if coordinator.observer == nil {
-            coordinator.observer = NotificationCenter.default.addObserver(
-                forName: NSWindow.didResizeNotification,
-                object: window,
-                queue: .main
-            ) { notification in
-                guard let window = notification.object as? NSWindow else { return }
-                MainActor.assumeIsolated { Self.positionTrafficLights(in: window) }
+        // adjustment has to be reapplied rather than set once. Leaving full
+        // screen lays them out again after the last resize, as the title bar
+        // returns to the window, so that needs it too.
+        if coordinator.observers.isEmpty {
+            coordinator.observers = [
+                NSWindow.didResizeNotification,
+                NSWindow.didExitFullScreenNotification,
+            ].map { name in
+                NotificationCenter.default.addObserver(
+                    forName: name,
+                    object: window,
+                    queue: .main
+                ) { notification in
+                    guard let window = notification.object as? NSWindow else { return }
+                    MainActor.assumeIsolated { Self.positionTrafficLights(in: window) }
+                }
             }
         }
 
