@@ -44,7 +44,7 @@ import Testing
     /// Opens the workspace and the named files, leaving the last one showing.
     func open(_ names: [String]) async -> (EditorModel, WorkspaceRegistry) {
         let (model, registry) = makeModel()
-        await registry.open(WorkspaceID(root))
+        await model.restore(in: await registry.open(WorkspaceID(root)))
         for name in names {
             await model.open(root.appending(path: name))
         }

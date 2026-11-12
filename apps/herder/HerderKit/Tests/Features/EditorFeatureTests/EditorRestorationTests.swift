@@ -41,7 +41,7 @@ import Testing
     func openAndQuit(_ name: String) async throws {
         let registry = makeRegistry()
         let model = makeModel(registry)
-        _ = await registry.open(WorkspaceID(root))
+        await model.restore(in: await registry.open(WorkspaceID(root)))
         await model.open(root.appending(path: name))
         await registry.close(WorkspaceID(root))
     }
@@ -62,7 +62,7 @@ import Testing
     @Test func noWorkspaceEmptiesThePane() async throws {
         let registry = makeRegistry()
         let model = makeModel(registry)
-        await registry.open(WorkspaceID(root))
+        await model.restore(in: await registry.open(WorkspaceID(root)))
         await model.open(root.appending(path: "a.txt"))
 
         await model.restore(in: nil)
@@ -74,6 +74,7 @@ import Testing
         let registry = makeRegistry()
         let model = makeModel(registry)
         let workspace = try #require(await registry.open(WorkspaceID(root)))
+        await model.restore(in: workspace)
 
         await model.open(root.appending(path: "a.txt"))
 
@@ -137,6 +138,7 @@ import Testing
         let registry = makeRegistry()
         let model = makeModel(registry)
         let workspace = try #require(await registry.open(WorkspaceID(root)))
+        await model.restore(in: workspace)
         await model.open(root.appending(path: "a.txt"))
         await model.open(root.appending(path: "b.txt"))
 
@@ -150,7 +152,7 @@ import Testing
     @Test func aRelaunchReopensEveryTabAndReadsOnlyTheOneShowing() async throws {
         let registry = makeRegistry()
         let model = makeModel(registry)
-        _ = await registry.open(WorkspaceID(root))
+        await model.restore(in: await registry.open(WorkspaceID(root)))
         for name in ["a.txt", "b.txt", "c.txt"] {
             await model.open(root.appending(path: name))
         }
@@ -173,5 +175,114 @@ import Testing
         #expect(fresh.tabs == ["a.txt", "b.txt", "c.txt"].map { PathKey(root.appending(path: $0)) })
         #expect(fresh.file == root.appending(path: "b.txt"))
         #expect(reads.reads == [root.appending(path: "b.txt").path(percentEncoded: false)])
+    }
+
+    // MARK: - Scope
+
+    func path(_ folder: URL, _ name: String) -> PathKey {
+        PathKey(folder.appending(path: name))
+    }
+
+    @Test func aFileFromAnotherWorkspaceIsRefused() async throws {
+        let registry = makeRegistry()
+        let model = makeModel(registry)
+        let api = try #require(await registry.open(WorkspaceID(root)))
+        let web = try #require(await registry.open(WorkspaceID(other)))
+        await model.restore(in: api)
+        await model.open(root.appending(path: "a.txt"))
+
+        await model.open(other.appending(path: "a.txt"))
+
+        #expect(model.tabs == [path(root, "a.txt")])
+        #expect(model.file == root.appending(path: "a.txt"))
+        #expect(web.uiState(EditorUIState.self).files.isEmpty)
+    }
+
+    @Test func nothingOpensBeforeAWorkspaceIsRestored() async throws {
+        let registry = makeRegistry()
+        let model = makeModel(registry)
+        await registry.open(WorkspaceID(root))
+
+        await model.open(root.appending(path: "a.txt"))
+
+        #expect(model.tabs.isEmpty)
+    }
+
+    @Test func switchingShowsOnlyTheOtherWorkspacesTabs() async throws {
+        let registry = makeRegistry()
+        let model = makeModel(registry)
+        let api = await registry.open(WorkspaceID(root))
+        let web = await registry.open(WorkspaceID(other))
+        await model.restore(in: api)
+        await model.open(root.appending(path: "a.txt"))
+        await model.open(root.appending(path: "b.txt"))
+
+        await model.restore(in: web)
+        #expect(model.tabs.isEmpty)
+        await model.restore(in: api)
+
+        #expect(model.tabs == [path(root, "a.txt"), path(root, "b.txt")])
+        #expect(model.file == root.appending(path: "b.txt"))
+    }
+
+    @Test func restoringCleansWhatDoesNotBelongToTheWorkspace() async throws {
+        let registry = makeRegistry()
+        let model = makeModel(registry)
+        let api = try #require(await registry.open(WorkspaceID(root)))
+        let state = api.uiState(EditorUIState.self)
+        state.files = [path(root, "a.txt"), path(other, "a.txt"), path(root, "b.txt")]
+        state.pinned = [path(other, "a.txt"), path(root, "a.txt")]
+        state.active = path(other, "a.txt")
+
+        await model.restore(in: api)
+
+        #expect(model.tabs == [path(root, "a.txt"), path(root, "b.txt")])
+        #expect(model.openTabs.map(\.isPinned) == [true, false])
+        #expect(model.file == root.appending(path: "a.txt"))
+        #expect(state.files == [path(root, "a.txt"), path(root, "b.txt")])
+        #expect(state.pinned == [path(root, "a.txt")])
+        #expect(state.active == path(root, "a.txt"))
+    }
+
+    @Test func aRequestForAnotherWorkspaceIsAnsweredByTheRestoreThatFollows() async throws {
+        let registry = makeRegistry()
+        let model = makeModel(registry)
+        let api = try #require(await registry.open(WorkspaceID(root)))
+        let web = try #require(await registry.open(WorkspaceID(other)))
+        await model.restore(in: api)
+        await model.open(root.appending(path: "a.txt"))
+
+        await model.requestOpen(other.appending(path: "c.txt"), line: 1, column: 1)
+        #expect(model.file == root.appending(path: "a.txt"))
+        await model.close()
+        await model.restore(in: web)
+
+        #expect(model.file == other.appending(path: "c.txt"))
+        #expect(model.activeBuffer != nil)
+        #expect(api.uiState(EditorUIState.self).files == [path(root, "a.txt")])
+    }
+
+    @Test func aRequestForTheWorkspaceShowingOpensAtOnce() async throws {
+        let registry = makeRegistry()
+        let model = makeModel(registry)
+        await model.restore(in: await registry.open(WorkspaceID(root)))
+
+        await model.requestOpen(root.appending(path: "c.txt"), line: nil, column: nil)
+
+        #expect(model.file == root.appending(path: "c.txt"))
+    }
+
+    @Test func aHeldRequestIsDroppedWhenAnotherWorkspaceComesFirst() async throws {
+        let registry = makeRegistry()
+        let model = makeModel(registry)
+        let api = try #require(await registry.open(WorkspaceID(root)))
+        let web = try #require(await registry.open(WorkspaceID(other)))
+        await model.restore(in: api)
+
+        await model.requestOpen(other.appending(path: "c.txt"), line: nil, column: nil)
+        await model.restore(in: api)
+        await model.restore(in: web)
+
+        #expect(model.tabs.isEmpty)
     }
 }

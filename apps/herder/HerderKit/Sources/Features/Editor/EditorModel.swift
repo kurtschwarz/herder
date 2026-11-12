@@ -42,6 +42,15 @@ public final class EditorModel {
     private let highlighter: any SyntaxHighlighter
 
     private var worktree: Workspace?
+
+    /// The workspace the pane was last restored into. Everything the editor
+    /// opens, saves and remembers goes through it; a file outside it is refused.
+    private var scope: Workspace?
+
+    /// A file asked for in a workspace the window has not got to yet, held
+    /// until the restore that follows the switch. See ``requestOpen(_:line:column:)``.
+    private var pendingOpen: (url: URL, line: Int?, column: Int?)?
+
     private var registration: Workspace.Registration?
     private var fileKey: PathKey?
 
@@ -154,7 +163,8 @@ public final class EditorModel {
 
     /// Shows `url`, opening a tab for it if it has none. Does nothing for the
     /// file that is already showing, so a repeat selection keeps the scroll
-    /// position, and nothing for a path outside every worktree being held.
+    /// position, and nothing for a path outside the workspace the pane is
+    /// restored into.
     public func open(_ url: URL) async {
         await open(PathKey(canonical: url.path(percentEncoded: false)), remembering: true)
     }
@@ -182,15 +192,48 @@ public final class EditorModel {
     /// of looking at it.
     ///
     /// A remembered file that has since gone is shown as deleted, and stays
-    /// remembered.
+    /// remembered. One that lies outside the workspace is dropped, tab, pin and
+    /// active file alike, and the cleaned state is written back: it got there
+    /// from an editor that was not scoped, and this repairs it.
+    ///
+    /// Then answers the open held by ``requestOpen(_:line:column:)``, if any,
+    /// and drops it whether it was answered or not.
     public func restore(in workspace: Workspace?) async {
         close()
+        let requested = pendingOpen
+        pendingOpen = nil
         guard let workspace else { return }
+        scope = workspace
         let state = workspace.uiState(EditorUIState.self)
-        tabs = state.files
+        tabs = state.files.filter { $0.isInside(workspace.root) }
         pinned = Set(state.pinned).intersection(tabs)
-        guard let active = state.active ?? state.files.first else { return }
-        await open(active, remembering: false)
+        let remembered = state.active.flatMap { tabs.contains($0) ? $0 : nil }
+        if let active = remembered ?? tabs.first {
+            await open(active, remembering: false)
+        }
+        if tabs != state.files || fileKey != state.active || pinned.count != state.pinned.count {
+            remember(on: workspace)
+        }
+        if let requested {
+            await open(requested.url, line: requested.line, column: requested.column)
+        }
+    }
+
+    /// Asks for `url` to be shown at `line` and `column` once the pane is
+    /// restored into the workspace holding it, which the window is already on
+    /// its way to: the workspace opens asynchronously. If the pane is in it
+    /// now, the file opens straight away.
+    ///
+    /// Answered by the next ``restore(in:)``, and dropped by it if the file is
+    /// not inside, so a request for a workspace that never came cannot open the
+    /// file somewhere else later.
+    public func requestOpen(_ url: URL, line: Int?, column: Int?) async {
+        let key = PathKey(canonical: url.path(percentEncoded: false))
+        if let scope, key.isInside(scope.root) {
+            await open(url, line: line, column: column)
+        } else {
+            pendingOpen = (url, line, column)
+        }
     }
 
     /// Closes the tab for `key`. When it was the one showing, the tab to its
@@ -210,7 +253,7 @@ public final class EditorModel {
             return
         }
         let next = tabs.indices.contains(index) ? tabs[index] : tabs.last
-        guard let next, let state = store.state(containing: next) else {
+        guard let next, let state = scope else {
             let leaving = worktree
             clear()
             leaving.map(remember(on:))
@@ -233,6 +276,7 @@ public final class EditorModel {
     /// coming back to the checkout finds the typing where it was left.
     public func close() {
         clear()
+        scope = nil
         tabs = []
         pinned = []
         for document in documents.documents where !document.isDirty { discard(document) }
@@ -297,7 +341,7 @@ public final class EditorModel {
     }
 
     private func open(_ key: PathKey, remembering: Bool) async {
-        guard key != fileKey, let state = store.state(containing: key) else { return }
+        guard key != fileKey, let state = scope, key.isInside(state.root) else { return }
         if !tabs.contains(key) { tabs.append(key) }
         await show(key, in: state, remembering: remembering)
     }
