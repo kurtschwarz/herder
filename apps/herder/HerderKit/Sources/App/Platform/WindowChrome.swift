@@ -112,10 +112,14 @@ struct WindowChrome: NSViewRepresentable {
         // AppKit lays the buttons back out when the window resizes, so the
         // adjustment has to be reapplied rather than set once. Leaving full
         // screen lays them out again after the last resize, as the title bar
-        // returns to the window, so that needs it too.
+        // returns to the window, so that needs it too. The buttons show at the
+        // default position for the whole exit animation, beyond reach of
+        // moving them, so they are hidden until it ends. Showing them lays
+        // them out again, so they are moved after that, not before.
         if coordinator.observers.isEmpty {
             coordinator.observers = [
                 NSWindow.didResizeNotification,
+                NSWindow.willExitFullScreenNotification,
                 NSWindow.didExitFullScreenNotification,
             ].map { name in
                 NotificationCenter.default.addObserver(
@@ -124,7 +128,19 @@ struct WindowChrome: NSViewRepresentable {
                     queue: .main
                 ) { notification in
                     guard let window = notification.object as? NSWindow else { return }
-                    MainActor.assumeIsolated { Self.positionTrafficLights(in: window) }
+                    let name = notification.name
+                    MainActor.assumeIsolated {
+                        switch name {
+                        case NSWindow.willExitFullScreenNotification:
+                            Self.setTrafficLightsVisible(false, in: window)
+                        case NSWindow.didExitFullScreenNotification:
+                            Self.setTrafficLightsVisible(true, in: window)
+                            Self.positionTrafficLights(in: window)
+                            Self.updateTrafficLightTracking(in: window)
+                        default:
+                            Self.positionTrafficLights(in: window)
+                        }
+                    }
                 }
             }
         }
@@ -244,6 +260,24 @@ struct WindowChrome: NSViewRepresentable {
             let topInset = trafficLightCentre - size.height / 2
             let top = bar.isFlipped ? topInset : bar.bounds.height - topInset - size.height
             button.setFrameOrigin(CGPoint(x: left, y: top))
+        }
+    }
+
+    /// Rebuilds the areas that show the buttons' symbols on hover, which the
+    /// title bar sets up around wherever the buttons were when it last laid
+    /// them out.
+    private static func updateTrafficLightTracking(in window: NSWindow) {
+        var view: NSView? = window.standardWindowButton(.closeButton)
+        while let current = view {
+            current.updateTrackingAreas()
+            view = current.superview
+        }
+    }
+
+    /// By alpha rather than `isHidden`, which AppKit sets on the buttons itself.
+    private static func setTrafficLightsVisible(_ visible: Bool, in window: NSWindow) {
+        for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            window.standardWindowButton(type)?.alphaValue = visible ? 1 : 0
         }
     }
 
