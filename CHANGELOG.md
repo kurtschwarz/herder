@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/kurtschwarz/herder/compare/herder-v0.3.0...herder-v0.3.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **herder:** keep a reopened session's title until the person speaks ([#60](https://github.com/kurtschwarz/herder/issues/60)) ([d79e305](https://github.com/kurtschwarz/herder/commit/d79e305562ab2ac963c2ff25f88f47bf915c2ed9))
+* **herder:** scope open editor files to the worktree showing ([#62](https://github.com/kurtschwarz/herder/issues/62)) ([1bfd633](https://github.com/kurtschwarz/herder/commit/1bfd633f2c380afb9eb46f9925c34cb47f0cbfe5)), closes [#59](https://github.com/kurtschwarz/herder/issues/59)
+
 ## [0.3.0](https://github.com/kurtschwarz/herder/compare/herder-v0.2.7...herder-v0.3.0) (2026-11-12)
 
 
