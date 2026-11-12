@@ -44,6 +44,7 @@ struct EnvironmentEditor: View {
             .textFieldStyle(.plain)
             .font(.system(size: 12, design: .monospaced))
             .padding(.horizontal, Theme.Spacing.normal)
+            .frame(maxWidth: .infinity)
             .frame(height: Theme.Size.control)
             .fieldSurface()
     }
