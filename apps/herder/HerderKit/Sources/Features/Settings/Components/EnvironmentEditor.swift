@@ -21,17 +21,19 @@ struct EnvironmentEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
             ForEach($rows) { $row in
-                HStack(spacing: Theme.Spacing.tight) {
-                    field("NAME", text: $row.name)
-                        .foregroundStyle(
-                            row.name.isEmpty || row.hasValidName ? Theme.Palette.text : Theme.Palette.warning
-                        )
-                        .frame(width: 200)
-                    field("value", text: $row.value)
-                    HoverIconButton(icon: Ph.trash, help: "Remove \(row.name.isEmpty ? "variable" : row.name)") {
-                        rows.removeAll { $0.id == row.id }
+                VStack(spacing: Theme.Spacing.tight) {
+                    HStack(spacing: Theme.Spacing.tight) {
+                        field("NAME", text: $row.name)
+                            .foregroundStyle(
+                                row.name.isEmpty || row.hasValidName ? Theme.Palette.text : Theme.Palette.warning
+                            )
+                        HoverIconButton(icon: Ph.trash, help: "Remove \(row.name.isEmpty ? "variable" : row.name)") {
+                            rows.removeAll { $0.id == row.id }
+                        }
                     }
+                    field("value", text: $row.value)
                 }
+                .padding(.bottom, Theme.Spacing.tight)
             }
             Button("Add Variable") { rows.append(EnvironmentVariable(name: "", value: "")) }
                 .buttonStyle(.secondary)
