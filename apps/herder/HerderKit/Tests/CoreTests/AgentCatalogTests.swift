@@ -30,6 +30,20 @@ import Testing
         #expect(relaunched.lastUsed == mine)
     }
 
+    @Test func aCustomAgentsEnvironmentSurvivesARelaunch() async throws {
+        let catalog = AgentCatalog(state: state)
+        var mine = catalog.add()
+        mine.command = "opencode"
+        mine.environment = ["ANTHROPIC_BASE_URL": "http://localhost:4000"]
+        catalog.update(mine)
+        await catalog.flushSaves()
+
+        let relaunched = AgentCatalog(state: state)
+        await relaunched.load()
+
+        #expect(relaunched.agent(mine.id)?.environment == ["ANTHROPIC_BASE_URL": "http://localhost:4000"])
+    }
+
     @Test func removingTheAgentUsedLastFallsBackToTheDefault() {
         let catalog = AgentCatalog(state: state)
         let mine = catalog.add()

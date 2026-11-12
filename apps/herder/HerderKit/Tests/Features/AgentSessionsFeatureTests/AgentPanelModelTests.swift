@@ -147,6 +147,35 @@ import Testing
         #expect(model.activeTab.map { model.title(of: $0) } == "Aider")
     }
 
+    @Test func aCustomAgentsEnvironmentBeatsTheApps() async throws {
+        let (model, _, _) = try await shown()
+        var aider = catalog.add()
+        aider.command = "aider"
+        aider.environment = ["SHELL": "/bin/custom", "ANTHROPIC_BASE_URL": "http://localhost:4000"]
+        catalog.update(aider)
+
+        await model.startSession(aider)
+
+        let environment = try #require(pty.specs.last?.environment)
+        #expect(environment["ANTHROPIC_BASE_URL"] == "http://localhost:4000")
+        #expect(environment["SHELL"] == "/bin/custom")
+    }
+
+    @Test func anEditToACustomAgentsEnvironmentReachesATabThatIsAlreadyOpen() async throws {
+        let (model, _, _) = try await shown()
+        var aider = catalog.add()
+        aider.command = "aider"
+        catalog.update(aider)
+        await model.startSession(aider)
+        let tab = try #require(model.activeTab)
+
+        aider.environment = ["ANTHROPIC_BASE_URL": "http://localhost:4000"]
+        catalog.update(aider)
+        await model.reattach(tab)
+
+        #expect(pty.specs.last?.environment["ANTHROPIC_BASE_URL"] == "http://localhost:4000")
+    }
+
     @Test func anAgentWithNoCommandStartsNothing() async throws {
         let (model, _, _) = try await shown()
 
