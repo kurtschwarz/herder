@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/kurtschwarz/herder/compare/herder-v0.3.1...herder-v0.3.2) (2026-11-12)
+
+
+### Bug Fixes
+
+* **herder:** set env vars on custom agents ([#65](https://github.com/kurtschwarz/herder/issues/65)) ([04792ba](https://github.com/kurtschwarz/herder/commit/04792ba1ef13f5929b5950068bbde5701669c74b))
+
 ## [0.3.1](https://github.com/kurtschwarz/herder/compare/herder-v0.3.0...herder-v0.3.1) (2026-11-12)
 
 
