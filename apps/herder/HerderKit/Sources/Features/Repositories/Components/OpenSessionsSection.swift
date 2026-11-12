@@ -65,11 +65,13 @@ struct OpenSessionsSection: View {
             // from a click, and catch up when it leaves.
             .onHover { heldOrder = $0 ? sessions.map(\.id) : nil }
 
-            if sessions.isEmpty {
-                startSessionButton
-            }
+            startSessionButton
         }
     }
+
+    /// The list length at which the row at its foot can be pushed out of
+    /// sight, and the header's plus starts to show.
+    static let headerPlusThreshold = 5
 
     private func header(count: Int) -> some View {
         HStack(spacing: Theme.Spacing.normal) {
@@ -84,7 +86,11 @@ struct OpenSessionsSection: View {
                 .frame(minWidth: 18, minHeight: 18)
                 .background(Circle().fill(Theme.Palette.control))
             Spacer(minLength: 0)
+            // Hidden rather than removed, so the header keeps its height.
             newSessionButton
+                .opacity(count < Self.headerPlusThreshold ? 0 : 1)
+                .allowsHitTesting(count >= Self.headerPlusThreshold)
+                .accessibilityHidden(count < Self.headerPlusThreshold)
         }
         .padding(.horizontal, Theme.Spacing.normal + 2)
         .padding(.vertical, Theme.Spacing.tight)
@@ -100,7 +106,9 @@ struct OpenSessionsSection: View {
         model.beginNewSession(in: repository, active: active?.id.url)
     }
 
-    /// Opens the modal, which has the workspace selector to say where.
+    /// Opens the modal, which has the workspace selector to say where. Only
+    /// shown once the list is long enough to push the Start a session row
+    /// out of sight, which is the usual way in.
     private var newSessionButton: some View {
         Button(action: beginNewSession) {
             PhIcon(Ph.plus, size: 12)
@@ -110,8 +118,8 @@ struct OpenSessionsSection: View {
         .help("New session")
     }
 
-    /// What the list shows while there is nothing in it: the same thing as
-    /// the plus, said in words.
+    /// The foot of the list, always: the usual way to start a session. The
+    /// header's plus is the same thing for lists too long to see the foot of.
     private var startSessionButton: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.Radius.control + 2, style: .continuous)
         return Button(action: beginNewSession) {
