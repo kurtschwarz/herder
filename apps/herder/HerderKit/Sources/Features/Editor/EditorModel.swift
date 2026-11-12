@@ -211,7 +211,10 @@ public final class EditorModel {
         if let active = remembered ?? tabs.first {
             await open(active, remembering: false)
         }
-        if tabs != state.files || fileKey != state.active || pinned.count != state.pinned.count {
+        let dropped = tabs.count != state.files.count
+            || pinned.count != state.pinned.count
+            || (state.active != nil && state.active != fileKey)
+        if dropped {
             remember(on: workspace)
         }
         if let requested {

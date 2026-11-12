@@ -252,13 +252,13 @@ import Testing
         await model.restore(in: api)
         await model.open(root.appending(path: "a.txt"))
 
-        await model.requestOpen(other.appending(path: "c.txt"), line: 1, column: 1)
+        await model.requestOpen(other.appending(path: "c.txt"), line: 1, column: 5)
         #expect(model.file == root.appending(path: "a.txt"))
         await model.close()
         await model.restore(in: web)
 
         #expect(model.file == other.appending(path: "c.txt"))
-        #expect(model.activeBuffer != nil)
+        #expect(model.activeBuffer?.selectedRange == NSRange(location: 4, length: 0))
         #expect(api.uiState(EditorUIState.self).files == [path(root, "a.txt")])
     }
 
