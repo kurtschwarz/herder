@@ -207,11 +207,15 @@ final class AgentTab: Identifiable {
     /// (OSC 7501) is a label and used as it is; failing that, the terminal
     /// title, without the spinner or mark many put in front of it. `nil`
     /// until it says something with a word in it.
+    ///
+    /// The terminal title only counts once the person has spoken in the tab:
+    /// a program starting again sets a placeholder there before it knows
+    /// which session it is, and opening or reading a session must not rename it.
     var programTitle: String? {
         let label = screen?.programStatuses.first { $0.id.isEmpty }?.title
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let label, !label.isEmpty { return label }
-        guard let title = screen?.title else { return nil }
+        guard hasConversed, let title = screen?.title else { return nil }
         let trimmed = title.drop { !$0.isLetter && !$0.isNumber }
             .trimmingCharacters(in: .whitespaces)
         return trimmed.isEmpty ? nil : trimmed

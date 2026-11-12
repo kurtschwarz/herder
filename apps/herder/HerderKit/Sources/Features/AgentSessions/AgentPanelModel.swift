@@ -132,9 +132,10 @@ public final class AgentPanelModel {
     }
 
     /// What the header and the sidebar call a session: the person's name, else
-    /// the title the program reports, else ``title(of:)``.
+    /// the title the program reports, else the one on record, else
+    /// ``title(of:)``.
     func subject(of tab: AgentTab) -> String {
-        tab.customName ?? tab.programTitle ?? title(of: tab)
+        tab.customName ?? tab.programTitle ?? sessions.store.session(tab.id)?.title ?? title(of: tab)
     }
 
     // MARK: Showing a workspace

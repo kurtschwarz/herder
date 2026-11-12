@@ -307,6 +307,72 @@ import Testing
         #expect(model.focusRequest == focus)
     }
 
+    // MARK: Titles of sessions picked up again
+
+    /// A session titled "Fix the build" by its program, ended and read in a new tab.
+    func titledAndReading() async throws -> (AgentPanelModel, AgentSession) {
+        let (model, record) = try await started()
+        let label = Data("Fix the build".utf8).base64EncodedString()
+        pty.sessions[0].emit("\u{1b}]7501;state=idle:title=\(label)\u{07}")
+        try await eventually("the title is written down") { sessions.session(record.id)?.title == "Fix the build" }
+        return (model, try await reading(model, record))
+    }
+
+    func terminalTitle(of model: AgentPanelModel, is title: String) async throws {
+        pty.sessions.last?.emit("\u{1b}]0;\(title)\u{07}")
+        try await eventually("the terminal title arrives") { model.activeTab?.screen?.title == title }
+    }
+
+    @Test func aTerminalTitleDoesNotRenameASessionNobodyHasSpokenTo() async throws {
+        let (model, ended) = try await titledAndReading()
+
+        try await terminalTitle(of: model, is: "OpenCode")
+        await model.show(model.workspace)
+        await sessions.flushSaves()
+
+        #expect(sessions.session(ended.id) == ended)
+        #expect(model.subject(of: try #require(model.activeTab)) == "Fix the build")
+    }
+
+    @Test func aSessionStartingAgainIsCalledWhatItWasBeforeItSaysAnything() async throws {
+        let (model, _) = try await titledAndReading()
+
+        let tab = try #require(model.activeTab)
+        #expect(model.subject(of: tab) == "Fix the build")
+    }
+
+    @Test func aTerminalTitleRenamesASessionOnceThePersonHasSpoken() async throws {
+        let (model, record) = try await titledAndReading()
+
+        model.activeTab?.screen?.send(text: "go on\r")
+        try await terminalTitle(of: model, is: "Ship it")
+
+        try await eventually("it is renamed") { sessions.session(record.id)?.title == "Ship it" }
+        #expect(model.subject(of: try #require(model.activeTab)) == "Ship it")
+    }
+
+    @Test func aTitleTheProgramReportsRenamesASessionWithoutAnyTyping() async throws {
+        let (model, record) = try await titledAndReading()
+
+        let label = Data("Ship it".utf8).base64EncodedString()
+        pty.sessions.last?.emit("\u{1b}]7501;state=idle:title=\(label)\u{07}")
+
+        try await eventually("it is renamed") { sessions.session(record.id)?.title == "Ship it" }
+        #expect(model.subject(of: try #require(model.activeTab)) == "Ship it")
+    }
+
+    @Test func aNameThePersonGaveBeatsTheProgramsTitle() async throws {
+        let (model, record) = try await titledAndReading()
+        model.rename(record.id, to: "Scroll fix")
+
+        let label = Data("Ship it".utf8).base64EncodedString()
+        pty.sessions.last?.emit("\u{1b}]7501;state=idle:title=\(label)\u{07}")
+        try await eventually("the label arrives") { model.activeTab?.programTitle == "Ship it" }
+
+        #expect(model.subject(of: try #require(model.activeTab)) == "Scroll fix")
+        #expect(sessions.session(record.id)?.title == "Scroll fix")
+    }
+
     @Test func aSessionWithNoIDIsNotPickedUp() async throws {
         let codex = try #require(Agent.presets.first { $0.id == "codex" })
         let (model, record) = try await started(codex)
