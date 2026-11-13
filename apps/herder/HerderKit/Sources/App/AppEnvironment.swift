@@ -70,6 +70,7 @@ public final class AppEnvironment {
     private let git: any GitClient
     private let files: any FileClient
     private let folderPicker: any FolderPickerClient
+    private let saveLocation: any SaveLocationClient
     private let highlighter: any SyntaxHighlighter
     private let pty: any PTYClient
     private let commands: any CommandClient
@@ -171,6 +172,7 @@ public final class AppEnvironment {
         clock: any ClockClient,
         persistence: PersistenceStack,
         highlighter: any SyntaxHighlighter = TreeSitterHighlighter(),
+        saveLocation: any SaveLocationClient = LiveSaveLocationClient(),
         pty: any PTYClient = LivePTYClient(),
         commands: any CommandClient = LiveCommandClient(),
         leftovers: (any LeftoverAgentClient)? = nil,
@@ -194,6 +196,7 @@ public final class AppEnvironment {
         self.git = git
         self.files = files
         self.folderPicker = folderPicker
+        self.saveLocation = saveLocation
         self.highlighter = highlighter
         self.pty = pty
         self.commands = commands
@@ -222,7 +225,7 @@ public final class AppEnvironment {
             repositories: list,
             repositoryList: repositoryList,
             fileTree: FileTreeModel(store: worktrees),
-            editor: EditorModel(store: worktrees, files: files, highlighter: highlighter),
+            editor: EditorModel(store: worktrees, files: files, highlighter: highlighter, saveLocation: saveLocation),
             terminal: TerminalModel(pty: pty, clock: clock),
             agentPanel: panel,
             worktrees: worktrees,
@@ -238,7 +241,7 @@ public final class AppEnvironment {
     /// had its scene lost, and the two look alike: quitting with every window
     /// closed loses them all. So when no other window is open, it adopts the one
     /// used last, and a relaunch never looks like the app forgot everything.
-    /// With another window open it is a blank slate, which is what ⌘N means.
+    /// With another window open it is a blank slate, which is what ⌃⌘N means.
     ///
     /// Waits for ``start()``, because the folder access a workspace needs is
     /// taken there and a window's task may run before the app's.

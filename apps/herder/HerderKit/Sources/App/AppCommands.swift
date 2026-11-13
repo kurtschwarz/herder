@@ -6,6 +6,10 @@ extension FocusedValues {
     /// by each window's root view, so a menu command lands in the right one.
     @Entry var beginAddingRepository: (() -> Void)?
 
+    /// Opens an untitled editor tab in the focused window. `nil` when it is
+    /// showing no workspace.
+    @Entry var newEditorFile: (() -> Void)?
+
     /// Closes the editor tab showing in the focused window. `nil` when that
     /// window has none open, which is what leaves ⌘W closing the window.
     @Entry var closeEditorTab: (() -> Void)?
@@ -42,6 +46,7 @@ extension FocusedValues {
 /// window in front" is what the user means.
 public struct AppCommands: Commands {
     @FocusedValue(\.beginAddingRepository) private var beginAddingRepository
+    @FocusedValue(\.newEditorFile) private var newEditorFile
     @FocusedValue(\.closeEditorTab) private var closeEditorTab
     @FocusedValue(\.saveEditorFile) private var saveEditorFile
     @FocusedValue(\.selectPreviousEditorTab) private var selectPreviousEditorTab
@@ -73,8 +78,17 @@ public struct AppCommands: Commands {
                 .keyboardShortcut(",", modifiers: .command)
         }
 
-        // ⌘N already opens a new window.
-        CommandGroup(after: .newItem) {
+        // ⌘N is a new file, so the window the scene gives itself moves to ⌃⌘N.
+        CommandGroup(replacing: .newItem) {
+            Button("New Window") { openWindow(id: MainWindow.id) }
+                .keyboardShortcut("n", modifiers: [.command, .control])
+
+            Divider()
+
+            Button("New File") { newEditorFile?() }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(newEditorFile == nil)
+
             Button("Add Repository…") { beginAddingRepository?() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(beginAddingRepository == nil)

@@ -74,6 +74,21 @@ public struct PathKey: Hashable, Sendable, Comparable, CustomStringConvertible {
         PathKey(canonical: path == "/" ? "/" + relative : path + "/" + relative)
     }
 
+    /// The folder name no real path can have, because it holds a NUL.
+    private static let untitledFolder = "\u{0}untitled"
+
+    /// The key of a tab that has no file yet. It lies inside `root`, so the
+    /// workspace it belongs to is told apart from another's that has a tab of
+    /// the same `name`, and it names nothing on disk.
+    public static func untitled(_ name: String, in root: PathKey) -> PathKey {
+        root.appending(untitledFolder + "/" + name)
+    }
+
+    /// Whether this is the key of a tab with no file behind it.
+    public var isUntitled: Bool {
+        path.contains("/" + Self.untitledFolder + "/")
+    }
+
     /// The folder holding this one, or `nil` at the root of the volume.
     public var parent: PathKey? {
         guard path != "/", let slash = path.lastIndex(of: "/") else { return nil }

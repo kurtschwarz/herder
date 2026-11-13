@@ -20,7 +20,7 @@ final class EditorUIState: PersistedWorkspaceUIState {
 
     /// The files with a tab, in the order they were opened. Kept when a file
     /// goes from disk: the tab shows it struck through, and only closing it
-    /// forgets it.
+    /// forgets it. Includes the untitled tabs, for as long as the app runs.
     var files: [PathKey] = []
 
     /// Which of ``files`` was showing.
@@ -59,8 +59,16 @@ final class EditorUIState: PersistedWorkspaceUIState {
     /// As paths, not `PathKey`s: see ``FileTreeUIState`` for why `PathKey`
     /// is not `Codable`. Canonical when written, so they come back through
     /// `init(canonical:)`.
+    ///
+    /// Untitled tabs are in ``files`` so that switching away and back finds
+    /// them, and are left out here: they have no path and do not survive
+    /// quitting.
     func encode() throws -> Data {
-        try JSONEncoder().encode(Stored(files: files.map(\.path), active: active?.path, pinned: pinned.map(\.path)))
+        let saved = files.filter { !$0.isUntitled }
+        let showing = active.flatMap { $0.isUntitled ? nil : $0 }
+        return try JSONEncoder().encode(
+            Stored(files: saved.map(\.path), active: showing?.path, pinned: pinned.filter { !$0.isUntitled }.map(\.path))
+        )
     }
 
     func restore(from data: Data) throws {
