@@ -160,7 +160,7 @@ struct OpenSessionsSection: View {
 
 /// One session: what it is called and how long since it last did anything,
 /// under that what it seems to be doing, and the worktree it is in. Right
-/// click to rename or close it.
+/// click to rename or close it, or hover for an X that closes it.
 private struct AgentSessionRow: View {
     let session: AgentSession
     let branch: String
@@ -201,6 +201,20 @@ private struct AgentSessionRow: View {
                         Text(RelativeAge.short(from: lastActivity, now: context.date))
                             .font(.system(size: 11))
                             .foregroundStyle(Theme.Palette.tertiaryText)
+                            // Wide enough for the X, which is laid over the
+                            // age rather than swapped for it, so the row's
+                            // size and the title's truncation stay put.
+                            .frame(minWidth: 20)
+                            .opacity(showsClose ? 0 : 1)
+                            .overlay {
+                                if showsClose {
+                                    Button(action: close) {
+                                        PhIcon(Ph.xBold, size: 10)
+                                    }
+                                    .buttonStyle(.icon(size: 20))
+                                    .help("Close session")
+                                }
+                            }
                     }
                 }
                 Text(summary)
@@ -242,6 +256,8 @@ private struct AgentSessionRow: View {
     /// Every session listed here has a tab open; paused is what one would
     /// be if the store said nothing.
     private var state: AgentSession.State { session.state ?? .paused }
+
+    private var showsClose: Bool { isHovering && !isRenaming }
 
     private var lastActivity: Date { session.live?.lastActivity ?? session.lastSeenAt }
 
