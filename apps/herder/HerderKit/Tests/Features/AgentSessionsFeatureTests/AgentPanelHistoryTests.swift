@@ -168,6 +168,38 @@ import Testing
         return ended
     }
 
+    @Test func theSessionInFrontIsEndedWhileItIsReadAndNotOnceItReopens() async throws {
+        let (model, record) = try await started()
+        #expect(model.endedSessionNotice == nil)
+
+        _ = try await reading(model, record)
+        #expect(model.endedSessionNotice == .worktreeKept)
+
+        model.activeTab?.screen?.send(text: "hello again\r")
+        try await eventually("it reopens") { sessions.session(record.id)?.isEnded == false }
+        #expect(model.endedSessionNotice == nil)
+    }
+
+    @Test func aSessionWhoseWorktreeIsGoneIsReadInAnotherAndSaysSo() async throws {
+        let (model, record) = try await started()
+        model.closeActiveTab()
+        let ended = try #require(sessions.session(record.id))
+        let registry = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
+        let other = URL(filePath: "/code/api-main")
+        await model.show(try #require(await registry.open(WorkspaceID(other))))
+
+        await model.resume(ended, in: WorkspaceID(other))
+
+        #expect(model.activeTab?.id == record.id)
+        #expect(pty.specs.last?.workingDirectory == other)
+        #expect(pty.specs.last?.arguments.last == "exec claude --resume \(record.id.uuidString.lowercased())")
+        #expect(model.endedSessionNotice == .worktreeRemoved(agent: "Claude Code", carriedOnIn: "api-main"))
+
+        model.activeTab?.screen?.send(text: "hello again\r")
+        try await eventually("it reopens") { sessions.session(record.id)?.isEnded == false }
+        #expect(model.endedSessionNotice == nil)
+    }
+
     @Test func readingAnEndedSessionOpensItsTabAndLeavesItEnded() async throws {
         let (model, record) = try await started()
         let ended = try await reading(model, record)

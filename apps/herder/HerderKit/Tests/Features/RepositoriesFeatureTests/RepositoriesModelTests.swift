@@ -451,6 +451,21 @@ import Testing
 
         #expect(source.key == PathKey(URL(filePath: "/code/api")))
         #expect(source.worktrees.count == 2)
+        // A session whose worktree is gone is picked up in the main one.
+        #expect(source.fallback == WorkspaceID(URL(filePath: "/code/api")))
+    }
+
+    @Test func aBareRepositorysFallbackIsItsFirstWorktree() async throws {
+        let repository = try await addRepository("/code/bare")
+        git.seed(worktrees: [
+            GitWorktree(path: URL(filePath: "/code/bare/b"), checkout: .branch("b"), isMainWorkingTree: false),
+            GitWorktree(path: URL(filePath: "/code/bare/main"), checkout: .branch("main"), isMainWorkingTree: false),
+        ], at: URL(filePath: "/code/bare"))
+        await model.refresh([repository])
+
+        let source = try #require(model.historySources(of: [repository]).first)
+
+        #expect(source.fallback == WorkspaceID(URL(filePath: "/code/bare/b")))
     }
 
     /// A bare repository has no main working tree, so what git says cannot name
@@ -501,6 +516,7 @@ import Testing
 
         #expect(source.key == PathKey(URL(filePath: "/code/api")))
         #expect(source.worktrees.isEmpty)
+        #expect(source.fallback == nil)
     }
 
     @Test func anUnavailableRepositoryHasNoHistoryOnShow() async throws {

@@ -288,7 +288,7 @@ private struct WindowActions: ViewModifier {
             .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
             .environment(\.startAgentSession, StartAgentSessionAction { window.startAgentSession(in: $0, agent: $1) })
             .environment(\.showAgentSession, ShowAgentSessionAction { window.showAgentSession($0) })
-            .environment(\.resumeAgentSession, ResumeAgentSessionAction { window.resumeAgentSession($0) })
+            .environment(\.resumeAgentSession, ResumeAgentSessionAction { window.resumeAgentSession($0, in: $1) })
             .environment(\.renameAgentSession, RenameAgentSessionAction { window.agentPanel.rename($0.id, to: $1) })
             .environment(\.closeAgentSession, CloseAgentSessionAction { window.agentPanel.close($0.id) })
             // What the sidebar offers when it starts a session.
