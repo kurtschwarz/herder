@@ -61,7 +61,7 @@ public final class AgentPanelModel {
 
     /// A session from the history to pick up once its worktree is the one
     /// showing. See ``requestResume(_:)``.
-    private var pendingResume: AgentSession?
+    private var pendingResume: (session: AgentSession, target: WorkspaceID)?
 
     public private(set) var workspace: Workspace?
 
@@ -118,11 +118,15 @@ public final class AgentPanelModel {
         return tabs.first { $0.id == id } ?? tabs.first
     }
 
-    /// The session in front was brought back from the history and is only
-    /// being read: its record stays ended until the person says something in
-    /// the tab.
-    var isShowingEndedSession: Bool {
-        activeTab.flatMap { sessions.store.session($0.id) }?.isEnded == true
+    /// What to tell the person about the session in front when it was
+    /// brought back from the history and is only being read: its record stays
+    /// ended until they say something in the tab. `nil` for any other.
+    var endedSessionNotice: EndedSessionNotice? {
+        guard let workspace, let tab = activeTab,
+              let record = sessions.store.session(tab.id), record.isEnded
+        else { return nil }
+        guard record.worktree != workspace.id else { return .worktreeKept }
+        return .worktreeRemoved(agent: tab.agent.displayName, carriedOnIn: workspace.id.root.name)
     }
 
     /// A terminal UI has the keyboard. Read by the commands that mean a tab of
@@ -169,8 +173,8 @@ public final class AgentPanelModel {
         pendingResume = nil
         if let requested, requested.workspace == workspace.id {
             await startSession(requested.agent)
-        } else if let resuming, resuming.worktree == workspace.id {
-            await resume(resuming)
+        } else if let resuming, resuming.target == workspace.id {
+            await resume(resuming.session, in: resuming.target)
         } else {
             await resumeActive()
         }
@@ -257,16 +261,17 @@ public final class AgentPanelModel {
     }
 
     /// Brings a session from the history back in a new tab of its own, in the
-    /// workspace showing, which must be the worktree it ran in, or in front
-    /// if it has one already. It is the same session again, but only to be
+    /// workspace showing, which must be `target`, or in front if it has one
+    /// already. `target` is the worktree it ran in, unless that is gone: then
+    /// another of the repository's, where the agent runs from instead. It is the same session again, but only to be
     /// read: the record stays ended until the person says something in the
     /// tab (see ``watch(_:in:)``).
     ///
     /// Refused for one that cannot be picked up: its agent is gone, or gave
     /// no id to resume it by. The sidebar says so; the last session in the
     /// worktree is not a stand-in, because it may be another.
-    public func resume(_ session: AgentSession) async {
-        guard let workspace, workspace.id == session.worktree else { return }
+    public func resume(_ session: AgentSession, in target: WorkspaceID? = nil) async {
+        guard let workspace, workspace.id == (target ?? session.worktree) else { return }
         if tabsByWorkspace[workspace.id]?.contains(where: { $0.id == session.id }) == true {
             reveal(session.id, in: workspace.id)
             return
@@ -286,14 +291,14 @@ public final class AgentPanelModel {
         await open(tab, in: workspace)
     }
 
-    /// Asks for a session from the history to be picked up in its worktree.
+    /// Asks for a session from the history to be picked up in `target`.
     /// If that is the workspace showing it happens now; otherwise when the
     /// window gets there. See ``show(_:)``.
-    public func requestResume(_ session: AgentSession) {
-        if workspace?.id == session.worktree {
-            Task { await resume(session) }
+    public func requestResume(_ session: AgentSession, in target: WorkspaceID) {
+        if workspace?.id == target {
+            Task { await resume(session, in: target) }
         } else {
-            pendingResume = session
+            pendingResume = (session, target)
         }
     }
 

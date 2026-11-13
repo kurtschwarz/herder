@@ -16,27 +16,25 @@ struct SessionHistorySection: View {
 
     private var keys: [PathKey] { sources.map(\.key) }
 
-    /// Every ended session in the shown repositories, latest end first, and
-    /// which repository each is from when there is more than one to tell
-    /// apart.
-    private var ended: (records: [AgentSession], repositories: [UUID: String]) {
-        guard let history else { return ([], [:]) }
+    /// Every ended session in the shown repositories, latest end first, which
+    /// repository each is from when there is more than one to tell apart, and
+    /// the worktree each is picked up in: its own, else its repository's
+    /// fallback. None has no entry.
+    private var ended: (records: [AgentSession], repositories: [UUID: String], targets: [UUID: WorkspaceID]) {
+        guard let history else { return ([], [:], [:]) }
         var records: [AgentSession] = []
         var repositories: [UUID: String] = [:]
+        var targets: [UUID: WorkspaceID] = [:]
         var seen: Set<PathKey> = []
         for source in sources where seen.insert(source.key).inserted {
             for record in history.ended(in: source.key) {
                 records.append(record)
+                targets[record.id] = source.worktrees.contains(record.worktree) ? record.worktree : source.fallback
                 if sources.count > 1 { repositories[record.id] = source.name }
             }
         }
         records.sort { ($0.endedAt ?? .distantPast) > ($1.endedAt ?? .distantPast) }
-        return (records, repositories)
-    }
-
-    /// The worktrees that are still there, across them all.
-    private var worktrees: Set<WorkspaceID> {
-        sources.reduce(into: []) { $0.formUnion($1.worktrees) }
+        return (records, repositories, targets)
     }
 
     var body: some View {
@@ -46,8 +44,8 @@ struct SessionHistorySection: View {
         // still runs while there is nothing to show.
         VStack(alignment: .leading, spacing: 0) {
             if !digest.isEmpty {
-                group("Today", digest.today, repositories: ended.repositories)
-                group("Yesterday", digest.yesterday, repositories: ended.repositories)
+                group("Today", digest.today, ended: ended)
+                group("Yesterday", digest.yesterday, ended: ended)
                 AllHistoryRow(count: digest.total)
             }
         }
@@ -76,7 +74,7 @@ struct SessionHistorySection: View {
     private func group(
         _ title: String,
         _ records: [AgentSession],
-        repositories: [UUID: String]
+        ended: (records: [AgentSession], repositories: [UUID: String], targets: [UUID: WorkspaceID])
     ) -> some View {
         if !records.isEmpty {
             Text(title.uppercased())
@@ -87,8 +85,8 @@ struct SessionHistorySection: View {
             ForEach(records) { record in
                 HistoryRow(
                     record: record,
-                    repository: repositories[record.id],
-                    worktreeExists: worktrees.contains(record.worktree),
+                    repository: ended.repositories[record.id],
+                    target: ended.targets[record.id],
                     isSelected: active?.id == record.worktree && open?.focused == record.id,
                     canDelete: history?.isOpen(record.id) != true,
                     rename: {
@@ -121,7 +119,8 @@ private struct HistoryRow: View {
     /// The repository it ran in, when more than one is on show.
     let repository: String?
 
-    let worktreeExists: Bool
+    /// The worktree it is picked up in, or `nil` when there is none.
+    let target: WorkspaceID?
 
     /// Its tab is the one in front.
     let isSelected: Bool
@@ -140,7 +139,7 @@ private struct HistoryRow: View {
     /// Why it cannot be picked up again, or `nil` when it can. Never a
     /// stand-in: the last session in the worktree may be another.
     private var unavailable: String? {
-        if !worktreeExists { return "Its worktree is gone" }
+        if target == nil { return "Its worktree is gone, and the repository has none to open it in" }
         guard let agent = catalog?.agent(record.agentID), agent.isRunnable else {
             return "\(record.agentName) is no longer set up"
         }
@@ -197,7 +196,7 @@ private struct HistoryRow: View {
         .opacity(reason == nil || isRenaming ? 1 : 0.5)
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
-        .onTapGesture { if reason == nil, !isRenaming { resume(record) } }
+        .onTapGesture { if reason == nil, !isRenaming, let target { resume(record, in: target) } }
         .pointerStyle(reason == nil && !isRenaming ? .link : nil)
         .help(reason ?? "Resume in \(record.agentName)")
         .contextMenu {

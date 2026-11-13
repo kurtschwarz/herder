@@ -33,11 +33,14 @@ public final class RepositoriesModel {
     private(set) var listings: [UUID: Listing] = [:]
 
     /// Where a repository's session history is kept, and the worktrees it has
-    /// now, which is how a session whose worktree has gone is known.
+    /// now, which is how a session whose worktree has gone is known. Such a
+    /// session is picked up in `fallback` instead: the main worktree, or for
+    /// a bare repository the first listed. `nil` while none is known.
     struct HistorySource: Equatable {
         var name: String
         var key: PathKey
         var worktrees: Set<WorkspaceID>
+        var fallback: WorkspaceID?
     }
 
     /// The repository whose name is being edited in place.
@@ -281,7 +284,8 @@ public final class RepositoriesModel {
             return HistorySource(
                 name: repository.name,
                 key: PathKey(repository.url),
-                worktrees: Set(worktrees.map { WorkspaceID($0.path) })
+                worktrees: Set(worktrees.map { WorkspaceID($0.path) }),
+                fallback: (worktrees.first(where: \.isMainWorkingTree) ?? worktrees.first).map { WorkspaceID($0.path) }
             )
         }
     }
