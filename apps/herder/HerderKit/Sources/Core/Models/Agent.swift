@@ -19,6 +19,11 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// user's login shell. May name the session with ``sessionToken``.
     public var command: String
 
+    /// A shell command line that starts a new session in plan mode, used in
+    /// place of ``command``. `nil` for an agent with no plan flag: plan then
+    /// runs the normal command. May name the session with ``sessionToken``.
+    public var planCommand: String?
+
     /// The command line that picks a session up again after its terminal was
     /// closed, or `nil` for an agent that cannot: it starts afresh instead.
     /// May name the session with ``sessionToken``.
@@ -43,6 +48,7 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
         id: ID,
         name: String,
         command: String,
+        planCommand: String? = nil,
         resumeCommand: String? = nil,
         sessionLookup: String? = nil,
         environment: [String: String]? = nil
@@ -50,6 +56,7 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
         self.id = id
         self.name = name
         self.command = command
+        self.planCommand = planCommand
         self.resumeCommand = resumeCommand
         self.sessionLookup = sessionLookup
         self.environment = environment
@@ -63,13 +70,27 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
 
     /// The command line to run for the session called `session`: a new one,
     /// or picking one up. Resuming with no resume command starts afresh.
-    public func commandLine(session: String, resuming: Bool) -> String {
-        let template = resuming ? (resumeCommand.flatMap { $0.isEmpty ? nil : $0 } ?? command) : command
+    /// `mode` only matters for a new session: a resumed one has its mode
+    /// already, in the agent's own session.
+    public func commandLine(session: String, resuming: Bool, mode: SessionMode = .build) -> String {
+        let template = resuming ? (nonBlank(resumeCommand) ?? command) : newCommand(for: mode)
         return template.replacing(Self.sessionToken, with: session)
+    }
+
+    private func newCommand(for mode: SessionMode) -> String {
+        mode == .plan ? (nonBlank(planCommand) ?? command) : command
+    }
+
+    private func nonBlank(_ command: String?) -> String? {
+        command.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
     }
 
     /// The agents Herder knows how to start without being told. Never
     /// change an id: it is what a saved "last used" names.
+    ///
+    /// Only Claude Code has a plan command: Codex and Pi have no plan flag, and
+    /// opencode's `--agent` is not a flag of its terminal UI in the version
+    /// this was checked against (2.0.16), so for those plan is the normal command.
     ///
     /// Claude Code and Pi can be given a session's id up front, so they resume
     /// exactly. opencode names its own, so its sessions are looked up and then
@@ -88,6 +109,7 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
             id: "claude-code",
             name: "Claude Code",
             command: "claude --session-id \(sessionToken)",
+            planCommand: "claude --session-id \(sessionToken) --permission-mode plan",
             resumeCommand: "claude --resume \(sessionToken)"
         ),
         Agent(id: "codex", name: "Codex", command: "codex", resumeCommand: "codex resume --last"),

@@ -56,6 +56,9 @@ public final class RepositoriesModel {
     /// re-read once one is created.
     private(set) var newSessionRepository: Repository?
 
+    /// What the new-session modal's session will be for.
+    private(set) var newSessionMode: SessionMode = .build
+
     /// Whether a modal is covering the window.
     public var isModalPresented: Bool { adding != nil || newSession != nil }
 
@@ -173,8 +176,21 @@ public final class RepositoriesModel {
     /// on in whichever repository holds it.
     private var newSessionActiveWorktree: URL?
 
-    func beginNewSession(in repository: Repository, active: URL? = nil) {
+    /// Where Plan and Build start a session at once, without the modal: the
+    /// main worktree of the one repository on show, or for a bare one the
+    /// first listed. `nil` when there is no such one to name, and the modal,
+    /// which has the workspace selector, is the way in: several are on show,
+    /// the one cannot be reached, or its worktrees are not read yet.
+    var quickStartWorktree: WorkspaceID? {
+        guard shownRepositories.count == 1, let repository = shownRepositories.first, repository.isAvailable,
+              case .loaded(let worktrees)? = listings[repository.id]
+        else { return nil }
+        return (worktrees.first(where: \.isMainWorkingTree) ?? worktrees.first).map { WorkspaceID($0.path) }
+    }
+
+    func beginNewSession(in repository: Repository, active: URL? = nil, mode: SessionMode = .build) {
         guard !isModalPresented, repository.isAvailable else { return }
+        newSessionMode = mode
         newSessionRepository = repository
         newSessionActiveWorktree = active
         newSession = NewSessionModel(
@@ -189,6 +205,7 @@ public final class RepositoriesModel {
         newSession = nil
         newSessionRepository = nil
         newSessionActiveWorktree = nil
+        newSessionMode = .build
     }
 
     /// Moves the open modal to another repository. What was typed as a branch

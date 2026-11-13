@@ -3,8 +3,7 @@ import DesignSystem
 import SwiftUI
 
 /// The agent sessions open in this window in any worktree of the repositories
-/// on show, together, each saying which worktree it is in; and the way to
-/// start another.
+/// on show, together, each saying which worktree it is in.
 struct OpenSessionsSection: View {
     let model: RepositoriesModel
 
@@ -64,14 +63,8 @@ struct OpenSessionsSection: View {
             // Rows hold still under the pointer, so one never moves away
             // from a click, and catch up when it leaves.
             .onHover { heldOrder = $0 ? sessions.map(\.id) : nil }
-
-            startSessionButton
         }
     }
-
-    /// The list length at which the row at its foot can be pushed out of
-    /// sight, and the header's plus starts to show.
-    static let headerPlusThreshold = 5
 
     private func header(count: Int) -> some View {
         HStack(spacing: Theme.Spacing.normal) {
@@ -86,59 +79,8 @@ struct OpenSessionsSection: View {
                 .frame(minWidth: 18, minHeight: 18)
                 .background(Circle().fill(Theme.Palette.control))
             Spacer(minLength: 0)
-            // Hidden rather than removed, so the header keeps its height.
-            newSessionButton
-                .opacity(count < Self.headerPlusThreshold ? 0 : 1)
-                .allowsHitTesting(count >= Self.headerPlusThreshold)
-                .accessibilityHidden(count < Self.headerPlusThreshold)
         }
         .padding(.horizontal, Theme.Spacing.normal + 2)
-        .padding(.vertical, Theme.Spacing.tight)
-    }
-
-    private var newSessionRepository: Repository? {
-        model.repositoryForNewSession(active: active?.id.url)
-    }
-
-    /// Opens the modal on the worktree open now, where there is one.
-    private func beginNewSession() {
-        guard let repository = newSessionRepository else { return }
-        model.beginNewSession(in: repository, active: active?.id.url)
-    }
-
-    /// Opens the modal, which has the workspace selector to say where. Only
-    /// shown once the list is long enough to push the Start a session row
-    /// out of sight, which is the usual way in.
-    private var newSessionButton: some View {
-        Button(action: beginNewSession) {
-            PhIcon(Ph.plus, size: 12)
-        }
-        .buttonStyle(.icon(size: 20))
-        .disabled(newSessionRepository == nil)
-        .help("New session")
-    }
-
-    /// The foot of the list, always: the usual way to start a session. The
-    /// header's plus is the same thing for lists too long to see the foot of.
-    private var startSessionButton: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.Radius.control + 2, style: .continuous)
-        return Button(action: beginNewSession) {
-            HStack(spacing: Theme.Spacing.normal) {
-                PhIcon(Ph.plus, size: 14)
-                Text("Start a session")
-            }
-            .foregroundStyle(Theme.Palette.secondaryText)
-            .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-            .frame(maxWidth: .infinity, minHeight: Theme.Size.control + 4, alignment: .leading)
-            .overlay {
-                shape.strokeBorder(Theme.Palette.tertiaryText.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-            }
-            .contentShape(shape)
-        }
-        .buttonStyle(.plain)
-        .disabled(newSessionRepository == nil)
-        .pointerStyle(newSessionRepository == nil ? nil : .link)
-        .padding(.horizontal, Theme.Spacing.normal)
         .padding(.vertical, Theme.Spacing.tight)
     }
 

@@ -80,7 +80,7 @@ public final class AgentPanelModel {
     /// A session to start once its worktree is the one showing, with the
     /// agent asked for, or `nil` for the one used last. See
     /// ``requestSession(in:agent:)``.
-    private var pending: (workspace: WorkspaceID, agent: Agent?)?
+    private var pending: (workspace: WorkspaceID, agent: Agent?, mode: SessionMode)?
 
     /// Changes when the panel should take the keyboard.
     public private(set) var focusRequest = 0
@@ -172,7 +172,7 @@ public final class AgentPanelModel {
         let resuming = pendingResume
         pendingResume = nil
         if let requested, requested.workspace == workspace.id {
-            await startSession(requested.agent)
+            await startSession(requested.agent, mode: requested.mode)
         } else if let resuming, resuming.target == workspace.id {
             await resume(resuming.session, in: resuming.target)
         } else {
@@ -196,7 +196,7 @@ public final class AgentPanelModel {
         guard !state.tabs.isEmpty else { return }
         let tabs = state.tabs.map {
             AgentTab(
-                id: $0.id, agent: $0.agent, number: $0.number, name: $0.name,
+                id: $0.id, agent: $0.agent, number: $0.number, mode: $0.mode ?? .build, name: $0.name,
                 restored: true, sessionID: $0.session, startedAt: $0.started
             )
         }
@@ -239,24 +239,25 @@ public final class AgentPanelModel {
     /// Asks for a new session in `id`, with `agent` or the one used last. If
     /// that is the workspace showing, it starts now; otherwise when the window
     /// gets there, which it is already on its way to. See ``show(_:)``.
-    public func requestSession(in id: WorkspaceID, agent: Agent? = nil) {
+    public func requestSession(in id: WorkspaceID, agent: Agent? = nil, mode: SessionMode = .build) {
         if workspace?.id == id {
-            Task { await startSession(agent) }
+            Task { await startSession(agent, mode: mode) }
         } else {
-            pending = (id, agent)
+            pending = (id, agent, mode)
         }
     }
 
     /// Starts `agent`, or the one used last, in the root of the workspace
     /// showing, whichever tab is in front: a new session is a fresh start, not
-    /// a copy of the one beside it.
-    public func startSession(_ agent: Agent? = nil) async {
+    /// a copy of the one beside it. In plan mode it runs the agent's plan
+    /// command, if it has one.
+    public func startSession(_ agent: Agent? = nil, mode: SessionMode = .build) async {
         guard let workspace else { return }
         let agent = agent ?? catalog.lastUsed
         guard agent.isRunnable else { return }
         catalog.markUsed(agent)
 
-        let tab = AgentTab(agent: agent, number: nextNumber(of: agent, in: workspace.id))
+        let tab = AgentTab(agent: agent, number: nextNumber(of: agent, in: workspace.id), mode: mode)
         await open(tab, in: workspace)
     }
 
@@ -360,7 +361,7 @@ public final class AgentPanelModel {
     /// whose commands take no id has none to know.
     private func mintsSessionID(of agent: Agent) -> Bool {
         !agent.looksUpSessions
-            && [agent.command, agent.resumeCommand].contains { $0?.contains(Agent.sessionToken) == true }
+            && [agent.command, agent.planCommand, agent.resumeCommand].contains { $0?.contains(Agent.sessionToken) == true }
     }
 
     func select(_ tab: AgentTab) {
@@ -459,7 +460,7 @@ public final class AgentPanelModel {
         // An agent that names its own sessions cannot be pointed at one
         // nobody found, so that one starts afresh.
         let resuming = tab.hasStarted && !tab.isMissingSessionID
-        let line = tab.agent.commandLine(session: tab.sessionName, resuming: resuming)
+        let line = tab.agent.commandLine(session: tab.sessionName, resuming: resuming, mode: tab.mode)
         var spec = ShellLaunch.command(
             "exec \(line)",
             environment: environment(for: tab.agent),
@@ -545,7 +546,7 @@ public final class AgentPanelModel {
         let state = workspace.uiState(AgentPanelUIState.self)
         let tabs = (tabsByWorkspace[id] ?? []).map {
             AgentPanelUIState.Tab(
-                id: $0.id, agent: $0.agent, number: $0.number, name: $0.customName,
+                id: $0.id, agent: $0.agent, number: $0.number, mode: $0.mode, name: $0.customName,
                 session: $0.sessionID, started: $0.startedAt
             )
         }

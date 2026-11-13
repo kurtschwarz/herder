@@ -23,8 +23,11 @@ public enum Ph {
     public static var gearSixFill: Image { icon("gear-six-fill") }
     public static var gitBranch: Image { icon("git-branch") }
     public static var gitFork: Image { icon("git-fork") }
+    public static var hammer: Image { icon("hammer") }
     public static var magnifyingGlass: Image { icon("magnifying-glass") }
+    public static var notepad: Image { icon("notepad") }
     public static var plus: Image { icon("plus") }
+    public static var plusSquare: Image { icon("plus-square") }
     public static var pushPinFill: Image { icon("push-pin-fill") }
     public static var sparkle: Image { icon("sparkle") }
     public static var sparkleFill: Image { icon("sparkle-fill") }

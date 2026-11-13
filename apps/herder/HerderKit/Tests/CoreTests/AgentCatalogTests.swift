@@ -103,4 +103,41 @@ import Testing
 
         #expect(decoded == Agent(id: "custom-1", name: "Aider", command: "aider"))
     }
+
+    // MARK: Modes
+
+    @Test func planRunsThePlanCommandWhereAnAgentHasOne() throws {
+        let claude = try #require(Agent.presets.first { $0.id == "claude-code" })
+
+        #expect(claude.commandLine(session: "6f9619ff", resuming: false, mode: .plan)
+            == "claude --session-id 6f9619ff --permission-mode plan")
+        #expect(claude.commandLine(session: "6f9619ff", resuming: false, mode: .build)
+            == "claude --session-id 6f9619ff")
+    }
+
+    @Test func planWithNoPlanCommandRunsTheNormalOne() throws {
+        for id in ["codex", "pi"] {
+            let agent = try #require(Agent.presets.first { $0.id == id })
+            #expect(agent.planCommand == nil)
+            #expect(agent.commandLine(session: "x", resuming: false, mode: .plan)
+                == agent.commandLine(session: "x", resuming: false, mode: .build))
+        }
+        #expect(Agent(id: "x", name: "", command: "aider", planCommand: "  ")
+            .commandLine(session: "x", resuming: false, mode: .plan) == "aider")
+    }
+
+    @Test func resumingIgnoresTheMode() throws {
+        let claude = try #require(Agent.presets.first { $0.id == "claude-code" })
+
+        #expect(claude.commandLine(session: "6f9619ff", resuming: true, mode: .plan)
+            == claude.commandLine(session: "6f9619ff", resuming: true, mode: .build))
+        #expect(claude.commandLine(session: "6f9619ff", resuming: true, mode: .plan) == "claude --resume 6f9619ff")
+    }
+
+    @Test func aCustomAgentKeepsItsPlanCommandThroughTheSnapshot() throws {
+        let snapshot = AgentsSnapshot(custom: [Agent(id: "custom-1", name: "Aider", command: "aider", planCommand: "aider --architect")])
+        let decoded = try JSONDecoder().decode(AgentsSnapshot.self, from: JSONEncoder().encode(snapshot))
+
+        #expect(decoded == snapshot)
+    }
 }

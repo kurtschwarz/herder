@@ -525,4 +525,81 @@ import Testing
 
         #expect(model.historySources(of: [repository]).isEmpty)
     }
+
+    // MARK: Quick start
+
+    @Test func oneWorkspaceOnShowStartsInItsMainWorktree() async throws {
+        let repository = try await addRepository("/code/api")
+        git.seed(worktrees: [
+            GitWorktree(path: URL(filePath: "/code/api-feature"), checkout: .branch("feature"), isMainWorkingTree: false),
+            GitWorktree(path: URL(filePath: "/code/api"), checkout: .branch("main"), isMainWorkingTree: true),
+        ], at: URL(filePath: "/code/api"))
+        await model.refresh([repository])
+
+        #expect(model.quickStartWorktree == WorkspaceID(URL(filePath: "/code/api")))
+    }
+
+    @Test func aBareRepositoryStartsInItsFirstListedWorktree() async throws {
+        let repository = try await addRepository("/code/api.git")
+        git.seed(worktrees: [
+            GitWorktree(path: URL(filePath: "/code/api/main"), checkout: .branch("main"), isMainWorkingTree: false),
+            GitWorktree(path: URL(filePath: "/code/api/dev"), checkout: .branch("dev"), isMainWorkingTree: false),
+        ], at: URL(filePath: "/code/api.git"))
+        await model.refresh([repository])
+
+        #expect(model.quickStartWorktree == WorkspaceID(URL(filePath: "/code/api/main")))
+    }
+
+    @Test func severalWorkspacesOnShowAskWhere() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        await model.refresh([api, web])
+
+        #expect(model.quickStartWorktree == nil)
+    }
+
+    @Test func onlyTheWorkspaceOnShowCounts() async throws {
+        let api = try await addRepository("/code/api")
+        let web = try await addRepository("/code/web")
+        await model.refresh([api, web])
+        model.setShown(web, false)
+
+        #expect(model.quickStartWorktree == WorkspaceID(URL(filePath: "/code/api")))
+    }
+
+    @Test func worktreesNotReadYetAskWhere() async throws {
+        _ = try await addRepository("/code/api")
+
+        #expect(model.quickStartWorktree == nil)
+    }
+
+    @Test func anUnreadableWorkspaceAsksWhere() async throws {
+        let repository = try await addRepository("/code/api")
+        git.seedUnreadable(URL(filePath: "/code/api"))
+        await model.refresh([repository])
+
+        #expect(model.quickStartWorktree == nil)
+    }
+
+    @Test func anUnavailableWorkspaceAsksWhere() async throws {
+        let repository = try await addRepository("/code/api")
+        await model.refresh([repository])
+        bookmarks.breakResolution(for: repository.url)
+        await store.load()
+
+        #expect(model.quickStartWorktree == nil)
+    }
+
+    // MARK: Modes
+
+    @Test func theModalCarriesTheModeItWasOpenedWith() async throws {
+        let repository = try await addRepository("/code/api")
+
+        model.beginNewSession(in: repository, mode: .plan)
+        #expect(model.newSessionMode == .plan)
+
+        model.cancelNewSession()
+        model.beginNewSession(in: repository)
+        #expect(model.newSessionMode == .build)
+    }
 }

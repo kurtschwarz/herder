@@ -180,8 +180,8 @@ final class WindowEnvironment {
         activate(worktree)
     }
 
-    func startAgentSession(in id: WorkspaceID, agent: Agent?) {
-        agentPanel.requestSession(in: id, agent: agent)
+    func startAgentSession(in id: WorkspaceID, agent: Agent?, mode: SessionMode) {
+        agentPanel.requestSession(in: id, agent: agent, mode: mode)
         activate(id)
     }
 
@@ -198,7 +198,7 @@ final class WindowEnvironment {
     ///
     /// A file in another worktree switches the window to it. The editor is told
     /// first and holds the request until the switch gets there, for the same
-    /// reason as ``startAgentSession(in:agent:)``.
+    /// reason as ``startAgentSession(in:agent:mode:)``.
     func openTerminalFile(_ url: URL, line: Int?, column: Int?) {
         let key = PathKey(url)
         let isFolder = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
