@@ -9,7 +9,7 @@ struct AgentsSettings: View {
 
     var body: some View {
         SettingsPaneContent(pane: .agents) {
-            Text("Each agent is a command run in your login shell, in the root of the worktree a session starts in. The resume command picks a session up again after its window was closed; without one, it starts afresh. \(Agent.sessionToken) in either stands for the session\u{2019}s id: one Herder makes up, or, for an agent that names its own sessions, the one its session lookup finds. An agent\u{2019}s environment variables are set for its terminal alone, over the app\u{2019}s own.")
+            Text("Each agent is a command run in your login shell, in the root of the worktree a session starts in. The plan command, where there is one, starts a session in Plan mode instead of the command; without one, Plan runs the command. The resume command picks a session up again after its window was closed; without one, it starts afresh. \(Agent.sessionToken) in either stands for the session\u{2019}s id: one Herder makes up, or, for an agent that names its own sessions, the one its session lookup finds. An agent\u{2019}s environment variables are set for its terminal alone, over the app\u{2019}s own.")
                 .font(.callout)
                 .foregroundStyle(Theme.Palette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -22,6 +22,9 @@ struct AgentsSettings: View {
                         Spacer(minLength: 0)
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(agent.command)
+                            if let plan = agent.planCommand {
+                                Text(plan).foregroundStyle(Theme.Palette.tertiaryText)
+                            }
                             if let resume = agent.resumeCommand {
                                 Text(resume).foregroundStyle(Theme.Palette.tertiaryText)
                             }
@@ -71,6 +74,7 @@ private struct CustomAgentRow: View {
 
             VStack(spacing: Theme.Spacing.tight) {
                 commandField("Command, e.g. aider --model sonnet", text: binding(\.command))
+                commandField("Plan command (optional), used instead when a session starts in Plan mode", text: optionalBinding(\.planCommand))
                 commandField("Resume command (optional), e.g. aider --restore-chat-history", text: optionalBinding(\.resumeCommand))
                 commandField("Session lookup (optional), lists the agent\u{2019}s sessions", text: optionalBinding(\.sessionLookup))
                 Text("Environment")

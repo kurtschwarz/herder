@@ -66,6 +66,59 @@ import Testing
 
     // MARK: Starting
 
+    @Test func aPlanSessionRunsThePlanCommand() async throws {
+        let (model, _, _) = try await shown()
+
+        await model.startSession(mode: .plan)
+
+        let id = try #require(model.activeTab?.id).uuidString.lowercased()
+        let spec = try #require(pty.specs.last)
+        #expect(spec.arguments.last == "exec claude --session-id \(id) --permission-mode plan")
+        #expect(model.activeTab?.mode == .plan)
+    }
+
+    @Test func aRequestedSessionKeepsItsModeUntilItsWorkspaceShows() async throws {
+        let registry = makeRegistry()
+        let model = makeModel()
+        await model.show(try await workspace(root, in: registry))
+
+        model.requestSession(in: WorkspaceID(other), mode: .plan)
+        await model.show(try await workspace(other, in: registry))
+
+        #expect(model.activeTab?.mode == .plan)
+        #expect(pty.specs.last?.arguments.last?.hasSuffix("--permission-mode plan") == true)
+    }
+
+    @Test func aTabRestoredFromBeforeModesIsBuild() async throws {
+        let registry = makeRegistry()
+        let workspace = try await workspace(root, in: registry)
+        let old = #"{"tabs":[{"id":"\#(UUID().uuidString)","agent":{"id":"claude-code","name":"Claude Code","command":"claude"},"number":1}]}"#
+        try workspace.uiState(AgentPanelUIState.self).restore(from: Data(old.utf8))
+
+        let model = makeModel()
+        await model.show(workspace)
+
+        #expect(model.tabs.first?.mode == .build)
+    }
+
+    @Test func aRestoredTabThatStartsFreshKeepsItsMode() async throws {
+        let registry = makeRegistry()
+        let workspace = try await workspace(root, in: registry)
+        let agent = Agent(id: "x", name: "X", command: "x", planCommand: "x --plan", resumeCommand: "x --resume")
+        let id = UUID()
+        workspace.uiState(AgentPanelUIState.self).tabs = [
+            AgentPanelUIState.Tab(id: id, agent: agent, number: 1, mode: .plan),
+        ]
+        let model = makeModel()
+        await model.show(workspace)
+
+        #expect(model.tabs.first?.mode == .plan)
+        let saved = try workspace.uiState(AgentPanelUIState.self).encode()
+        let again = AgentPanelUIState()
+        try again.restore(from: saved)
+        #expect(again.tabs.first?.mode == .plan)
+    }
+
     @Test func aSessionIsTheAgentsCommandInTheWorktreeRoot() async throws {
         let (model, _, _) = try await shown(sessions: 1)
 

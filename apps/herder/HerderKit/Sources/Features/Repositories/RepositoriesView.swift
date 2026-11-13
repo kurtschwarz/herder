@@ -30,6 +30,7 @@ public struct RepositoriesView: View {
             if repositories.isEmpty {
                 EmptyRepositories { model.beginAdding() }
             } else {
+                SessionLauncher(model: model)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         OpenSessionsSection(model: model, repositories: shown)

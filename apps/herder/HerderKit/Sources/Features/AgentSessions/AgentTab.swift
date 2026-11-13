@@ -32,6 +32,10 @@ final class AgentTab: Identifiable {
     /// nothing outside.
     let number: Int
 
+    /// What it was started for. Kept across launches, so a tab that has to
+    /// start afresh starts the way it did before.
+    let mode: SessionMode
+
     /// A name the person gave it, which replaces the agent's until it is
     /// cleared. Kept across launches, like the tab.
     private(set) var customName: String?
@@ -107,6 +111,7 @@ final class AgentTab: Identifiable {
         id: UUID = UUID(),
         agent: Agent,
         number: Int,
+        mode: SessionMode = .build,
         name: String? = nil,
         restored: Bool = false,
         sessionID: String? = nil,
@@ -115,6 +120,7 @@ final class AgentTab: Identifiable {
         self.id = id
         self.agent = agent
         self.number = number
+        self.mode = mode
         self.customName = name
         self.sessionID = sessionID
         self.startedAt = startedAt

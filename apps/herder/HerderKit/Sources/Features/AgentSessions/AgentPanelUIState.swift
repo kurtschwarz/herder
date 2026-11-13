@@ -21,6 +21,8 @@ final class AgentPanelUIState: PersistedWorkspaceUIState {
         var id: UUID
         var agent: Agent
         var number: Int
+        /// Absent in a tab saved before there were modes, which is build.
+        var mode: SessionMode?
         /// What the person named the tab, if anything.
         var name: String?
         /// The agent's own id for the session, once looked up.

@@ -34,6 +34,7 @@ public struct NewSessionOverlay: View {
                     workspaces: model,
                     agents: catalog?.agents.filter(\.isRunnable) ?? [],
                     agentID: $agentID,
+                    mode: model.newSessionMode,
                     activeWorktree: active?.id,
                     activity: { worktree in
                         WorktreeActivity(open?.sessions(in: WorkspaceID(worktree.path)) ?? [])
@@ -41,9 +42,10 @@ public struct NewSessionOverlay: View {
                     cancel: { model.cancelNewSession() },
                     submit: {
                         let agent = agentID.flatMap { catalog?.agent($0) }
+                        let mode = model.newSessionMode
                         Task {
                             if let worktree = await model.submitNewSession() {
-                                startAgentSession(worktree, agent: agent)
+                                startAgentSession(worktree, agent: agent, mode: mode)
                             }
                         }
                     }
@@ -62,6 +64,7 @@ private struct NewSessionCard: View {
     let workspaces: RepositoriesModel
     let agents: [Agent]
     @Binding var agentID: Agent.ID?
+    let mode: SessionMode
     let activeWorktree: WorkspaceID?
     let activity: (GitWorktree) -> WorktreeActivity
     let cancel: () -> Void
@@ -231,10 +234,12 @@ private struct NewSessionCard: View {
 
     private var primaryLabel: String {
         let isNew = model.choice == .newWorktree
+        let isPlan = mode == .plan
         guard let name = agents.first(where: { $0.id == agentID })?.displayName else {
-            return isNew ? "Create worktree & open session" : "Open session"
+            return isNew ? "Create worktree & open session" : (isPlan ? "Open plan session" : "Open session")
         }
-        return isNew ? "Create worktree & start \(name)" : "Start \(name)"
+        let verb = isPlan ? "plan with" : "start"
+        return isNew ? "Create worktree & \(verb) \(name)" : "\(verb.prefix(1).uppercased() + verb.dropFirst()) \(name)"
     }
 }
 
