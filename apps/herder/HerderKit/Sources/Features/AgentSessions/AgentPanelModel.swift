@@ -118,6 +118,13 @@ public final class AgentPanelModel {
         return tabs.first { $0.id == id } ?? tabs.first
     }
 
+    /// The session in front was brought back from the history and is only
+    /// being read: its record stays ended until the person says something in
+    /// the tab.
+    var isShowingEndedSession: Bool {
+        activeTab.flatMap { sessions.store.session($0.id) }?.isEnded == true
+    }
+
     /// A terminal UI has the keyboard. Read by the commands that mean a tab of
     /// this panel when it does.
     public var hasFocus: Bool { activeTab?.screen?.isFocused == true }

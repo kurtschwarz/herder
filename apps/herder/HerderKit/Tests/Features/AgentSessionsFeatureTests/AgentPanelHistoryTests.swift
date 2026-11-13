@@ -168,6 +168,18 @@ import Testing
         return ended
     }
 
+    @Test func theSessionInFrontIsEndedWhileItIsReadAndNotOnceItReopens() async throws {
+        let (model, record) = try await started()
+        #expect(!model.isShowingEndedSession)
+
+        _ = try await reading(model, record)
+        #expect(model.isShowingEndedSession)
+
+        model.activeTab?.screen?.send(text: "hello again\r")
+        try await eventually("it reopens") { sessions.session(record.id)?.isEnded == false }
+        #expect(!model.isShowingEndedSession)
+    }
+
     @Test func readingAnEndedSessionOpensItsTabAndLeavesItEnded() async throws {
         let (model, record) = try await started()
         let ended = try await reading(model, record)

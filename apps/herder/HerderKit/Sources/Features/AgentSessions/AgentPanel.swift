@@ -17,6 +17,10 @@ public struct AgentPanel: View {
         VStack(spacing: 0) {
             AgentHeader(model: model)
 
+            if model.isShowingEndedSession {
+                EndedSessionBanner()
+            }
+
             Group {
                 if let tab = model.activeTab {
                     AgentTabContent(tab: tab, model: model)
@@ -104,4 +108,33 @@ private struct AgentEmptyState: View {
         .disabled(model.workspace == nil)
         .padding(Theme.Spacing.loose)
     }
+}
+
+/// Says the session in front is closed and only being read, and that it can be
+/// picked up again.
+private struct EndedSessionBanner: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.normal) {
+            Ph.archive
+                .frame(width: 16, height: 16)
+                .foregroundStyle(Theme.Palette.text)
+            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                Text("Session ended")
+                    .font(.callout.bold())
+                    .foregroundStyle(Theme.Palette.text)
+                Text("The worktree is still here, so you can pick this session up right where it stopped.")
+                    .font(.callout)
+                    .foregroundStyle(Theme.Palette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(Theme.Spacing.normal + Theme.Spacing.tight)
+        .background(Theme.Palette.control.opacity(0.5), in: shape)
+        .overlay(shape.strokeBorder(Theme.Palette.hairline, lineWidth: 1))
+        .padding(.horizontal, Theme.Spacing.normal)
+        .padding(.bottom, Theme.Spacing.normal)
+    }
+
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 8, style: .continuous) }
 }
