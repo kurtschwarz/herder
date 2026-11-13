@@ -82,6 +82,9 @@ public struct EditorView: View {
                 .font(.callout)
                 .foregroundStyle(Theme.Palette.secondaryText)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // As in the tab bar, empty space is where a double-click
+                // starts a new file.
+                .background { DoubleClickSurface { Task { await model.newUntitled() } } }
         }
     }
 
