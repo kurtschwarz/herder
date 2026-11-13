@@ -60,10 +60,30 @@ private struct LauncherButton: View {
             HStack(spacing: Theme.Spacing.normal) {
                 PhIcon(icon, size: 14)
                 Text(title)
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .frame(maxWidth: .infinity, minHeight: Theme.Size.control + 4)
         }
-        .buttonStyle(.secondary)
+        .buttonStyle(LauncherPlateStyle())
         .disabled(isDisabled)
+    }
+}
+
+/// The secondary plate without its side padding, which leaves a label this
+/// short too little room in a sidebar.
+private struct LauncherPlateStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+        configuration.label
+            .font(.body)
+            .foregroundStyle(Theme.Palette.text)
+            .background(configuration.isPressed ? Theme.Palette.controlPressed : Theme.Palette.control, in: shape)
+            .overlay { shape.strokeBorder(Theme.Palette.hairline, lineWidth: 1) }
+            .contentShape(shape)
+            .pointerStyle(isEnabled ? .link : nil)
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }
