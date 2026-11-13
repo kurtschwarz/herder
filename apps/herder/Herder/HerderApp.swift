@@ -20,7 +20,7 @@ struct HerderApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: MainWindow.id) {
             AppView(environment: environment)
                 // Reading the repository list touches the disk, so it happens
                 // here rather than in `init`. The sidebar is empty for the

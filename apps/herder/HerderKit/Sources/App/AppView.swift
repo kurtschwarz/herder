@@ -328,6 +328,10 @@ private struct TabCommandValues: ViewModifier {
             // `nil` rather than a disabled-looking closure: an item with no action
             // is the one AppKit skips, which is what lets ⌘W reach the window's
             // own Close when there are no tabs. See ``AppCommands``.
+            .focusedSceneValue(
+                \.newEditorFile,
+                editor.canCreateFile ? { Task { await editor.newUntitled() } } : nil
+            )
             .focusedSceneValue(\.closeEditorTab, closeTab)
             .focusedSceneValue(
                 \.saveEditorFile,

@@ -40,8 +40,20 @@ public final class EditorModel {
     private let store: WorkspaceRegistry
     private let files: any FileClient
     private let highlighter: any SyntaxHighlighter
+    private let saveLocation: (any SaveLocationClient)?
 
     private var worktree: Workspace?
+
+    /// The workspace each untitled tab was made in, which is where its file
+    /// has to be saved. Not read off the key: a workspace can lie inside
+    /// another one's folder.
+    @ObservationIgnored
+    private var untitledOwners: [PathKey: Workspace] = [:]
+
+    /// The folder of the real file most recently shown, where the save panel
+    /// opens for an untitled tab.
+    @ObservationIgnored
+    private var lastShownFolder: PathKey?
 
     /// The workspace the pane was last restored into. Everything the editor
     /// opens, saves and remembers goes through it; a file outside it is refused.
@@ -115,14 +127,19 @@ public final class EditorModel {
     /// `Services` and a feature may not import that. The composition root picks
     /// it; `NoSyntaxHighlighter` is there for a test that wants the editor
     /// without the colour.
+    ///
+    /// `saveLocation` is where an untitled tab asks for its file name. With
+    /// `nil` it cannot be saved, which a test that never saves one can leave.
     public init(
         store: WorkspaceRegistry,
         files: any FileClient,
-        highlighter: any SyntaxHighlighter
+        highlighter: any SyntaxHighlighter,
+        saveLocation: (any SaveLocationClient)? = nil
     ) {
         self.store = store
         self.files = files
         self.highlighter = highlighter
+        self.saveLocation = saveLocation
     }
 
     /// Which tab is showing, or `nil` when none is.
@@ -147,17 +164,22 @@ public final class EditorModel {
             EditorTab(
                 key: key,
                 name: key.name,
-                folder: counts[key.name, default: 0] > 1 ? key.parent?.name : nil,
+                folder: counts[key.name, default: 0] > 1 && !key.isUntitled ? key.parent?.name : nil,
                 isPinned: pinned.contains(key)
             )
         }
     }
 
     /// The worktree's folder name, then each folder down to the file showing.
+    /// An untitled tab has no folders: just its name.
     var breadcrumb: [String] {
         guard let worktree, let fileKey else { return [] }
+        if fileKey.isUntitled { return [worktree.root.name, fileKey.name] }
         return worktree.components(of: fileKey)
     }
+
+    /// Whether ``newUntitled()`` has a workspace to make a tab in.
+    public var canCreateFile: Bool { scope != nil }
 
     // MARK: - Opening and closing
 
@@ -185,6 +207,41 @@ public final class EditorModel {
         await open(key, remembering: true)
     }
 
+    /// Opens a blank tab at the end of the strip and shows it. It has no file
+    /// until its first save. Does nothing with no workspace to make it in.
+    ///
+    /// Named "Untitled", "Untitled 2" and so on: the lowest number no untitled
+    /// tab in this window has, so a closed tab's name is used again.
+    public func newUntitled() async {
+        guard let state = scope else { return }
+        let key = PathKey.untitled(nextUntitledName(), in: state.root)
+        let document = documents.open(key, baseline: "")
+        buffers[document.buffer] = makeBuffer(text: "")
+        untitledOwners[key] = state
+        tabs.append(key)
+        await show(key, in: state, remembering: true)
+    }
+
+    private func nextUntitledName() -> String {
+        var taken = Set(documents.documents.filter { $0.key.isUntitled }.map(\.key.name))
+        taken.formUnion(tabs.filter(\.isUntitled).map(\.name))
+        var number = 1
+        while true {
+            let name = number == 1 ? "Untitled" : "Untitled \(number)"
+            if !taken.contains(name) { return name }
+            number += 1
+        }
+    }
+
+    private func makeBuffer(text: String) -> Buffer {
+        let buffer = Buffer(text: text)
+        buffer.onEdit = { [weak self, weak buffer] in
+            guard let buffer else { return }
+            self?.bufferDidChange(buffer)
+        }
+        return buffer
+    }
+
     /// Shows the tabs `workspace` had open when it was last shown, or empties
     /// the pane when there is nothing, or no workspace. Only the one that was
     /// showing is read, and only now, when something is showing the workspace:
@@ -205,7 +262,12 @@ public final class EditorModel {
         guard let workspace else { return }
         scope = workspace
         let state = workspace.uiState(EditorUIState.self)
-        tabs = state.files.filter { $0.isInside(workspace.root) }
+        // An untitled tab comes back only with text in it. An empty one is
+        // dropped, as it is when the pane lets go of the workspace.
+        tabs = state.files.filter { key in
+            key.isInside(workspace.root)
+                && (!key.isUntitled || documents.documents(at: key).contains(where: \.isDirty))
+        }
         pinned = Set(state.pinned).intersection(tabs)
         let remembered = state.active.flatMap { tabs.contains($0) ? $0 : nil }
         if let active = remembered ?? tabs.first {
@@ -353,7 +415,8 @@ public final class EditorModel {
     private func show(_ key: PathKey, in state: Workspace, remembering: Bool) async {
         registration?.cancel()
         worktree = state
-        file = key.url
+        file = key.isUntitled ? nil : key.url
+        if !key.isUntitled { lastShownFolder = key.parent }
         fileKey = key
         content = nil
         activeDocument = nil
@@ -391,6 +454,7 @@ public final class EditorModel {
     private func discard(_ document: Document) {
         documents.close(document)
         buffers[document.buffer] = nil
+        untitledOwners[document.key] = nil
     }
 
     /// Writes the tabs down on the workspace they belong to.
@@ -414,6 +478,9 @@ public final class EditorModel {
         else { return }
 
         document.bufferChanged(to: buffer.text)
+
+        // Plain text until it has a name to take a language from.
+        guard !document.key.isUntitled else { return }
 
         rehighlight?.cancel()
         let waits = buffer.storage.length > Self.immediateRehighlightLimit
@@ -440,15 +507,19 @@ public final class EditorModel {
     ///
     /// A file that was deleted is written back. Its folder is not: making
     /// back a folder that was deleted is a bigger decision than saving.
+    ///
+    /// An untitled tab asks where first, and becomes a tab for that file.
     public func save() async {
         guard let activeDocument else { return }
         await save(activeDocument)
     }
 
-    /// Whether the document was written.
+    /// Where the document is now if it was written, which differs from where
+    /// it was for an untitled one; `nil` if it was not.
     @discardableResult
-    private func save(_ document: Document) async -> Bool {
-        guard let buffer = buffers[document.buffer] else { return false }
+    private func save(_ document: Document) async -> PathKey? {
+        if document.key.isUntitled { return await saveUntitled(document) }
+        guard let buffer = buffers[document.buffer] else { return nil }
         let key = document.key
         let text = buffer.text
 
@@ -460,11 +531,93 @@ public final class EditorModel {
             try await files.write(text, to: key.path)
         } catch {
             saveFailure = SaveFailure(name: key.name, reason: error.localizedDescription)
-            return false
+            return nil
         }
         document.saved(text, buffer: buffer.text)
         if key == fileKey { isDeleted = false }
-        return true
+        return key
+    }
+
+    /// Asks where to write an untitled document, writes it, and turns its tab
+    /// into the tab for that file: same place in the strip, same buffer and
+    /// undo history. Cancelling the panel is not a failure and says nothing.
+    ///
+    /// A file inside the workspace only, like everything else the editor
+    /// writes. Landing on a file that is open in another tab merges the two
+    /// as a rename onto it would: see ``DocumentStore/relocate(_:to:)``.
+    private func saveUntitled(_ document: Document) async -> PathKey? {
+        let old = document.key
+        guard let saveLocation, let owner = untitledOwners[old], let buffer = buffers[document.buffer] else {
+            return nil
+        }
+        let folder = lastShownFolder.flatMap { $0.isInside(owner.root) ? $0 : nil } ?? owner.root
+        guard let chosen = await saveLocation.chooseSaveLocation(suggestedName: old.name, startingAt: folder.url),
+              documents.documents.contains(where: { $0 === document })
+        else { return nil }
+
+        let key = PathKey(chosen)
+        guard key.isInside(owner.root), key != owner.root else {
+            saveFailure = SaveFailure(
+                name: old.name,
+                reason: "It can only be saved inside \u{201C}\(owner.root.name)\u{201D}."
+            )
+            return nil
+        }
+
+        let text = buffer.text
+        do {
+            try await files.write(text, to: key.path)
+        } catch {
+            saveFailure = SaveFailure(name: old.name, reason: error.localizedDescription)
+            return nil
+        }
+        guard documents.documents.contains(where: { $0 === document }) else { return key }
+
+        document.saved(text, buffer: buffer.text)
+        let moved = documents.relocate(document, to: key)
+        untitledOwners[old] = nil
+        for collapsed in moved.collapsed { discard(collapsed) }
+
+        let wasShowing = owner === scope && old == fileKey
+        if owner === scope {
+            tabs = Self.replacing(old, with: key, in: tabs)
+            if pinned.remove(old) != nil { pinned.insert(key) }
+            if wasShowing { fileKey = key }
+            remember(on: owner)
+        } else {
+            let ui = owner.uiState(EditorUIState.self)
+            ui.files = Self.replacing(old, with: key, in: ui.files)
+            ui.pinned = Self.replacing(old, with: key, in: ui.pinned)
+            if ui.active == old { ui.active = key }
+            owner.scheduleSnapshotSave()
+        }
+
+        guard wasShowing else { return key }
+        file = key.url
+        isDeleted = false
+        if moved.collapsed.contains(where: { $0 === document }) {
+            // The survivor is the other document at the path. Its text is not
+            // what is on screen, so the read puts it there.
+            activeDocument = documents.documents(at: key).first
+            content = nil
+            await reload()
+        } else {
+            language = highlighter.language(of: text, ofFileNamed: key.path)
+            content = .text(SourceText(text: text))
+            await highlight(text, at: key)
+        }
+        return key
+    }
+
+    /// `keys` with `old` swapped for `new`, and no key twice: the leftmost
+    /// stays, as in ``follow(from:to:)``.
+    private static func replacing(_ old: PathKey, with new: PathKey, in keys: [PathKey]) -> [PathKey] {
+        var result: [PathKey] = []
+        for key in keys {
+            let next = key == old ? new : key
+            if !result.contains(next) { result.append(next) }
+        }
+        return result
     }
 
     // MARK: - Unsaved work
@@ -477,9 +630,14 @@ public final class EditorModel {
     /// Writes every document with unsaved edits. Stops at the first that
     /// fails, which is then reported as any failed save is, and answers
     /// whether all of them went.
+    ///
+    /// The files that have a name go first, then a save panel for each untitled
+    /// one: cancelling any of them is a document not written, which stops the
+    /// quit or the close that asked.
     public func saveAll() async -> Bool {
-        for document in documents.dirty {
-            guard await save(document) else { return false }
+        let dirty = documents.dirty
+        for document in dirty.filter({ !$0.key.isUntitled }) + dirty.filter({ $0.key.isUntitled }) {
+            guard await save(document) != nil else { return false }
         }
         return true
     }
@@ -512,18 +670,21 @@ public final class EditorModel {
     func answer(_ answer: CloseAnswer) async {
         guard let prompt = closePrompt else { return }
         closePrompt = nil
+        var closing = prompt.key
 
         switch answer {
         case .cancel:
             return
         case .save:
             for document in documents.documents(at: prompt.key) where document.isDirty {
-                guard await save(document) else { return }
+                guard let saved = await save(document) else { return }
+                // An untitled tab is the tab for its file by now.
+                closing = saved
             }
         case .discard:
             break
         }
-        await close(tab: prompt.key)
+        await close(tab: closing)
     }
 
     // MARK: - A file that changed under unsaved edits
@@ -547,7 +708,8 @@ public final class EditorModel {
     }
 
     /// Whether ``save()`` has anything to do.
-    public var canSave: Bool { activeDocument?.isDirty == true }
+    /// An untitled tab always has: saving is how it gets a name.
+    public var canSave: Bool { activeDocument.map { $0.isDirty || $0.key.isUntitled } ?? false }
 
     func dismissSaveFailure() {
         saveFailure = nil
@@ -576,6 +738,10 @@ public final class EditorModel {
     /// reaching another.
     func reload() async {
         guard let worktree, let key = fileKey else { return }
+        if key.isUntitled {
+            showUntitled(key)
+            return
+        }
         if worktree.exists(key) == false {
             isDeleted = true
             return
@@ -614,12 +780,7 @@ public final class EditorModel {
             reading = existing.read(source.text)
         } else {
             document = documents.open(key, baseline: source.text)
-            let buffer = Buffer(text: source.text)
-            buffer.onEdit = { [weak self, weak buffer] in
-                guard let buffer else { return }
-                self?.bufferDidChange(buffer)
-            }
-            buffers[document.buffer] = buffer
+            buffers[document.buffer] = makeBuffer(text: source.text)
             reading = .replace
         }
         activeDocument = document
@@ -641,6 +802,16 @@ public final class EditorModel {
             content = result
             await highlight(source.text, at: key)
         }
+    }
+
+    /// Shows an untitled tab. There is nothing to read: the text is in its
+    /// buffer, and there is no file to be deleted or to change.
+    private func showUntitled(_ key: PathKey) {
+        guard let document = documents.documents(at: key).first else { return }
+        isDeleted = false
+        language = nil
+        activeDocument = document
+        if content == nil { content = .text(SourceText(text: document.baseline)) }
     }
 
     /// Colours what is on screen, if it is still the text these tokens were

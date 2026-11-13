@@ -71,19 +71,33 @@ public final class DocumentStore {
     public func move(from old: PathKey, to new: PathKey) -> Move {
         var result = Move()
         for document in documents where document.key.isInside(old) {
-            let target = PathKey(canonical: new.path + document.key.path.dropFirst(old.path.count))
-            if target == document.key { continue }
-
-            let others = documents.filter { $0.key == target && $0 !== document }
-            if !document.isDirty, others.contains(where: \.isDirty) {
-                result.collapsed.append(document)
-                continue
-            }
-            result.collapsed += others.filter { !$0.isDirty }
-            document.rekey(to: target)
-            result.moved.append(document)
+            place(document, at: PathKey(canonical: new.path + document.key.path.dropFirst(old.path.count)), into: &result)
         }
         documents.removeAll { document in result.collapsed.contains { $0 === document } }
         return result
+    }
+
+    /// Puts `document` at `key`, the way a rename would: the same document
+    /// with the same buffer, merged with whatever is already there by the
+    /// rules of ``move(from:to:)``. What saving an untitled document is.
+    @discardableResult
+    public func relocate(_ document: Document, to key: PathKey) -> Move {
+        var result = Move()
+        place(document, at: key, into: &result)
+        documents.removeAll { document in result.collapsed.contains { $0 === document } }
+        return result
+    }
+
+    private func place(_ document: Document, at target: PathKey, into result: inout Move) {
+        if target == document.key { return }
+
+        let others = documents.filter { $0.key == target && $0 !== document }
+        if !document.isDirty, others.contains(where: \.isDirty) {
+            result.collapsed.append(document)
+            return
+        }
+        result.collapsed += others.filter { !$0.isDirty }
+        document.rekey(to: target)
+        result.moved.append(document)
     }
 }

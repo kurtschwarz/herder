@@ -31,7 +31,7 @@ public struct EditorView: View {
 
     @ViewBuilder
     private var content: some View {
-        if model.file != nil {
+        if model.activeTab != nil {
             VStack(spacing: 0) {
                 // Nothing goes higher than the pane's top, which is under the
                 // window's command bar. `WindowChrome` grows the title bar so
@@ -82,6 +82,9 @@ public struct EditorView: View {
                 .font(.callout)
                 .foregroundStyle(Theme.Palette.secondaryText)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // As in the tab bar, empty space is where a double-click
+                // starts a new file.
+                .background { DoubleClickSurface { Task { await model.newUntitled() } } }
         }
     }
 
