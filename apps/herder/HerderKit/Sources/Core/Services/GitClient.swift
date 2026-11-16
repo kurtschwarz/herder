@@ -52,4 +52,8 @@ public protocol GitClient: Sendable {
     /// counted. `nil` for a folder that is not a working tree, or when there is
     /// no default branch to compare with.
     func changeSummary(in worktree: URL) async throws -> GitChangeSummary?
+
+    /// What `file` contained at `revision` in the working tree at `worktree`.
+    /// `nil` when the file is not in that revision, or is not UTF-8.
+    func contents(of file: URL, atRevision revision: String, in worktree: URL) async throws -> String?
 }

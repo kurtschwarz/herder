@@ -122,6 +122,18 @@ public final class EditorModel {
     /// when typing pauses.
     static let immediateRehighlightLimit = 100_000
 
+    /// How long typing has to stop before the lines that differ from `HEAD` are
+    /// worked out again.
+    static let changesDelay = Duration.milliseconds(150)
+
+    @ObservationIgnored
+    private var recompare: Task<Void, Never>?
+
+    /// Counts each fetch of the base, so one that comes back after a newer one
+    /// started, or after the tab was left, is dropped.
+    @ObservationIgnored
+    private var baseGeneration = 0
+
     /// `highlighter` is injected rather than defaulted, even though it is pure —
     /// the same text gives the same tokens — because the real one lives in
     /// `Services` and a feature may not import that. The composition root picks
@@ -414,6 +426,7 @@ public final class EditorModel {
     /// Points the pane at `key` and reads it. The tab is already in ``tabs``.
     private func show(_ key: PathKey, in state: Workspace, remembering: Bool) async {
         registration?.cancel()
+        forgetBase()
         worktree = state
         file = key.isUntitled ? nil : key.url
         if !key.isUntitled { lastShownFolder = key.parent }
@@ -444,6 +457,7 @@ public final class EditorModel {
         language = nil
         isDeleted = false
         rehighlight?.cancel()
+        forgetBase()
         generation += 1
     }
 
@@ -481,6 +495,8 @@ public final class EditorModel {
 
         // Plain text until it has a name to take a language from.
         guard !document.key.isUntitled else { return }
+
+        compare(buffer, after: Self.changesDelay)
 
         rehighlight?.cancel()
         let waits = buffer.storage.length > Self.immediateRehighlightLimit
@@ -802,6 +818,53 @@ public final class EditorModel {
             content = result
             await highlight(source.text, at: key)
         }
+        await refreshBase(of: document, at: key, in: worktree)
+    }
+
+    // MARK: - Changes since HEAD
+
+    /// Fetches what `HEAD` has for the file showing and marks the lines that
+    /// differ from it. Runs with every read, which is every change the
+    /// workspace reports for the tab showing and the moment a tab is shown:
+    /// that is what picks up a commit or a switch of branch, with no watch on
+    /// `HEAD` of its own.
+    private func refreshBase(of document: Document, at key: PathKey, in worktree: Workspace) async {
+        baseGeneration += 1
+        let mine = baseGeneration
+        let base = await worktree.headContents(of: key)
+        guard mine == baseGeneration, key == fileKey, let buffer = buffers[document.buffer] else { return }
+        buffer.baseText = base
+        compare(buffer, after: nil)
+    }
+
+    /// Drops any fetch or comparison under way, for a tab or a workspace being
+    /// left.
+    private func forgetBase() {
+        recompare?.cancel()
+        baseGeneration += 1
+    }
+
+    /// Works out the lines of `buffer` that differ from its base, off the main
+    /// actor, `delay` after the last edit. Without a `delay`, now.
+    private func compare(_ buffer: Buffer, after delay: Duration?) {
+        recompare?.cancel()
+        recompare = Task {
+            if let delay {
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled else { return }
+            }
+            let text = buffer.text
+            let changes = await Self.changes(from: buffer.baseText, to: text)
+            guard !Task.isCancelled else { return }
+            // Dropped by the buffer if typing went on while this was worked out.
+            buffer.show(changes, foundIn: text)
+        }
+    }
+
+    @concurrent
+    private static func changes(from base: String?, to text: String) async -> LineChanges {
+        guard let base else { return .none }
+        return LineChanges(base: base, current: text)
     }
 
     /// Shows an untitled tab. There is nothing to read: the text is in its

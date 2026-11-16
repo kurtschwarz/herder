@@ -28,6 +28,23 @@ final class LineNumberGutter: NSView {
     private let attributes: [NSAttributedString.Key: Any]
     private let currentAttributes: [NSAttributedString.Key: Any]
 
+    /// Width of the strip at the right edge, between the numbers and the text,
+    /// where a changed line's bar and a deleted boundary's triangle are drawn.
+    /// Inside the gutter's own width, so the numbers give way to it.
+    private static let stripWidth: CGFloat = 3
+
+    private static let addedColour = NSColor(Theme.Palette.success)
+    private static let modifiedColour = NSColor(Theme.Palette.warning)
+    private static let deletedColour = NSColor(Theme.Palette.danger)
+
+    /// The lines that differ from `HEAD`. Display only: the gutter draws what
+    /// it is given.
+    var changes = LineChanges.none {
+        didSet {
+            if changes != oldValue { needsDisplay = true }
+        }
+    }
+
     /// The 1-based lines the caret is on or a selection touches. A selection
     /// that ends where a line starts, as a triple-click's does, leaves that
     /// line out: nothing on it is selected.
@@ -103,6 +120,7 @@ final class LineNumberGutter: NSView {
         // Where the empty line after the last fragment has its baseline.
         var emptyLineBaseline: CGFloat?
         var reachedEnd = true
+        let lastLine = endsInEmptyLine ? lineStarts.count - 1 : lineStarts.count
 
         layout.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
             // Converted rather than subtracted from the scroll offset: with a
@@ -129,16 +147,24 @@ final class LineNumberGutter: NSView {
             let lineNumber = number(at: offset)
             let label = NSAttributedString(
                 string: "\(lineNumber)",
-                attributes: currentLines.contains(lineNumber) ? currentAttributes : attributes
+                attributes: numberAttributes(for: lineNumber, isCurrent: currentLines.contains(lineNumber))
             )
             let size = label.size()
             // Sat on the text's own baseline. Centring in the line box drifts
             // when the two fonts' ascents differ.
             let baseline = top + line.typographicBounds.minY + line.glyphOrigin.y
             label.draw(at: NSPoint(
-                x: bounds.width - size.width - Theme.Spacing.normal,
+                x: bounds.width - size.width - Theme.Spacing.normal - Self.stripWidth,
                 y: baseline - font.ascender
             ))
+            let isLast = lineNumber == lastLine
+            // The last line's fragment includes the empty line after it, which
+            // is no part of the line that changed.
+            var height = fragment.layoutFragmentFrame.height
+            if isLast, endsInEmptyLine, let tail = fragment.textLineFragments.last, fragment.textLineFragments.count > 1 {
+                height = tail.typographicBounds.minY
+            }
+            drawMarkers(for: lineNumber, top: top, height: height, isLast: isLast)
             return true
         }
 
@@ -149,9 +175,47 @@ final class LineNumberGutter: NSView {
             attributes: currentLines.contains(lineStarts.count) ? currentAttributes : attributes
         )
         label.draw(at: NSPoint(
-            x: bounds.width - label.size().width - Theme.Spacing.normal,
+            x: bounds.width - label.size().width - Theme.Spacing.normal - Self.stripWidth,
             y: baseline - font.ascender
         ))
+    }
+
+    /// A changed line's number takes its marker's colour, and the current line
+    /// still reads brighter than the rest.
+    private func numberAttributes(for line: Int, isCurrent: Bool) -> [NSAttributedString.Key: Any] {
+        guard let colour = colour(forLine: line) else { return isCurrent ? currentAttributes : attributes }
+        return [.font: font, .foregroundColor: isCurrent ? colour : colour.withAlphaComponent(0.65)]
+    }
+
+    private func colour(forLine line: Int) -> NSColor? {
+        if changes.added.contains(line) { return Self.addedColour }
+        if changes.modified.contains(line) { return Self.modifiedColour }
+        return nil
+    }
+
+    /// Draws what the strip shows for `line`, which fills `top` down by
+    /// `height`: its bar if it changed, and a triangle where lines were removed
+    /// above it. A removal after the last line has no line below it, so it is
+    /// drawn at the bottom of that one.
+    private func drawMarkers(for line: Int, top: CGFloat, height: CGFloat, isLast: Bool) {
+        if let colour = colour(forLine: line) {
+            colour.setFill()
+            NSRect(x: bounds.width - Self.stripWidth, y: top, width: Self.stripWidth, height: height).fill()
+        }
+        if changes.deleted.contains(line - 1) { drawTriangle(at: top) }
+        if isLast, changes.deleted.contains(line) { drawTriangle(at: top + height) }
+    }
+
+    /// A small triangle pointing at the text, centred on `y`.
+    private func drawTriangle(at y: CGFloat) {
+        let edge = bounds.width
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: edge - Self.stripWidth, y: y - Self.stripWidth))
+        path.line(to: NSPoint(x: edge, y: y))
+        path.line(to: NSPoint(x: edge - Self.stripWidth, y: y + Self.stripWidth))
+        path.close()
+        Self.deletedColour.setFill()
+        path.fill()
     }
 
     /// The 1-based line holding the character at `offset`.

@@ -251,6 +251,24 @@ public struct LiveGitClient: GitClient {
         return GitChangeSummary.parse(shortstat: stat)
     }
 
+    /// `git show` of the file as `revision` has it, which is its text exactly as
+    /// committed. Git answers 128 for a path that is not in the revision, and
+    /// that is the `nil`, as is bytes that are not UTF-8: a lossy decode would
+    /// show every line of such a file as changed.
+    @concurrent
+    public func contents(of file: URL, atRevision revision: String, in worktree: URL) async throws -> String? {
+        let root = PathKey(worktree)
+        let path = PathKey(file)
+        guard path.isInside(root) else { return nil }
+        let relative = String(path.path.dropFirst(root.path.count + 1))
+        // `./` makes the path relative to `-C`, not to the top of the repository.
+        let (code, data) = try runGitData(
+            ["-C", root.path, "show", "--no-textconv", "\(revision):./\(relative)"], allowing: []
+        )
+        guard code == 0 else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     // MARK: - Reading porcelain v2
 
     /// Every record is NUL-terminated, and a rename's original path is a record
@@ -333,6 +351,11 @@ public struct LiveGitClient: GitClient {
     /// returned: that is git saying the folder is not a repository, a normal
     /// answer for callers that ask about arbitrary folders.
     private func runGit(_ arguments: [String], allowing: Set<Int32>) throws -> (Int32, String) {
+        let (status, data) = try runGitData(arguments, allowing: allowing)
+        return (status, String(decoding: data, as: UTF8.self))
+    }
+
+    private func runGitData(_ arguments: [String], allowing: Set<Int32>) throws -> (Int32, Data) {
         let process = Process()
         process.executableURL = URL(filePath: "/usr/bin/git")
         process.arguments = arguments
@@ -351,7 +374,7 @@ public struct LiveGitClient: GitClient {
         guard status == 0 || status == 128 || allowing.contains(status) else {
             throw GitClientError.commandFailed("git exited with \(status)")
         }
-        return (status, String(decoding: data, as: UTF8.self))
+        return (status, data)
     }
 
     private func runGit(_ arguments: [String]) throws {
