@@ -1,0 +1,54 @@
+set shell := ["zsh", "-cu"]
+
+# Recipes for herderd. Callable from here, or from the repo root as
+# `just <recipe> packages/herderd`.
+#
+# The output is one binary, built for both macOS architectures and joined, for
+# the app to bundle. Whoever consumes it copies it in; this package does not
+# know who that is.
+
+binary := "target/herderd"
+
+# Universal, because Xcode builds macOS Release for both architectures.
+targets := "aarch64-apple-darwin x86_64-apple-darwin"
+
+# Show available recipes
+default:
+    @just --list --unsorted
+
+# Set up a fresh clone
+bootstrap:
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    command -v rustup >/dev/null || { print -u2 "rustup not found: brew install rustup && rustup-init"; exit 1 }
+    for target in {{ targets }}; do
+        rustup target add "${target}"
+    done
+
+# Build the universal binary the app bundles
+build: bootstrap
+    #!/usr/bin/env zsh
+    set -euo pipefail
+
+    slices=()
+    for target in {{ targets }}; do
+        cargo build --release --target "${target}"
+        slices+=("target/${target}/release/herderd")
+    done
+
+    mkdir -p target
+    lipo -create -output "{{ binary }}" "${slices[@]}"
+    # Joining the slices voids their signatures, and Apple Silicon will not run
+    # an unsigned binary. The app's own signing replaces this one when it
+    # copies the binary in.
+    codesign --force --sign - "{{ binary }}"
+    print -P "%F{cyan}==>%f {{ binary }}"
+
+# Run the tests and the linter
+test *args:
+    cargo test {{ args }}
+    cargo clippy --all-targets -- -D warnings
+
+# Remove build artifacts
+clean:
+    cargo clean

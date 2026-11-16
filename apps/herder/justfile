@@ -12,6 +12,10 @@ kit := "HerderKit"
 crate := "../../packages/herder-syntax-highlighter"
 vendor := kit + "/Vendor"
 
+# herderd, the daemon the app bundles. A copy-files phase in project.yml takes
+# its binary from here, so it has to exist before the project is generated.
+daemon_pkg := "../../packages/herderd"
+
 # libghostty-vt, which the terminal component links the same way.
 ghostty_pkg := "../../packages/herder-ghostty-vt"
 
@@ -25,7 +29,7 @@ default:
     @just --list --unsorted
 
 # Set up a fresh clone
-bootstrap: syntax ghostty project
+bootstrap: syntax ghostty daemon project
     @echo "Ready. Open {{ proj }}"
 
 # Build the syntax crate and put its XCFramework where HerderKit expects it.
@@ -40,6 +44,10 @@ syntax:
     mkdir -p {{ vendor }}
     rsync --archive --delete \
         {{ crate }}/target/HerderSyntaxFFI.xcframework {{ vendor }}/
+
+# Build herderd, which the app bundles and the Services tests run.
+daemon:
+    just --justfile {{ daemon_pkg }}/justfile --working-directory {{ daemon_pkg }} build
 
 # Build libghostty-vt and put its XCFramework where HerderKit expects it.
 # Needs Zig 0.17.x. Skipped when the framework already came from the pinned
@@ -78,11 +86,11 @@ project:
 # Without -parallel-testing-enabled the test bundles run one after another, so
 # the whole run waits on each bundle's slowest suite in turn. Side by side they
 # take about a quarter of the time. Their output interleaves as a result.
-test *args: syntax ghostty
+test *args: syntax ghostty daemon
     cd {{ kit }} && xcodebuild test -scheme HerderKit -destination 'platform=macOS,arch={{ arch }}' -parallel-testing-enabled YES {{ args }}
 
 # Build the app. Extra arguments go to xcodebuild, as with `test`.
-build *args: project syntax ghostty
+build *args: daemon project syntax ghostty
     @{{ xcodebuild }} -configuration Debug -quiet build HERDER_GIT_COMMIT=$(git rev-parse --short HEAD) {{ args }}
 
 # Build and run the app, with its output in this terminal
@@ -125,7 +133,7 @@ dev: build
 
 # Build a Release Herder.dmg in build/. Set VERSION to stamp it, and
 # CODESIGN_IDENTITY to sign it with a Developer ID instead of ad-hoc.
-package: project syntax ghostty
+package: daemon project syntax ghostty
     @scripts/package.sh
 
 # Run the XCTest UI suite (slow, launches the app)
@@ -147,5 +155,6 @@ clean:
     rm -rf {{ kit }}/.build {{ vendor }} 2>/dev/null || true
     just --justfile {{ crate }}/justfile --working-directory {{ crate }} clean
     just --justfile {{ ghostty_pkg }}/justfile --working-directory {{ ghostty_pkg }} clean
+    just --justfile {{ daemon_pkg }}/justfile --working-directory {{ daemon_pkg }} clean
     rm -rf build
     {{ xcodebuild }} clean >/dev/null 2>&1 || true

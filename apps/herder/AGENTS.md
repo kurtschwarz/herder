@@ -37,6 +37,7 @@ rationale.
 | A design token | `DesignSystem/Theme.swift` |
 | An icon | its `.imageset` in `DesignSystem/Icons.xcassets` and a property on `Ph`. **Never add the PhosphorSwift package back** — its catalog of every icon was most of the app's size. `DesignSystem/Views/Ph.swift` says where to copy one from. |
 | A colour for a token kind | `DesignSystem/Theme.swift`, paired in `Features/Editor/Platform/SyntaxAttributes.swift` |
+| A message the daemon and the app exchange | `packages/herderd/src/protocol.rs` and `Core/Models/Daemon/DaemonWire.swift`, together, additively. See `docs/adr/0001-herderd.md`. |
 | Anything that constructs a concrete service | `AppFeature` — nowhere else |
 | Something the app persists about itself | nothing new — add a field to a snapshot, decoded with `decodeIfPresent`, and put it through `StateStore`. No schema, no migration. |
 | A key the app stores state under | a `static let persistenceKey` beside the snapshot. **Never rename one** — it is a file name on the user's disk, so a rename is a migration. |
@@ -67,6 +68,7 @@ just build         # regenerates the project, then builds
 just check         # the import rules the compiler cannot enforce
 just dev           # build and run with output in the terminal
 just syntax        # rebuild the Rust crate and refresh its XCFramework
+just daemon        # build herderd, the daemon the app bundles
 just ghostty       # build libghostty-vt at the pinned commit (needs Zig 0.17.x)
 ```
 

@@ -7,6 +7,7 @@ This is the target architecture for Herder and the rulebook for anyone (human or
 - Swift 6 language mode, `swift-tools-version: 6.2`, macOS 26 and later
 - SwiftUI for the app shell and panels; AppKit (`NSTextView` with TextKit 2) for the editor surface
 - Rust for performance-sensitive work, starting with the syntax highlighter in `packages/herder-syntax-highlighter`. That package stays where it is and keeps its own build and binding setup.
+- Rust for the daemon too: `packages/herderd`, the process that owns agent sessions and terminals. See `docs/adr/0001-herderd.md`.
 - Zig, only to build libghostty-vt (the terminal emulation under the terminal panel) from a pinned Ghostty commit: `packages/herder-ghostty-vt`. Zig 0.17.x, `brew install zig`. We write no Zig.
 - Distributed with Developer ID signing and notarization. No App Sandbox, because Herder spawns processes and opens arbitrary folders.
 
@@ -40,6 +41,15 @@ AppFeature            composition root: windows, menus, builds real services
 ### RustBridge
 
 `RustBridge` is a role, not a target name. In Herder it is filled by the `HerderSyntaxFFI` binary target: `packages/herder-syntax-highlighter` ships no Swift package, it builds an XCFramework, and `.binaryTarget` is how SwiftPM takes one. `Services` depends on it directly, so there is no separate wrapper target. Substitute `HerderSyntaxFFI` wherever this document and `check-boundaries.sh` say `RustBridge`.
+
+### herderd
+
+`packages/herderd` is a separate process, started by the app on demand and left running when the app quits. It is the only thing on a host that starts or ends agent and terminal processes; files, git and the file watcher stay in the app. The decisions, and why, are in `docs/adr/0001-herderd.md`.
+
+- **Who owns what.** The daemon owns processes and (as it arrives) their screen state. The app owns everything the user sees and every file it touches. Persisted state names sessions by id and host; the daemon does not read the app's state.
+- **The protocol.** Length-prefixed frames of JSON over any byte stream, a version handshake first, additive changes only. `Core/Models/Daemon/DaemonWire` is the Swift half of `packages/herderd/src/protocol.rs`, and changing one means changing the other.
+- **The seam.** Core holds `DaemonClient` and `DaemonConnection` (what Settings observes). `Services/Daemon/LiveDaemonClient` finds or starts the daemon and does the handshake. Features see only `DaemonConnection`. `AppEnvironment` is the only place that names the live client, and passes `nil` unless a test asks, so nothing under test starts a real daemon.
+- **The binary.** `just daemon` builds it, `just build`, `just test` and `just package` depend on it, and a copy-files phase puts it at `Contents/MacOS/herderd`.
 
 ### Dependency rules
 
@@ -85,7 +95,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   ├── Vendor/                  # gitignored: HerderSyntaxFFI.xcframework (`just syntax`), GhosttyVt.xcframework (`just ghostty`)
 │   │   │   ├── Sources/
 │   │   │   │   ├── Core/
-│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Editor/, Files/, Git/, Processes/, Terminal/
+│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Daemon/, Editor/, Files/, Git/, Processes/, Terminal/
 │   │   │   │   │   ├── Services/        # service protocols
 │   │   │   │   │   ├── Workspace/       # WorkspaceRegistry, Workspace, snapshots, UI state
 │   │   │   │   │   ├── Repositories/    # RepositoryStore, RepositoryAccess
@@ -93,6 +103,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   ├── Services/
 │   │   │   │   │   ├── FileSystem/
 │   │   │   │   │   ├── Git/
+│   │   │   │   │   ├── Daemon/          # finds or starts herderd and does its handshake
 │   │   │   │   │   ├── Process/         # PTY spawning
 │   │   │   │   │   ├── Agents/
 │   │   │   │   │   ├── Highlighting/    # wraps the syntax-highlighter bindings
@@ -130,6 +141,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │
 └── packages/
     ├── herder-syntax-highlighter/       # Rust highlighter: stays here, owns its own build
+    ├── herderd/                         # Rust daemon that owns agent sessions and terminals; `just build` here, bundled by the app
     ├── herder-ghostty-vt/               # a pinned Ghostty commit and the recipe that builds libghostty-vt
     ├── opencode-theme/                  # the `herder` opencode theme the agent panel asks for; `just install`
     ├── opencode-plugin-osc-7501/        # opencode plugin that reports session status with OSC 7501; `just install`

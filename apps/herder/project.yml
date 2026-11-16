@@ -70,6 +70,15 @@ targets:
           copyFiles:
             destination: resources
             subpath: opencode/plugins/osc-7501
+      # herderd, next to the app's own executable so that
+      # `Bundle.url(forAuxiliaryExecutable:)` finds it. Built by `just daemon`,
+      # which `just build` runs first.
+      - path: ../../packages/herderd/target/herderd
+        group: herderd
+        buildPhase:
+          copyFiles:
+            destination: executables
+            codeSign: true
     dependencies:
       # One product. AppEnvironment in HerderKit builds the live services, so
       # this target has nothing concrete to link and nothing to inject.
