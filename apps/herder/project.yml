@@ -24,7 +24,7 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT: "YES"
     SWIFT_APPROACHABLE_CONCURRENCY: "YES"
-    MARKETING_VERSION: "0.4.0" # x-release-please-version
+    MARKETING_VERSION: "0.5.0" # x-release-please-version
     CURRENT_PROJECT_VERSION: "1"
     # The commit a build came from, for Settings to show. Set on the
     # xcodebuild command line by `just build` and scripts/package.sh;
