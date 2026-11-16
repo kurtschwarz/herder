@@ -31,6 +31,8 @@ public struct TaskRow: Identifiable, Sendable, Equatable {
         case working
         case needsYou
         case idle
+        /// Remembered from before, and not started until its tab is shown.
+        case paused
         case starting
         case failed
         /// The agent has exited and its tab is still open.

@@ -805,12 +805,27 @@ import Testing
         #expect(entry.title() == model.subject(of: tab))
     }
 
-    @Test func aSessionThatFailedToStartIsNotListed() async throws {
+    @Test func aSessionThatFailedToStartIsListedWithoutAProcess() async throws {
         pty.failSpawns(with: .openFailed(1))
 
-        _ = try await shown(sessions: 1)
+        let (model, _, _) = try await shown(sessions: 1)
 
+        let tab = try #require(model.activeTab)
+        let entry = try #require(processes.entry(tab.id))
+        #expect(entry.pid == nil)
+        #expect(entry.state() == .failed)
+    }
+
+    @Test func aRestoredTabIsListedPausedBeforeAnythingStarts() async throws {
+        let ids = try await closedWindow(starting: ["claude-code", "codex"], selecting: 0)
         #expect(processes.entries.isEmpty)
+
+        let model = makeModel()
+        model.restore(try await workspace(root, in: makeRegistry()))
+
+        #expect(Set(processes.entries.map(\.id)) == Set(ids))
+        #expect(processes.entries.allSatisfy { $0.pid == nil && $0.state() == .paused })
+        withExtendedLifetime(model) {}
     }
 
     @Test func aSessionIsListedWithTheStateTheSidebarReads() async throws {
@@ -874,6 +889,7 @@ import Testing
     @Test func showingFromTheTaskManagerAsksTheWindow() async throws {
         let (model, workspace, _) = try await shown(sessions: 1)
         let tab = try #require(model.activeTab)
+        // CONCURRENCY: set and read on the main actor, by a closure that is not marked as running there.
         nonisolated(unsafe) var asked: (UUID, WorkspaceID)?
         model.onShowTab = { asked = ($0, $1) }
 

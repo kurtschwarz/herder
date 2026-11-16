@@ -219,6 +219,7 @@ public final class AgentPanelModel {
         }
         tabsByWorkspace[id] = tabs
         activeByWorkspace[id] = state.active
+        for tab in tabs { enter(tab, in: workspace) }
         startSampling()
         publish()
     }
@@ -485,13 +486,11 @@ public final class AgentPanelModel {
         recordStart(of: tab, in: workspace)
     }
 
-    /// Lists the tab's process for the Task Manager, or nothing if it did not
-    /// start. Entered again by each start, which replaces the one before.
+    /// Lists the tab for the Task Manager, with its process once it has one.
+    /// A restored tab is listed paused, as the sidebar lists it, and one that
+    /// could not start is listed as failed. Entered again by each start,
+    /// which replaces the one before.
     private func enter(_ tab: AgentTab, in workspace: Workspace) {
-        guard let pid = tab.pid else {
-            processes.unregister(tab.id)
-            return
-        }
         let id = workspace.id
         let tabID = tab.id
         processes.register(RunningProcesses.Entry(
@@ -499,7 +498,7 @@ public final class AgentPanelModel {
             kind: .agentSession,
             window: sessions.window,
             workspace: id,
-            pid: pid,
+            pid: tab.pid,
             title: { [weak self, weak tab] in tab.flatMap { self?.subject(of: $0) } ?? "" },
             branch: { [weak workspace] in
                 switch workspace?.checkout {

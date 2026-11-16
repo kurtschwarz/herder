@@ -620,6 +620,7 @@ import Testing
     @Test func showingFromTheTaskManagerAsksTheWindow() async throws {
         let (model, workspace, _) = try await shown(tabs: 1)
         let tab = try #require(model.activeTab)
+        // CONCURRENCY: set and read on the main actor, by a closure that is not marked as running there.
         nonisolated(unsafe) var asked: (UUID, WorkspaceID)?
         model.onShowTab = { asked = ($0, $1) }
 

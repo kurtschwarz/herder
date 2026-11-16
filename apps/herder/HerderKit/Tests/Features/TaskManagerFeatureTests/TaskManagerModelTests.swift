@@ -307,6 +307,7 @@ import Testing
 
     @Test func showSessionBringsTheTabForward() async {
         let model = model()
+        // CONCURRENCY: counted on the main actor, by a closure that is not marked as running there.
         nonisolated(unsafe) var shown = 0
         let id = addAgent(pid: 200) { shown += 1 }
         monitor.enqueue(sample(at: 0, process(200, "x")))
@@ -320,6 +321,7 @@ import Testing
 
     @Test func showSessionDoesNothingForAProcess() async {
         let model = model()
+        // CONCURRENCY: counted on the main actor, by a closure that is not marked as running there.
         nonisolated(unsafe) var shown = 0
         addAgent(pid: 200) { shown += 1 }
         monitor.enqueue(sample(at: 0, process(200, "x")))

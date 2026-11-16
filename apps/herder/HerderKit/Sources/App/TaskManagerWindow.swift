@@ -1,3 +1,4 @@
+import AppKit
 import Core
 import DesignSystem
 import SwiftUI
@@ -16,12 +17,23 @@ public struct TaskManagerWindow: View {
     /// starts again each time and nothing holds it between.
     @State private var model: TaskManagerModel
 
+    /// Whether the window is open, so that a closed one reads nothing even if
+    /// SwiftUI keeps its content around. Closing says no, and the window
+    /// becoming the key one again says yes.
+    @State private var isOpen = true
+    @State private var host = Host()
+
+    /// The window, once `WindowChrome` has handed it over.
+    private final class Host {
+        weak var window: NSWindow?
+    }
+
     public init(environment: AppEnvironment) {
         _model = State(initialValue: environment.makeTaskManager())
     }
 
     public var body: some View {
-        TaskManagerView(model: model)
+        TaskManagerView(model: model, isPolling: isOpen)
             .frame(
                 minWidth: Theme.Size.minTaskManagerWindow.width,
                 maxWidth: .infinity,
@@ -32,7 +44,12 @@ public struct TaskManagerWindow: View {
             // One window for the life of the app, so it follows the active
             // Space, as settings does, rather than pulling the person back to
             // the one it first opened on.
-            .background(WindowChrome(followsActiveSpace: true))
+            .background(
+                WindowChrome(onClose: { isOpen = false }, onWindow: { host.window = $0 }, followsActiveSpace: true)
+            )
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+                if let window = note.object as? NSWindow, window === host.window { isOpen = true }
+            }
             .ignoresSafeArea()
             .preferredColorScheme(.dark)
     }

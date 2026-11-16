@@ -122,6 +122,9 @@ public enum TaskTree {
                 children: children
             )
             row.addTotals(of: children)
+            // Nothing running under it, and so nothing used: zeros, not a
+            // dash, which would say it has not been measured yet.
+            if children.isEmpty { row.cpu = 0 }
             return row
         }
 
@@ -133,7 +136,8 @@ public enum TaskTree {
             case .starting: return .starting
             case .failed: return .failed
             case .exited: return .done
-            case .idle, .paused, nil: return .idle
+            case .paused: return .paused
+            case .idle, nil: return .idle
             }
         }
     }

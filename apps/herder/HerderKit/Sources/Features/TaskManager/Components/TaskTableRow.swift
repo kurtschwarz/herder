@@ -93,6 +93,7 @@ struct TaskTableRow: View {
         case .working: "Working"
         case .needsYou: "Needs you"
         case .idle: "Idle"
+        case .paused: "Paused"
         case .starting: "Starting"
         case .failed: "Failed"
         case .done: "Done"
@@ -107,29 +108,7 @@ struct TaskTableRow: View {
         case .working, .running: Theme.Palette.success
         case .needsYou: Theme.Palette.warning
         case .failed: Theme.Palette.danger
-        case .idle, .starting, .done, .sleeping, .none: Theme.Palette.tertiaryText
-        }
-    }
-}
-
-/// A rate and a small bar under it, filled by how much of a core it is.
-private struct CPUCell: View {
-    let percent: Double?
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.normal) {
-            Text(TaskFormat.cpu(percent))
-                .font(.system(size: 12))
-                .monospacedDigit()
-                .foregroundStyle(Theme.Palette.text)
-            Capsule()
-                .fill(Theme.Palette.control)
-                .frame(width: 44, height: 4)
-                .overlay(alignment: .leading) {
-                    Capsule()
-                        .fill(Theme.Palette.accent)
-                        .frame(width: 44 * min(max((percent ?? 0) / 100, 0), 1), height: 4)
-                }
+        case .idle, .paused, .starting, .done, .sleeping, .none: Theme.Palette.tertiaryText
         }
     }
 }

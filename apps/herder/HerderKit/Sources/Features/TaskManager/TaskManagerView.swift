@@ -9,9 +9,13 @@ import TestSupport
 /// are the composition root's.
 public struct TaskManagerView: View {
     private let model: TaskManagerModel
+    private let isPolling: Bool
 
-    public init(model: TaskManagerModel) {
+    /// `isPolling` is whether the window is open to be read, which whoever
+    /// owns the window says: the view cannot see it close.
+    public init(model: TaskManagerModel, isPolling: Bool = true) {
         self.model = model
+        self.isPolling = isPolling
     }
 
     public var body: some View {
@@ -38,8 +42,10 @@ public struct TaskManagerView: View {
         .padding([.horizontal, .bottom], Theme.Spacing.windowPadding + Theme.Spacing.normal)
         .padding(.top, Theme.Spacing.windowPadding)
         // Tied to the view, so that a closed window reads nothing: the loop
-        // ends when the view goes.
-        .task { await model.run() }
+        // ends when the view goes, or when the window says it has closed.
+        .task(id: isPolling) {
+            if isPolling { await model.run() }
+        }
     }
 }
 

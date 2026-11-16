@@ -74,10 +74,11 @@ public enum TaskSort {
         case .running: 2
         case .starting: 3
         case .idle: 4
-        case .sleeping: 5
-        case .done: 6
-        case .failed: 7
-        case .none: 8
+        case .paused: 5
+        case .sleeping: 6
+        case .done: 7
+        case .failed: 8
+        case .none: 9
         }
     }
 }

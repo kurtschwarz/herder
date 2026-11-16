@@ -74,9 +74,21 @@ import Testing
         let session = try #require(F.children(of: .agentSessions, in: rows).first)
         #expect(session.status == .done)
         #expect(session.children.isEmpty)
-        #expect(session.cpu == nil)
+        #expect(session.cpu == 0)
         #expect(session.memory == 0)
         #expect(session.threads == 0)
+        #expect(session.processCount == 0)
+    }
+
+    @Test func aRestoredTabIsListedPausedWithZeros() throws {
+        let agent = F.owner(.agentSession, "Waiting", pid: nil, state: .paused)
+
+        let rows = build(F.sample(), owners: [agent])
+
+        let session = try #require(F.children(of: .agentSessions, in: rows).first)
+        #expect(session.status == .paused)
+        #expect(session.children.isEmpty)
+        #expect(session.cpu == 0)
         #expect(session.processCount == 0)
     }
 
