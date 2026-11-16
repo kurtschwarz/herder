@@ -54,6 +54,11 @@ public final class AppEnvironment {
     /// write it as their processes start and end, and the Task Manager reads it.
     public let processes: RunningProcesses
 
+    /// The app's standing with herderd, for Settings to show.
+    /// `nil` when there is no daemon to talk to, which is what a test or a
+    /// preview is given.
+    public let daemon: DaemonConnection?
+
     /// Where windows' snapshots are kept, and which exist.
     let windows: WindowStore
 
@@ -143,6 +148,12 @@ public final class AppEnvironment {
         let updater: (any UpdaterClient)? = SparkleUpdaterClient()
         #endif
 
+        let daemon = LiveDaemonClient(
+            socket: (try? LiveDaemonClient.socketURL()) ?? URL.temporaryDirectory.appending(path: "herderd.sock"),
+            executable: Bundle.main.url(forAuxiliaryExecutable: "herderd"),
+            client: "Herder \(AppVersion(info: Bundle.main.infoDictionary ?? [:]).version)"
+        )
+
         self.init(
             files: LiveFileClient(),
             bookmarks: LiveBookmarkClient(),
@@ -153,7 +164,8 @@ public final class AppEnvironment {
             persistence: persistence,
             leftovers: LiveLeftoverAgentClient(),
             opencode: opencode,
-            updater: updater
+            updater: updater,
+            daemon: daemon
         )
     }
 
@@ -168,7 +180,8 @@ public final class AppEnvironment {
     /// is `nil` for the same reason: a test must not link into the
     /// developer's own opencode config. `bundle` is where the app is running
     /// from, which decides whether `opencode` is asked at all. `updater` is
-    /// `nil` so that nothing checks GitHub from a test.
+    /// `nil` so that nothing checks GitHub from a test. `daemon` is `nil`
+    /// unless asked for, so a test never starts a real herderd.
     public init(
         files: any FileClient,
         bookmarks: any BookmarkClient,
@@ -185,6 +198,7 @@ public final class AppEnvironment {
         leftovers: (any LeftoverAgentClient)? = nil,
         opencode: (any OpencodeIntegrationClient)? = nil,
         updater: (any UpdaterClient)? = nil,
+        daemon: (any DaemonClient)? = nil,
         bundle: URL = Bundle.main.bundleURL
     ) {
         self.persistence = persistence
@@ -198,6 +212,7 @@ public final class AppEnvironment {
         self.agents = AgentCatalog(state: persistence.state)
         self.sessions = AgentSessions(state: persistence.state, clock: clock)
         self.processes = RunningProcesses()
+        self.daemon = daemon.map { DaemonConnection(client: $0) }
         self.worktrees = WorkspaceRegistry(
             files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
         )
@@ -349,6 +364,7 @@ public final class AppEnvironment {
 
         await agents.load()
         await repositories.load()
+        await daemon?.connect()
     }
 
     /// Hands back every folder the sandbox is holding open and stops watching

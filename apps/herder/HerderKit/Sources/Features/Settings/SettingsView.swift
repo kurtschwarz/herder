@@ -13,11 +13,15 @@ public struct SettingsView: View {
     private let agents: AgentCatalog
     private let version: AppVersion
     private let updater: (any UpdaterClient)?
+    private let daemon: DaemonConnection?
 
-    public init(agents: AgentCatalog, version: AppVersion, updater: (any UpdaterClient)?) {
+    public init(
+        agents: AgentCatalog, version: AppVersion, updater: (any UpdaterClient)?, daemon: DaemonConnection?
+    ) {
         self.agents = agents
         self.version = version
         self.updater = updater
+        self.daemon = daemon
     }
 
     public var body: some View {
@@ -37,7 +41,7 @@ public struct SettingsView: View {
     @ViewBuilder
     private var detail: some View {
         switch selection {
-        case .general: GeneralSettings(version: version, updater: updater)
+        case .general: GeneralSettings(version: version, updater: updater, daemon: daemon)
         case .agents: AgentsSettings(catalog: agents)
         }
     }
@@ -48,7 +52,8 @@ public struct SettingsView: View {
     SettingsView(
         agents: AgentCatalog(state: InMemoryStateStore()),
         version: AppVersion(version: "0.1.0", build: "1", commit: "e87cd6e"),
-        updater: StubUpdaterClient()
+        updater: StubUpdaterClient(),
+        daemon: DaemonConnection(client: StubDaemonClient())
     )
     .frame(width: Theme.Size.settingsWindow.width, height: Theme.Size.settingsWindow.height)
     .background { WindowGlass() }

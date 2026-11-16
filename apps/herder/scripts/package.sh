@@ -71,6 +71,7 @@ sign --preserve-metadata=entitlements "$SPARKLE/Versions/B/XPCServices/Downloade
 sign "$SPARKLE/Versions/B/Autoupdate"
 sign "$SPARKLE/Versions/B/Updater.app"
 sign "$SPARKLE"
+sign "$APP/Contents/MacOS/herderd"
 sign --entitlements "$ENTITLEMENTS" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 

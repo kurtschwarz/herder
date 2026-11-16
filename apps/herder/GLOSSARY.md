@@ -15,3 +15,18 @@ _Avoid_: section, category.
 **Running process registry**:
 The app-wide list of tabs that have a process running, in every window: each agent session and each terminal, with the pid it started, its title, and a way to bring it forward. Windows write it as their processes start and end, and the Task Manager reads it to know which processes belong to which tab. Not the list of agent sessions (that is the sidebar's, and includes ones with no process).
 _Avoid_: process table, tab list.
+
+## Daemon
+
+**herderd**:
+The one local process that owns every agent session and terminal process, so they keep running when the app quits, crashes or updates. The app is its client. Not the app's own child: it is started in its own session and outlives the app.
+_Avoid_: helper, agent host, background service.
+
+**Reattach**:
+Connecting a tab to the process herderd still has running for it, and showing the screen as it was. Nothing is started. Distinct from *resume*.
+_Avoid_: reconnect, restore.
+
+**Resume**:
+Starting a new process with an agent's resume command, so the agent picks the conversation back up. Today what a relaunch does; once herderd owns the processes it is only for a session whose process has ended.
+_Avoid_: reattach, restart.
+

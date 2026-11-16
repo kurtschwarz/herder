@@ -38,3 +38,6 @@ packages/herder-ghostty-vt/target/
 
 # Coverage output written by test runs.
 *.profraw
+
+# herderd's build output, bundled into the app by `just build apps/herder`.
+packages/herderd/target/

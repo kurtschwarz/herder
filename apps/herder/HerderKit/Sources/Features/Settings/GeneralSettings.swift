@@ -6,6 +6,7 @@ import SwiftUI
 struct GeneralSettings: View {
     let version: AppVersion
     let updater: (any UpdaterClient)?
+    let daemon: DaemonConnection?
 
     /// A copy of the updater's setting, which it does not publish changes to.
     /// Read when the pane appears and written back on every change.
@@ -17,6 +18,26 @@ struct GeneralSettings: View {
                 row("Version", version.display)
                 if let commit = version.commit {
                     row("Commit", commit)
+                }
+            }
+
+            if let daemon {
+                SettingsSection("Daemon") {
+                    switch daemon.status {
+                    case .connecting:
+                        row("Status", "Connecting…")
+                    case .connected(let info):
+                        row("Status", "Connected")
+                        row("Version", info.daemonVersion)
+                        row("Protocol", "\(info.protocolVersion)")
+                    case .incompatible(let version, let supports, let app):
+                        row("Status", "Incompatible")
+                        row("Version", version)
+                        row("Protocol", "herderd speaks \(Self.describe(supports)), this app speaks \(Self.describe(app))")
+                    case .unavailable(let reason):
+                        row("Status", "Unavailable")
+                        row("Reason", reason)
+                    }
                 }
             }
 
@@ -39,6 +60,10 @@ struct GeneralSettings: View {
                 }
             }
         }
+    }
+
+    private static func describe(_ versions: ClosedRange<Int>) -> String {
+        versions.lowerBound == versions.upperBound ? "\(versions.lowerBound)" : "\(versions.lowerBound)–\(versions.upperBound)"
     }
 
     private func row(_ label: String, _ value: String) -> some View {
