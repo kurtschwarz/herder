@@ -210,9 +210,9 @@ final class LineNumberGutter: NSView {
     private func drawTriangle(at y: CGFloat) {
         let edge = bounds.width
         let path = NSBezierPath()
-        path.move(to: NSPoint(x: edge - Self.stripWidth - 2, y: y - 4))
+        path.move(to: NSPoint(x: edge - Self.stripWidth, y: y - Self.stripWidth))
         path.line(to: NSPoint(x: edge, y: y))
-        path.line(to: NSPoint(x: edge - Self.stripWidth - 2, y: y + 4))
+        path.line(to: NSPoint(x: edge - Self.stripWidth, y: y + Self.stripWidth))
         path.close()
         Self.deletedColour.setFill()
         path.fill()

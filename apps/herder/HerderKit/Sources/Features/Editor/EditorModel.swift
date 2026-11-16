@@ -426,8 +426,7 @@ public final class EditorModel {
     /// Points the pane at `key` and reads it. The tab is already in ``tabs``.
     private func show(_ key: PathKey, in state: Workspace, remembering: Bool) async {
         registration?.cancel()
-        recompare?.cancel()
-        baseGeneration += 1
+        forgetBase()
         worktree = state
         file = key.isUntitled ? nil : key.url
         if !key.isUntitled { lastShownFolder = key.parent }
@@ -458,8 +457,7 @@ public final class EditorModel {
         language = nil
         isDeleted = false
         rehighlight?.cancel()
-        recompare?.cancel()
-        baseGeneration += 1
+        forgetBase()
         generation += 1
     }
 
@@ -837,6 +835,13 @@ public final class EditorModel {
         guard mine == baseGeneration, key == fileKey, let buffer = buffers[document.buffer] else { return }
         buffer.baseText = base
         compare(buffer, after: nil)
+    }
+
+    /// Drops any fetch or comparison under way, for a tab or a workspace being
+    /// left.
+    private func forgetBase() {
+        recompare?.cancel()
+        baseGeneration += 1
     }
 
     /// Works out the lines of `buffer` that differ from its base, off the main
