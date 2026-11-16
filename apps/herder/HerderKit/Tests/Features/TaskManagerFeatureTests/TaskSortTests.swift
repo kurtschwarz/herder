@@ -1,7 +1,9 @@
 import Foundation
 import Testing
 
-@testable import Core
+import Core
+
+@testable import TaskManagerFeature
 
 /// Sorting among siblings, with the groups held in place.
 @Suite struct TaskSortTests {

@@ -1,3 +1,4 @@
+import Core
 import Foundation
 
 /// One row of the Task Manager's table: a group, a tab, or a process, with
@@ -6,8 +7,8 @@ import Foundation
 /// CPU, memory, threads and the process count are all for the row's whole
 /// subtree, so a collapsed row accounts for everything it hides and a group
 /// header is a subtotal.
-public struct TaskRow: Identifiable, Sendable, Equatable {
-    public enum ID: Hashable, Sendable {
+struct TaskRow: Identifiable, Sendable, Equatable {
+    enum ID: Hashable, Sendable {
         case agentSessions
         case herder
         case terminals
@@ -17,7 +18,7 @@ public struct TaskRow: Identifiable, Sendable, Equatable {
         case process(ProcessKey)
     }
 
-    public enum Kind: Sendable, Equatable {
+    enum Kind: Sendable, Equatable {
         /// A heading. Never moves when rows are sorted.
         case group
         case session
@@ -27,7 +28,7 @@ public struct TaskRow: Identifiable, Sendable, Equatable {
         case process
     }
 
-    public enum Status: Sendable, Equatable {
+    enum Status: Sendable, Equatable {
         case working
         case needsYou
         case idle
@@ -42,35 +43,35 @@ public struct TaskRow: Identifiable, Sendable, Equatable {
         case none
     }
 
-    public var id: ID
-    public var kind: Kind
-    public var name: String
+    var id: ID
+    var kind: Kind
+    var name: String
 
     /// A dim second line: the worktree, the pid, or what kind of row it is.
-    public var subtitle: String?
+    var subtitle: String?
 
     /// The full command line, for a tooltip.
-    public var help: String?
-    public var status: Status
+    var help: String?
+    var status: Status
 
     /// Percent of one core. `nil` until there are two samples to tell it by.
-    public var cpu: Double?
-    public var memory: UInt64
-    public var threads: Int
-    public var processCount: Int
+    var cpu: Double?
+    var memory: UInt64
+    var threads: Int
+    var processCount: Int
 
     /// When the row's process started. `nil` for a group, and for a tab whose
     /// process is gone.
-    public var startedAt: Date?
+    var startedAt: Date?
 
-    public var pid: Int32?
+    var pid: Int32?
 
     /// What the filter looks at, besides the name.
-    public var searchTerms: [String]
+    var searchTerms: [String]
 
-    public var children: [TaskRow]
+    var children: [TaskRow]
 
-    public init(
+    init(
         id: ID,
         kind: Kind,
         name: String,
@@ -103,7 +104,7 @@ public struct TaskRow: Identifiable, Sendable, Equatable {
     }
 
     /// A heading over `children`, with their totals.
-    public static func group(_ id: ID, name: String, children: [TaskRow]) -> TaskRow {
+    static func group(_ id: ID, name: String, children: [TaskRow]) -> TaskRow {
         var row = TaskRow(id: id, kind: .group, name: name, children: children)
         row.addTotals(of: children)
         return row
@@ -120,13 +121,13 @@ public struct TaskRow: Identifiable, Sendable, Equatable {
         }
     }
 
-    public var isGroup: Bool { kind == .group }
+    var isGroup: Bool { kind == .group }
 
     /// Whether this row stays where it is when its siblings are sorted.
     var isPinned: Bool { kind == .group || kind == .herder }
 
     /// The tab this row stands for, if it is one.
-    public var tabID: UUID? {
+    var tabID: UUID? {
         if case .tab(let id) = id { id } else { nil }
     }
 }

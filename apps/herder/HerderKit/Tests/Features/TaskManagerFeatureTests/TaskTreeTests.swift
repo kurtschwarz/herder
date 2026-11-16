@@ -1,7 +1,9 @@
 import Foundation
 import Testing
 
-@testable import Core
+import Core
+
+@testable import TaskManagerFeature
 
 /// Which processes belong to which tab, and what is left over.
 @Suite struct TaskTreeTests {

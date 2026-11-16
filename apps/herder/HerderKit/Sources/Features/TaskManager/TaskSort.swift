@@ -1,8 +1,9 @@
+import Core
 import Foundation
 
 /// Sorting the Task Manager's rows among their siblings.
-public enum TaskSort {
-    public enum Column: Sendable, CaseIterable {
+enum TaskSort {
+    enum Column: Sendable, CaseIterable {
         case name
         case status
         case cpu
@@ -12,23 +13,23 @@ public enum TaskSort {
         case uptime
     }
 
-    public struct Order: Sendable, Equatable {
-        public var column: Column
-        public var ascending: Bool
+    struct Order: Sendable, Equatable {
+        var column: Column
+        var ascending: Bool
 
-        public init(_ column: Column, ascending: Bool) {
+        init(_ column: Column, ascending: Bool) {
             self.column = column
             self.ascending = ascending
         }
 
         /// What the table opens with: the busiest first.
-        public static let `default` = Order(.cpu, ascending: false)
+        static let `default` = Order(.cpu, ascending: false)
     }
 
     /// `rows` sorted, and each row's children, and theirs. A group and
     /// Herder's own row hold the place they were in, and only the rows around
     /// them change places: the groups never reorder.
-    public static func apply(_ rows: [TaskRow], by order: Order) -> [TaskRow] {
+    static func apply(_ rows: [TaskRow], by order: Order) -> [TaskRow] {
         let slots = rows.indices.filter { !rows[$0].isPinned }
         let sorted = slots.map { (index: $0, row: rows[$0]) }.sorted { lhs, rhs in
             switch compare(lhs.row, rhs.row, by: order.column) {

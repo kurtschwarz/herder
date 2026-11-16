@@ -1,11 +1,11 @@
 import Core
 import Foundation
 import Services
-import TaskManagerFeature
 import TestSupport
 import Testing
 
 @testable import AppFeature
+@testable import TaskManagerFeature
 
 /// The Task Manager as the composition root joins it up: one registry for every
 /// window's panels, read by a model of its own, and a way back to the tab.

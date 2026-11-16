@@ -1,7 +1,9 @@
 import Foundation
 import Testing
 
-@testable import Core
+import Core
+
+@testable import TaskManagerFeature
 
 /// The tiles' numbers, and the history behind their sparklines.
 @Suite struct TaskSummaryTests {

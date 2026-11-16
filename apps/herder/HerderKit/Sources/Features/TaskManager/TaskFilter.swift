@@ -1,9 +1,10 @@
+import Core
 import Foundation
 
 /// Narrowing the Task Manager's rows: to one half of the app, and to what a
 /// typed word matches.
-public enum TaskFilter {
-    public enum Scope: Sendable, CaseIterable {
+enum TaskFilter {
+    enum Scope: Sendable, CaseIterable {
         case all
         case agents
         case herder
@@ -15,7 +16,7 @@ public enum TaskFilter {
     /// pid. A row that matches stays with everything under it, and a row with
     /// a match somewhere under it stays so that the match can be reached. A
     /// group is never a match of its own, and goes when nothing under it is.
-    public static func apply(_ rows: [TaskRow], scope: Scope, text: String) -> [TaskRow] {
+    static func apply(_ rows: [TaskRow], scope: Scope, text: String) -> [TaskRow] {
         let scoped = rows.filter { row in
             switch scope {
             case .all: true

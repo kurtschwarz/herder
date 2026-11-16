@@ -1,3 +1,4 @@
+import Core
 import Foundation
 
 /// Turns a sample into the Task Manager's rows: which processes belong to
@@ -12,10 +13,10 @@ import Foundation
 ///
 /// Pure: the sample, the rates and the tabs go in, and nothing is read from
 /// the system.
-public enum TaskTree {
-    public static let appName = "Herder"
+enum TaskTree {
+    static let appName = "Herder"
 
-    public static func build(sample: ProcessSample, cpu: [ProcessKey: Double], owners: [ProcessOwner]) -> [TaskRow] {
+    static func build(sample: ProcessSample, cpu: [ProcessKey: Double], owners: [ProcessOwner]) -> [TaskRow] {
         var builder = Builder(sample: sample, cpu: cpu)
         let sessions = owners.filter { $0.kind == .agentSession }.map { builder.tabRow($0) }
         let terminals = owners.filter { $0.kind == .terminal }.map { builder.tabRow($0) }

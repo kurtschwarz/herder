@@ -1,7 +1,9 @@
 import Foundation
 import Testing
 
-@testable import Core
+import Core
+
+@testable import TaskManagerFeature
 
 /// The All / Agents / Herder control and the filter field.
 @Suite struct TaskFilterTests {

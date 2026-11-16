@@ -19,27 +19,27 @@ public final class TaskManagerModel {
 
     /// Every row as of the last refresh, in the order they were built. What the
     /// table shows is ``lines``, with the sort and the filter applied.
-    public private(set) var rows: [TaskRow] = []
+    private(set) var rows: [TaskRow] = []
 
-    public private(set) var summary: TaskSummary?
+    private(set) var summary: TaskSummary?
 
     /// The last minute of the tiles that draw one: the machine's share of CPU,
     /// the tree's memory in bytes, and its threads.
-    public private(set) var cpuHistory = MetricHistory()
-    public private(set) var memoryHistory = MetricHistory()
-    public private(set) var threadHistory = MetricHistory()
+    private(set) var cpuHistory = MetricHistory()
+    private(set) var memoryHistory = MetricHistory()
+    private(set) var threadHistory = MetricHistory()
 
     /// When the last refresh read the system, which is "now" for uptimes.
-    public private(set) var sampledAt: Date?
+    private(set) var sampledAt: Date?
 
-    public private(set) var order = TaskSort.Order.default
-    public var scope: TaskFilter.Scope = .all
-    public var filter = ""
+    private(set) var order = TaskSort.Order.default
+    var scope: TaskFilter.Scope = .all
+    var filter = ""
 
-    public var selection: TaskRow.ID?
+    var selection: TaskRow.ID?
 
     /// Open rows. The groups start open and a tab's tree starts closed.
-    public private(set) var expanded: Set<TaskRow.ID> = [.agentSessions, .herder, .terminals, .other]
+    private(set) var expanded: Set<TaskRow.ID> = [.agentSessions, .herder, .terminals, .other]
 
     @ObservationIgnored private var previous: ProcessSample?
 
@@ -99,7 +99,7 @@ public final class TaskManagerModel {
     /// What the table shows: the rows in scope that match the filter, sorted
     /// among their siblings, and as deep as is open. A search opens
     /// everything, so that what it found is on screen.
-    public var lines: [TaskLine] {
+    var lines: [TaskLine] {
         let shown = TaskSort.apply(TaskFilter.apply(rows, scope: scope, text: filter), by: order)
         let isSearching = !filter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return TaskLine.flatten(shown, expanded: expanded, expandAll: isSearching)
@@ -107,7 +107,7 @@ public final class TaskManagerModel {
 
     /// Sorts by `column`; again, the other way. A new column starts with the
     /// biggest or the first: names and status A to Z, and the rest high to low.
-    public func sort(by column: TaskSort.Column) {
+    func sort(by column: TaskSort.Column) {
         if order.column == column {
             order.ascending.toggle()
         } else {
@@ -115,17 +115,17 @@ public final class TaskManagerModel {
         }
     }
 
-    public func toggleExpanded(_ id: TaskRow.ID) {
+    func toggleExpanded(_ id: TaskRow.ID) {
         if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
     }
 
     // MARK: The selection
 
-    public var selectedRow: TaskRow? { selection.flatMap(row(_:)) }
+    var selectedRow: TaskRow? { selection.flatMap(row(_:)) }
 
     /// The bottom bar's line for the selected row: "Syntax highlighting · 4
     /// processes · started 12m ago".
-    public var selectionSummary: String? {
+    var selectionSummary: String? {
         guard let row = selectedRow else { return nil }
         var parts = [row.name]
         parts.append(TaskFormat.processes(row.processCount))
@@ -138,13 +138,13 @@ public final class TaskManagerModel {
 
     /// Whether Show session has a tab to bring forward: an agent session or a
     /// terminal, and not a process or a group.
-    public var canShowSession: Bool {
+    var canShowSession: Bool {
         guard let id = selectedRow?.tabID else { return false }
         return processes.entry(id) != nil
     }
 
     /// Brings the selected tab forward in its window, and raises the window.
-    public func showSelectedSession() {
+    func showSelectedSession() {
         guard let id = selectedRow?.tabID else { return }
         processes.entry(id)?.show()
     }
