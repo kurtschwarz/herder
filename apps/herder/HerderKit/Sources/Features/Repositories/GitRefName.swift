@@ -2,8 +2,8 @@ import Foundation
 
 /// The rules `git check-ref-format` applies to a branch name, so a name can be
 /// refused while it is being typed instead of when `git` rejects it.
-public enum GitRefName {
-    public enum Problem: Equatable {
+enum GitRefName {
+    enum Problem: Equatable {
         case empty
         /// Why the name is not allowed, worded to finish "A branch name ...".
         case invalid(String)
@@ -12,7 +12,7 @@ public enum GitRefName {
     private static let forbidden: Set<Character> = ["~", "^", ":", "?", "*", "[", "\\"]
 
     /// `nil` when `name` is a valid branch name.
-    public static func problem(in name: String) -> Problem? {
+    static func problem(in name: String) -> Problem? {
         guard !name.isEmpty else { return .empty }
 
         if name.hasPrefix("-") { return .invalid("can't start with a dash") }

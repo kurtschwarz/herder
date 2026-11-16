@@ -1,7 +1,8 @@
+import Core
 import Foundation
 import Testing
 
-@testable import Core
+@testable import EditorFeature
 
 @Suite struct TextEditTests {
     private func token(_ location: Int, _ length: Int, _ kind: SyntaxTokenKind = .string) -> SyntaxToken {

@@ -24,9 +24,10 @@ rationale.
 
 | Adding | Goes in |
 | --- | --- |
-| A plain value type | `Core/Models/`, one type per file named after the type |
+| A plain value type two or more features, or a service protocol, need | `Core/Models/<Area>/`, one type per file named after the type |
+| A plain value type only one feature reads | that feature's folder, `internal` — see `GitRefName` |
 | A protocol for anything touching disk, network, processes or the clock | `Core/Services/` |
-| Pure logic about an external system, with no I/O | `Core/Models/` — see `GitRefName` |
+| Pure logic about an external system, with no I/O | `Core/Models/<Area>/` — see `GitWorktreeLocation` |
 | The live implementation of such a protocol | `Services/<Area>/` |
 | A fake for that protocol | `TestSupport/Fakes/`, wrapped in `#if DEBUG` |
 | A user-facing feature | its own target under `Sources/Features/<Name>/`, module `<Name>Feature` |

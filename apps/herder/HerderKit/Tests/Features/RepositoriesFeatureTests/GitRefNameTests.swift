@@ -1,6 +1,7 @@
-import Core
 import Foundation
 import Testing
+
+@testable import RepositoriesFeature
 
 @Suite struct GitRefNameTests {
     @Test(arguments: ["main", "agent/add-minimap", "fix_1.2", "v1.0", "a/b/c", "feature-x", "ünï"])
