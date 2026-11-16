@@ -10,6 +10,9 @@ import TestSupport
 public struct RepositoriesView: View {
     private let model: RepositoriesModel
 
+    /// Whether the history lists every ended session. Per window, and not saved.
+    @State private var showsAllHistory = false
+
     /// What this window lists, read straight off the model. This was a `@Query`
     /// against SwiftData; Observation does the same job, and the sidebar no
     /// longer knows what backs it.
@@ -18,6 +21,19 @@ public struct RepositoriesView: View {
     /// The part of it the workspace selector has left on screen. Only these
     /// are read: a hidden repository's worktrees are nobody's business.
     private var shown: [Repository] { model.shownRepositories }
+
+    private var historySources: [RepositoriesModel.HistorySource] { model.historySources(of: shown) }
+
+    @Environment(AgentSessions.self) private var history: AgentSessions?
+
+    /// How many ended sessions the shown repositories have between them.
+    private var historyCount: Int {
+        guard let history else { return 0 }
+        var seen: Set<PathKey> = []
+        return historySources.reduce(0) { total, source in
+            seen.insert(source.key).inserted ? total + history.ended(in: source.key).count : total
+        }
+    }
 
     public init(model: RepositoriesModel) {
         self.model = model
@@ -31,15 +47,46 @@ public struct RepositoriesView: View {
                 EmptyRepositories { model.beginAdding() }
             } else {
                 SessionLauncher(model: model)
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        OpenSessionsSection(model: model, repositories: shown)
-                        SessionHistorySection(sources: model.historySources(of: shown))
+                VStack(spacing: 0) {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            OpenSessionsSection(model: model, repositories: shown)
+                            SessionHistorySection(
+                                sources: historySources,
+                                isExpanded: $showsAllHistory
+                            )
+                            if !showsAllHistory, historyCount > 0 {
+                                AllHistoryRow(count: historyCount, isExpanded: $showsAllHistory)
+                            }
+                        }
+                        .padding(.horizontal, Theme.Spacing.tight)
+                        .padding(.bottom, Theme.Spacing.loose)
                     }
-                    .padding(.horizontal, Theme.Spacing.tight)
-                    .padding(.bottom, Theme.Spacing.loose)
+                    .scrollIndicators(.hidden)
+                    // Expanded, the row is pinned under the list, and rows
+                    // fade out as they near it rather than running under it.
+                    .mask(alignment: .bottom) {
+                        VStack(spacing: 0) {
+                            Color.black
+                            if showsAllHistory {
+                                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                    .frame(height: Theme.Spacing.loose)
+                            }
+                        }
+                    }
+
+                    if showsAllHistory, historyCount > 0 {
+                        AllHistoryRow(count: historyCount, isExpanded: $showsAllHistory)
+                            .padding(.horizontal, Theme.Spacing.tight)
+                            .padding(.bottom, Theme.Spacing.tight)
+                    }
                 }
-                .scrollIndicators(.hidden)
+                // Here rather than on the history, which a lazy stack
+                // may not build while there is nothing to show yet.
+                .task(id: historySources.map(\.key)) {
+                    guard let history else { return }
+                    for source in historySources { await history.load(source.key) }
+                }
             }
         }
         // Worktrees are made and removed in a terminal, so coming back to the
