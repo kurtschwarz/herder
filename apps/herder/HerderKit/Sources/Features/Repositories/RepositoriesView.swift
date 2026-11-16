@@ -22,6 +22,10 @@ public struct RepositoriesView: View {
     /// are read: a hidden repository's worktrees are nobody's business.
     private var shown: [Repository] { model.shownRepositories }
 
+    private var historySources: [RepositoriesModel.HistorySource] { model.historySources(of: shown) }
+
+    @Environment(AgentSessions.self) private var history: AgentSessions?
+
     public init(model: RepositoriesModel) {
         self.model = model
     }
@@ -39,7 +43,7 @@ public struct RepositoriesView: View {
                         LazyVStack(alignment: .leading, spacing: 2, pinnedViews: [.sectionFooters]) {
                             OpenSessionsSection(model: model, repositories: shown)
                             SessionHistorySection(
-                                sources: model.historySources(of: shown),
+                                sources: historySources,
                                 isExpanded: $showsAllHistory
                             )
                         }
@@ -47,6 +51,12 @@ public struct RepositoriesView: View {
                         .padding(.bottom, Theme.Spacing.loose)
                     }
                     .scrollIndicators(.hidden)
+                    // Here rather than on the history, which a lazy stack
+                    // may not build while there is nothing to show yet.
+                    .task(id: historySources.map(\.key)) {
+                        guard let history else { return }
+                        for source in historySources { await history.load(source.key) }
+                    }
                     // The list gets shorter, and the offset may now be past
                     // its end: bring the row back.
                     .onChange(of: showsAllHistory) { _, isExpanded in

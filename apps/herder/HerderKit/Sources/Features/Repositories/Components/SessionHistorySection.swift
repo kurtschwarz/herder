@@ -17,8 +17,6 @@ struct SessionHistorySection: View {
     @Environment(Workspace.self) private var active: Workspace?
     @Environment(\.renameAgentSession) private var renameAgentSession
 
-    private var keys: [PathKey] { sources.map(\.key) }
-
     /// Every ended session in the shown repositories, latest end first, which
     /// repository each is from when there is more than one to tell apart, and
     /// the worktree each is picked up in: its own, else its repository's
@@ -71,19 +69,9 @@ struct SessionHistorySection: View {
                 }
             }
         } footer: {
-            // Present even when empty, so reading the history, attached to
-            // it, still runs while there is nothing to show.
-            Group {
-                if digest.isEmpty {
-                    Color.clear.frame(height: 0)
-                } else {
-                    AllHistoryRow(count: digest.total, isExpanded: $isExpanded)
-                        .id(Self.footerID)
-                }
-            }
-            .task(id: keys) {
-                guard let history else { return }
-                for key in keys { await history.load(key) }
+            if !digest.isEmpty {
+                AllHistoryRow(count: digest.total, isExpanded: $isExpanded)
+                    .id(Self.footerID)
             }
         }
     }

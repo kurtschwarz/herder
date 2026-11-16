@@ -81,9 +81,9 @@ import Testing
             ended(hoursAgo: 11),       // today
             ended(hoursAgo: 13),       // yesterday
             ended(hoursAgo: 12 + 24),  // yesterday's midnight: still yesterday
-            ended(hoursAgo: 37),       // the day before: previous 7 days
-            ended(daysAgo: 7),         // 8 Nov 12:00, after 8 Nov 00:00
-            ended(at: date(2023, 11, 7, hour: 23)), // before the 7 day line
+            ended(hoursAgo: 37),       // the day before yesterday: previous 7 days
+            ended(at: date(2023, 11, 8, hour: 0)),  // on the 7 day line
+            ended(at: date(2023, 11, 7, hour: 23)), // just before it
             ended(at: date(2023, 10, 16, hour: 0)), // 30 days back is 16 Oct 00:00
             ended(at: date(2023, 10, 15, hour: 23)), // just before it
             ended(at: date(2023, 9, 3)),
