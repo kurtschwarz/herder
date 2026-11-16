@@ -20,9 +20,11 @@ public final class StubPTYSession: PTYSession {
     private let state: Mutex<State>
 
     public let spec: PTYSpec
+    public let pid: Int32
 
-    public init(spec: PTYSpec) {
+    public init(spec: PTYSpec, pid: Int32 = 1000) {
         self.spec = spec
+        self.pid = pid
         (output, continuation) = AsyncStream<Data>.makeStream()
         state = Mutex(State(
             size: spec.size,

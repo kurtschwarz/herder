@@ -48,5 +48,15 @@ struct HerderApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)
+
+        // One of it, opened from Tools and not brought back on relaunch. It is
+        // resizable, unlike settings, which has one column of controls.
+        Window("Task Manager", id: TaskManagerWindow.id) {
+            TaskManagerWindow(environment: environment)
+        }
+        .defaultSize(TaskManagerWindow.defaultSize)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentMinSize)
+        .restorationBehavior(.disabled)
     }
 }

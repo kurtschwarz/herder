@@ -27,6 +27,9 @@ struct WindowChrome: NSViewRepresentable {
     /// What its terminals are running. Asked of the processes, so it waits.
     var runningCommands: () async -> [String] = { [] }
 
+    /// Handed the window once there is one, for whoever needs to raise it.
+    var onWindow: (NSWindow) -> Void = { _ in }
+
     /// Whether the window moves to whichever Space is showing when it is
     /// brought forward, instead of pulling the person back to the one it first
     /// opened on.
@@ -73,6 +76,7 @@ struct WindowChrome: NSViewRepresentable {
 
     private func configure(_ window: NSWindow?, _ coordinator: Coordinator) {
         guard let window else { return }
+        onWindow(window)
 
         // Reassigned every time, because the closure captures the window's
         // state, which does not exist when the view is first made.

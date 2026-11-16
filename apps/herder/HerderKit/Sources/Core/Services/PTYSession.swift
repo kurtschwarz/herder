@@ -11,6 +11,10 @@ public protocol PTYSession: AnyObject, Sendable {
     /// slows the process; one that stops reading stops it.
     var output: AsyncStream<Data> { get }
 
+    /// The started process's id: what its tree is found by, and the one
+    /// the Task Manager counts under its tab.
+    var pid: Int32 { get }
+
     /// Sends bytes to the process as if typed. Waits while the terminal's input
     /// buffer is full, and returns early if the task is cancelled.
     func write(_ data: Data) async

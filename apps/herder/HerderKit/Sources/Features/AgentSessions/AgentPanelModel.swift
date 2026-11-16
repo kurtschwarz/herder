@@ -37,6 +37,15 @@ public final class AgentPanelModel {
     /// written down as it starts and ends.
     public let sessions: WindowAgentSessions
 
+    /// Every tab with a process running, in every window, for the Task
+    /// Manager to find. This panel's sessions are entered as they start.
+    private let processes: RunningProcesses
+
+    /// Asked for when the Task Manager shows a session: its tab in front, in
+    /// its workspace, and its window raised. A feature cannot reach the window,
+    /// so whoever composes it decides how.
+    @ObservationIgnored public var onShowTab: ((UUID, WorkspaceID) -> Void)?
+
     /// The key a worktree's history is kept under: its repository's folder.
     /// Set by whoever knows the window's repositories; a worktree none of
     /// them owns is kept under its own folder.
@@ -91,9 +100,11 @@ public final class AgentPanelModel {
         clock: any ClockClient,
         catalog: AgentCatalog,
         sessions: WindowAgentSessions,
+        processes: RunningProcesses = RunningProcesses(),
         environment: [String: String] = ProcessInfo.processInfo.environment,
         sampleInterval: Duration = .seconds(1)
     ) {
+        self.processes = processes
         self.pty = pty
         self.commands = commands
         self.clock = clock
@@ -208,6 +219,7 @@ public final class AgentPanelModel {
         }
         tabsByWorkspace[id] = tabs
         activeByWorkspace[id] = state.active
+        for tab in tabs { enter(tab, in: workspace) }
         startSampling()
         publish()
     }
@@ -430,6 +442,7 @@ public final class AgentPanelModel {
     }
 
     private func remove(_ tab: AgentTab, from id: WorkspaceID) {
+        processes.unregister(tab.id)
         guard var tabs = tabsByWorkspace[id], let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tabs.remove(at: index)
         tabsByWorkspace[id] = tabs.isEmpty ? nil : tabs
@@ -469,7 +482,39 @@ public final class AgentPanelModel {
         )
         spec.pidVariable = AgentMark.variable
         await tab.attach(using: pty, spec: spec)
+        enter(tab, in: workspace)
         recordStart(of: tab, in: workspace)
+    }
+
+    /// Lists the tab for the Task Manager, with its process once it has one.
+    /// A restored tab is listed paused, as the sidebar lists it, and one that
+    /// could not start is listed as failed. Entered again by each start,
+    /// which replaces the one before.
+    private func enter(_ tab: AgentTab, in workspace: Workspace) {
+        let id = workspace.id
+        let tabID = tab.id
+        processes.register(RunningProcesses.Entry(
+            id: tabID,
+            kind: .agentSession,
+            window: sessions.window,
+            workspace: id,
+            pid: tab.pid,
+            title: { [weak self, weak tab] in tab.flatMap { self?.subject(of: $0) } ?? "" },
+            branch: { [weak workspace] in
+                switch workspace?.checkout {
+                case .branch(let name): name
+                case .detached(let sha): String(sha.prefix(7))
+                case nil: nil
+                }
+            },
+            // The reading the sidebar lists, and the tab's own for the moment
+            // before the panel has published it.
+            state: { [weak self, weak tab] in
+                guard let tab else { return nil }
+                return self?.sessions.sessions.first { $0.id == tab.id }?.state ?? tab.state
+            },
+            show: { [weak self] in self?.onShowTab?(tabID, id) }
+        ))
     }
 
     /// The app's environment with the agent's over it. The agent's comes from
@@ -497,6 +542,7 @@ public final class AgentPanelModel {
         }
         tab.onExit = { [weak self] tab, code in
             guard let self else { return }
+            processes.processEnded(tab.id)
             if code == 0 {
                 sessions.store.end(tab.id, because: .exited)
                 remove(tab, from: id)
@@ -561,7 +607,10 @@ public final class AgentPanelModel {
 
     /// Ends every session for a workspace this window has stopped keeping.
     public func discard(_ id: WorkspaceID) {
-        for tab in tabsByWorkspace[id] ?? [] { tab.terminate() }
+        for tab in tabsByWorkspace[id] ?? [] {
+            tab.terminate()
+            processes.unregister(tab.id)
+        }
         tabsByWorkspace[id] = nil
         activeByWorkspace[id] = nil
         openedByWorkspace[id] = nil
@@ -572,7 +621,10 @@ public final class AgentPanelModel {
     /// Ends every session: the window is closing.
     public func terminateAll() {
         for tabs in tabsByWorkspace.values {
-            for tab in tabs { tab.terminate() }
+            for tab in tabs {
+                tab.terminate()
+                processes.unregister(tab.id)
+            }
         }
         tabsByWorkspace = [:]
         activeByWorkspace = [:]

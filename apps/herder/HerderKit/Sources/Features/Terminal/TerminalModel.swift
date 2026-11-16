@@ -22,7 +22,21 @@ public final class TerminalModel {
     private let environment: [String: String]
     private let home: URL
 
+    /// Every tab with a process running, in every window, for the Task
+    /// Manager to find. This panel's shells are entered as they start.
+    private let processes: RunningProcesses
+    private let window: UUID
+
     public private(set) var workspace: Workspace?
+
+    /// A tab to bring forward once its workspace is showing. See
+    /// ``reveal(_:in:)``.
+    private var pendingReveal: WorkspaceID?
+
+    /// Asked for when the Task Manager shows a shell: its tab in front, in
+    /// its workspace, and its window raised. A feature cannot reach the window,
+    /// so whoever composes it decides how.
+    @ObservationIgnored public var onShowTab: ((UUID, WorkspaceID) -> Void)?
 
     private var tabsByWorkspace: [WorkspaceID: [TerminalTab]] = [:]
     private var activeByWorkspace: [WorkspaceID: UUID] = [:]
@@ -63,8 +77,12 @@ public final class TerminalModel {
         pty: any PTYClient,
         clock: any ClockClient,
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        home: URL = FileManager.default.homeDirectoryForCurrentUser
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        processes: RunningProcesses = RunningProcesses(),
+        window: UUID = UUID()
     ) {
+        self.processes = processes
+        self.window = window
         self.pty = pty
         self.clock = clock
         self.environment = environment
@@ -107,6 +125,11 @@ public final class TerminalModel {
         let state = workspace.uiState(TerminalUIState.self)
         isOpen = state.isOpen
         storedHeight = state.height
+        if pendingReveal == workspace.id {
+            setOpen(true)
+            focusRequest += 1
+        }
+        pendingReveal = nil
         if isOpen, tabs.isEmpty { await openTab() }
     }
 
@@ -175,6 +198,16 @@ public final class TerminalModel {
             tab.onExit = { [weak self] tab, code in self?.shellExited(tab, code: code, in: id) }
             tab.screen.onOpenFile = { [weak self] url, line, column in self?.onOpenFile?(url, line, column) }
             tab.start(clock: clock)
+            let tabID = tab.id
+            processes.register(RunningProcesses.Entry(
+                id: tabID,
+                kind: .terminal,
+                window: window,
+                workspace: id,
+                pid: session.pid,
+                title: { [weak tab] in tab?.displayTitle ?? "" },
+                show: { [weak self] in self?.onShowTab?(tabID, id) }
+            ))
             tabsByWorkspace[id, default: []].append(tab)
             activeByWorkspace[id] = tab.id
             if self.workspace?.id == id {
@@ -186,6 +219,20 @@ public final class TerminalModel {
             case .openFailed(let code): "The system would not make a terminal (error \(code))."
             case .spawnFailed(let code): "Couldn\u{2019}t start \(spec.executable): \(String(cString: strerror(code)))."
             }
+        }
+    }
+
+    /// Brings a shell forward in `workspace`, which the window is showing or
+    /// on its way to: the panel opens with the tab in front, and takes the
+    /// keyboard once it is on screen.
+    public func reveal(_ id: UUID, in workspace: WorkspaceID) {
+        guard tabsByWorkspace[workspace]?.contains(where: { $0.id == id }) == true else { return }
+        activeByWorkspace[workspace] = id
+        if self.workspace?.id == workspace {
+            setOpen(true)
+            focusRequest += 1
+        } else {
+            pendingReveal = workspace
         }
     }
 
@@ -274,6 +321,7 @@ public final class TerminalModel {
     }
 
     private func remove(_ tab: TerminalTab, from id: WorkspaceID) {
+        processes.unregister(tab.id)
         guard var tabs = tabsByWorkspace[id], let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tabs.remove(at: index)
         tabsByWorkspace[id] = tabs.isEmpty ? nil : tabs
@@ -287,6 +335,7 @@ public final class TerminalModel {
     /// A shell went by itself. A clean exit takes its tab with it; anything
     /// else stays up with the reason, until a key is pressed.
     private func shellExited(_ tab: TerminalTab, code: Int32, in id: WorkspaceID) {
+        processes.unregister(tab.id)
         if code == 0 {
             remove(tab, from: id)
             return
@@ -322,7 +371,10 @@ public final class TerminalModel {
 
     /// Ends every shell for a workspace this window has stopped keeping.
     public func discard(_ id: WorkspaceID) {
-        for tab in tabsByWorkspace[id] ?? [] { tab.terminate() }
+        for tab in tabsByWorkspace[id] ?? [] {
+            tab.terminate()
+            processes.unregister(tab.id)
+        }
         tabsByWorkspace[id] = nil
         activeByWorkspace[id] = nil
         if workspace?.id == id { isOpen = false }
@@ -331,7 +383,10 @@ public final class TerminalModel {
     /// Ends every shell: the window is closing.
     public func terminateAll() {
         for tabs in tabsByWorkspace.values {
-            for tab in tabs { tab.terminate() }
+            for tab in tabs {
+                tab.terminate()
+                processes.unregister(tab.id)
+            }
         }
         tabsByWorkspace = [:]
         activeByWorkspace = [:]

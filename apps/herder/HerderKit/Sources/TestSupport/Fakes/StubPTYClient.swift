@@ -29,11 +29,12 @@ public final class StubPTYClient: PTYClient {
     }
 
     public func spawn(_ spec: PTYSpec) async throws(PTYClientError) -> any PTYSession {
-        let session = StubPTYSession(spec: spec)
-        let failure = state.withLock { state -> PTYClientError? in
+        let (session, failure) = state.withLock { state -> (StubPTYSession, PTYClientError?) in
+            // A pid of its own for each, in the order they were made.
+            let session = StubPTYSession(spec: spec, pid: Int32(1000 + state.specs.count))
             state.specs.append(spec)
             if state.failure == nil { state.sessions.append(session) }
-            return state.failure
+            return (session, state.failure)
         }
         if let failure { throw failure }
         return session

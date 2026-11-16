@@ -78,6 +78,9 @@ final class AgentTab: Identifiable {
     private(set) var screen: TerminalScreen?
     private(set) var generation = 0
 
+    /// The id of the process it started, while it has one.
+    var pid: Int32? { process?.pid }
+
     /// When it was opened, last worked, or last changed what it says it is
     /// doing. For a program that says nothing, when it last wrote anything.
     /// `nil` for a restored tab until it is first attached.

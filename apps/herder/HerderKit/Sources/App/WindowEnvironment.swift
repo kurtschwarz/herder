@@ -97,6 +97,35 @@ final class WindowEnvironment {
         }
         terminal.onOpenFile = openFile
         agentPanel.onOpenFile = openFile
+        agentPanel.onShowTab = { [weak self] id, workspace in self?.bringForward(agentSession: id, in: workspace) }
+        terminal.onShowTab = { [weak self] id, workspace in self?.bringForward(terminal: id, in: workspace) }
+    }
+
+    /// The window itself, once it has one. Set by `WindowChrome`, which is
+    /// where AppKit hands it over.
+    @ObservationIgnored
+    weak var hostWindow: NSWindow?
+
+    /// Raises the window over the others and makes it the one in front.
+    func raise() {
+        hostWindow?.makeKeyAndOrderFront(nil)
+        // Nil in a test, which has no application.
+        NSApp?.activate()
+    }
+
+    /// For the Task Manager, in another window: shows a session's tab and
+    /// raises this window. The panel is told first, as in
+    /// ``showAgentSession(_:)``.
+    private func bringForward(agentSession id: UUID, in worktree: WorkspaceID) {
+        agentPanel.reveal(id, in: worktree)
+        activate(worktree)
+        raise()
+    }
+
+    private func bringForward(terminal id: UUID, in worktree: WorkspaceID) {
+        terminal.reveal(id, in: worktree)
+        activate(worktree)
+        raise()
     }
 
     /// The workspace this window is showing, resolved from the id. `nil` until

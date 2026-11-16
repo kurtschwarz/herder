@@ -61,7 +61,7 @@ Features come in two kinds, and which kind a feature is decides how it gets its 
 
 **Workspace-scoped** features operate inside one checkout and receive it from the environment: `Editor`, `FileTree`, `AgentSessions`, `Terminal`, `Search`. They take `@Environment(Workspace.self)` and never look up "the active workspace" themselves.
 
-**App-scoped** features operate above any single workspace: `Repositories`, `Settings`. `Repositories` is the UI for `WorkspaceRegistry.open(_:)` and `close(_:)` and for `WindowEnvironment.activate(_:)` — it is the feature that *picks* the workspace the others run in, so it cannot be scoped to one. `CommandPalette` is app-scoped but reads the active workspace when there is one.
+**App-scoped** features operate above any single workspace: `Repositories`, `Settings`, `TaskManager`. `Repositories` is the UI for `WorkspaceRegistry.open(_:)` and `close(_:)` and for `WindowEnvironment.activate(_:)` — it is the feature that *picks* the workspace the others run in, so it cannot be scoped to one. `CommandPalette` is app-scoped but reads the active workspace when there is one.
 
 This mirrors the service scoping table below, and it is the rule for where a new feature goes: if it needs the registry rather than a workspace, it is app-scoped.
 
@@ -112,7 +112,8 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   │   ├── Terminal/        # module TerminalFeature
 │   │   │   │   │   ├── Search/          # module SearchFeature
 │   │   │   │   │   ├── CommandPalette/  # module CommandPaletteFeature
-│   │   │   │   │   └── Settings/        # module SettingsFeature
+│   │   │   │   │   ├── Settings/        # module SettingsFeature
+│   │   │   │   │   └── TaskManager/     # module TaskManagerFeature
 │   │   │   │   └── App/                 # module AppFeature: the composition root
 │   │   │   └── Tests/
 │   │   │       ├── CoreTests/
@@ -211,6 +212,7 @@ let package = Package(
         feature("Search"),
         feature("CommandPalette"),
         feature("Settings"),
+        feature("TaskManager"),
 
         // Composition root, not a feature: the one module that names concrete
         // service types, and so the one that may import Services.
@@ -500,6 +502,37 @@ shows it.
 - **Every session is an `AgentSession`**, with two parts kept in two stores, because they change at different rates. The record (agent, session id, worktree, branch, title, start, last seen, end) is app-wide, in `AgentSessions` (Core, one per app, `@MainActor @Observable`), which is the one writer of each repository's `history/` file, saved after changes settle. `live` (what its tab is doing, when it last wrote anything) is the window's, in that window's `WindowAgentSessions`, and never written down. The panel publishes its tabs into `WindowAgentSessions` every second; that lists each as the store's record with `live` set, and passes the reports on to `AgentSessions.note`, which changes a record only when its title or session id changes, or once a minute for `lastSeenAt` while it runs. **Keep the split**: live state in the app-wide store redrew every window's sidebar each second for one window's working agent. A session is **written down only once its agent is running and the person has pressed Return in it** (`TerminalScreen.onSubmit`, told by the key, not the bytes): a tab that never started, or was opened and left alone, is in its window's list alone and goes with its tab, and one restored without a record is written down the next time it is said something to after it resumes. The file is keyed by the canonical path of the **folder the repository was added as** (`RepositoriesModel.historyKey(of:)` for a worktree, handed to `begin` and `reconcile`), not by `Repository.id` and not by anything git says: the id changes when the folder is removed and added again, and git's answer (the main working tree, or the first worktree of a bare repository) differs by layout and moves when a worktree is added, which once had sessions saved under one key and listed under another. So every window listing a repository shows all its sessions, whichever worktree ran them. The record copies in the worktree and branch as they were at start, the agent's id and name, and the agent's session id when it has one (Herder-minted ids from the start; opencode's once looked up; Codex's never). It is the tab's id, and stays the same session when it is resumed. A tab restored before its repository's file is read is listed with its record's title from the next publish after the file is. It **ends only when the person closes the tab (`closed`) or the agent quits with status 0 (`exited`)**: a crash exit leaves the tab up and the session open, and quitting the app or closing the window only pauses it. A session whose tab was lost without being closed is ended when its worktree is next restored, dated by `lastSeenAt` with reason `unknown` (`reconcile`): only those last seen before this launch and with no tab in any window, so nothing running now is touched. "Archived" is not a separate state. The sidebar lists ended sessions below the open ones, for all the repositories the workspace selector has on show together: today's and yesterday's up to a few rows, with the count of all of them, and the repository's name beside the branch when more than one is on show. Clicking one resumes it in a new tab through `ResumeAgentSessionAction`, by its session id, and is **disabled rather than guessed** when it has none (Codex's `resume --last` may be another session), its agent is gone, or its worktree is. Right clicking one offers Rename and Delete. Rename sets the record's `name` (the person's name alone, kept apart from `title`, which may be the program's) and its title (`AgentSessions.rename`); a resumed session's tab takes `name` as its own, so the name outlives the program's titles. A tab renamed in the panel writes `name` down the same way. Delete takes the record out of the store and its file (`AgentSessions.delete`); the agent's transcript is not touched. Only an ended session can be renamed or deleted from the history: an open one's tab would undo either.
 - **Reading a closed session does not reopen it.** Clicking one under Closed opens a tab that resumes the agent (`AgentPanelModel.resume`), or brings its tab forward if it has one, and leaves the record ended: same end time and reason, whether the tab is closed, the agent exits, or Herder quits and restores it paused. `AgentSessions.reopen` is called from the tab's `onConverse` alone, the first Return, so the agent working or asking for input never counts. While ended, the session stays out of `WindowAgentSessions.sessionsByRecency` and `sessions(in:)` (the sidebar's open list and the worktree activity), `note` does not advance its `lastSeenAt`, and `AgentSessions.delete` refuses it while any window has a tab for it (`isOpen`). Renaming still works and goes to the store and the tab both.
 - The panel's width is a layout choice, so it is the window's: `PaneWidths.agent`, beside the outer panes. It sits between the sidebar and the editor, and the window's minimum width includes it.
+
+## Task Manager
+
+A window listing every process Herder is running, grouped by what started it, with live CPU, memory, threads and uptime. Tools ▸ Task Manager (⌥⌘T). One `Window` scene (`task-manager`), opened like Settings and not restored. It is `TaskManagerFeature`, wrapped for its scene by `TaskManagerWindow` in `AppFeature`.
+
+**Three parts, kept apart so the logic runs without a process.**
+
+- **`ProcessMonitorClient` reads, and does nothing else.** One call, `sample()`, returns a raw `ProcessSample`: the root (Herder's own process) and every descendant (`proc_listchildpids`, recursively), each with its pid, parent, name, command line, *cumulative* CPU time, physical footprint, threads, start time and run state, plus the sample time, the core count, the physical RAM and the memory-pressure level. The live one is `Services/Process/LiveProcessMonitorClient`, off the main actor; the fake is `StubProcessMonitorClient`. A process that ends while the tree is being read is left out.
+- **Pure logic decides what the numbers mean**, all of it tested without real processes. `ProcessCPU` (a rate from two samples) is in `Core/Models`, beside the sample types the service returns. The rest is the Task Manager's alone, so it is internal to `TaskManagerFeature`, as `WorktreeActivity` is to `RepositoriesFeature`: `TaskTree` (which process belongs to which tab, and the rollups), `TaskSort`, `TaskFilter`, `TaskSummary` (the tiles) and `MetricHistory` (a sparkline's last minute).
+- **`TaskManagerModel` holds what a person changes**: the sort, the filter and scope, which rows are open and which is selected, and the histories. It refreshes in `run()`, which the view starts from `.task`, so nothing is read while the window is closed. `TaskManagerWindow` also stops it when the `NSWindow` closes and restarts it when the window is key again, in case SwiftUI keeps a closed `Window` scene's content alive; whether it does is an assumption about SwiftUI that wants checking by hand. `run()` starts from nothing each time: the history is of this window being open, and a process has no rate until it has been seen twice.
+
+### Who owns which process: `RunningProcesses`
+
+A process tree says nothing about tabs, and the Task Manager is one window that has to find the tabs of every other. `RunningProcesses` (`Core/Workspace`, app-wide, `@MainActor @Observable`, built by `AppEnvironment`) is the registry between them, the same device as `WindowAgentSessions` is for the sidebar. Every window's `AgentPanelModel` and `TerminalModel` register an `Entry` when a PTY starts: the tab's id, its kind, its window and workspace, the root pid (`PTYSession.pid`), and closures for its title, branch, agent state and **`show`**. The closures are read at each refresh because a title changes while the tab lives. `show` is how Show session reaches a tab in a window the Task Manager cannot see: it calls the model's `onShowTab`, which `WindowEnvironment` sets to switch workspace, bring the tab forward and raise the window (`WindowChrome` hands it the `NSWindow`).
+
+- A **terminal**'s entry is removed when its process ends. An **agent**'s is kept, with `pid` cleared, until its tab closes, so a crashed agent shows as Done with zeros and no children, as the sidebar still lists the tab. Closing a window or discarding a workspace removes its entries.
+- An agent's status is read from the same `WindowAgentSessions` the sidebar reads, so the two never disagree. A restored tab, still paused, is listed too, with no process and zeros, because the sidebar lists it and the two must count the same sessions; so is one whose agent could not start, as Failed. Starting a tab enters it again, which replaces its entry.
+
+### Identity: pid + start time
+
+A row is keyed by `ProcessKey`, the pid **and** the process's start time. The kernel reuses pids, so a pid alone would let a new process inherit the old one's CPU time and make the delta nonsense, and would carry a selection or an open row onto a stranger. Two samples are the same process only if both match. Expansion and selection are kept by that key, so they survive a refresh, and a process that goes takes its selection with it.
+
+### Units
+
+Every row's CPU is **a percentage of one core**, as Activity Monitor shows it: 100 is one core's worth and a process on four threads can reach 400. The **CPU tile** is the machine-wide share, which is the tree's total divided by `100 × cores`, with "cores busy" as the total divided by 100. Both come from the same number; only the divisor differs. A process seen once has no rate and shows "—", and so does a row none of whose processes has one. Memory is the **physical footprint**, not the resident size.
+
+CPU, memory, threads and Procs on a row are for its **whole subtree**, so a collapsed row accounts for everything under it and a group header is a subtotal. The tiles are for the whole tree, which is more than the Herder group's subtotal because the agent sessions' trees are in the other group.
+
+### Known limit: reparenting
+
+The tree is the ppid tree. A process whose parent exits is reparented to launchd and **drops out of it**: a dev server started with `nohup … &` from a shell that then closes is not Herder's descendant any more, and is no longer listed. Accepted for now. Following process groups or sessions instead of ppids would fix it, if it turns out to matter.
 
 ## Testing and previews
 

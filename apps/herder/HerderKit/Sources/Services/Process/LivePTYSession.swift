@@ -39,7 +39,7 @@ final class LivePTYSession: PTYSession {
 
     let output: AsyncStream<Data>
 
-    private let pid: pid_t
+    let pid: pid_t
     private let descriptor: Descriptor
     private let exit = Mutex(Exit())
 
