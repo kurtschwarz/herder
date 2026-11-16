@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0](https://github.com/kurtschwarz/herder/compare/herder-v0.3.3...herder-v0.4.0) (2026-11-16)
+
+
+### Features
+
+* **herder:** add a Task Manager window under Tools ([#83](https://github.com/kurtschwarz/herder/issues/83)) ([1fc3f4a](https://github.com/kurtschwarz/herder/commit/1fc3f4a98a3127604e6fda14c9b5a8e8ac144f1c)), closes [#42](https://github.com/kurtschwarz/herder/issues/42)
+* **herder:** add herderd and show its connection in Settings ([#89](https://github.com/kurtschwarz/herder/issues/89)) ([92e9d07](https://github.com/kurtschwarz/herder/commit/92e9d07bbe3a6811d99552aeeec9a688afd15bbb))
+* **herder:** close an open session from a hover X on its row ([#74](https://github.com/kurtschwarz/herder/issues/74)) ([291bcd1](https://github.com/kurtschwarz/herder/commit/291bcd14d6692142c5a5765092f3063eaadff162)), closes [#73](https://github.com/kurtschwarz/herder/issues/73)
+* **herder:** colour the names of changed files and the folders above them ([#88](https://github.com/kurtschwarz/herder/issues/88)) ([8c38102](https://github.com/kurtschwarz/herder/commit/8c381023ecd8a13e1c58ae87fa05446e5707b65b)), closes [#87](https://github.com/kurtschwarz/herder/issues/87)
+* **herder:** create an untitled file with ⌘N or a double-click ([#77](https://github.com/kurtschwarz/herder/issues/77)) ([a4f59ff](https://github.com/kurtschwarz/herder/commit/a4f59ff08885bb42a6942390e95ffeed4c9ea67a)), closes [#72](https://github.com/kurtschwarz/herder/issues/72)
+* **herder:** expand All history to show older sessions ([#82](https://github.com/kurtschwarz/herder/issues/82)) ([228f866](https://github.com/kurtschwarz/herder/commit/228f8661fb74a42d543a4b3f984249cd103fc242)), closes [#78](https://github.com/kurtschwarz/herder/issues/78)
+* **herder:** give debug builds their own herderd socket ([#93](https://github.com/kurtschwarz/herder/issues/93)) ([d61a185](https://github.com/kurtschwarz/herder/commit/d61a185f2537f53fc5ba018e34b258749b238175))
+* **herder:** plan, build and + buttons on the sidebar ([#81](https://github.com/kurtschwarz/herder/issues/81)) ([2356825](https://github.com/kurtschwarz/herder/commit/2356825fbc50450f069fc3908151e6d590ff9d84)), closes [#79](https://github.com/kurtschwarz/herder/issues/79)
+* **herder:** show a banner when reading an ended session ([#76](https://github.com/kurtschwarz/herder/issues/76)) ([b9593cf](https://github.com/kurtschwarz/herder/commit/b9593cfc70ba4125e1b0264a89e4bbbe99204412))
+
 ## [0.3.3](https://github.com/kurtschwarz/herder/compare/herder-v0.3.2...herder-v0.3.3) (2026-11-12)
 
 
