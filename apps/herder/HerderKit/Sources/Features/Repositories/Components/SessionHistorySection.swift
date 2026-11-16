@@ -9,6 +9,9 @@ struct SessionHistorySection: View {
     /// Where each shown repository's history is kept, and its worktrees now.
     let sources: [RepositoriesModel.HistorySource]
 
+    /// Whether every ended session is listed, rather than the latest few.
+    @Binding var isExpanded: Bool
+
     @Environment(AgentSessions.self) private var history: AgentSessions?
     @Environment(WindowAgentSessions.self) private var open: WindowAgentSessions?
     @Environment(Workspace.self) private var active: Workspace?
@@ -37,76 +40,99 @@ struct SessionHistorySection: View {
         return (records, repositories, targets)
     }
 
+    /// The id the sidebar scrolls to, to keep "All history" in view.
+    static let footerID = "all-history"
+
+    /// A section of the sidebar's lazy stack, so its rows are built as they
+    /// scroll into view and "All history" can pin to the bottom of the sidebar.
     var body: some View {
         let ended = ended
-        let digest = SessionHistoryDigest(ended: ended.records)
-        // A stack even when empty, so reading the history, attached to it,
-        // still runs while there is nothing to show.
-        VStack(alignment: .leading, spacing: 0) {
-            if !digest.isEmpty {
-                group("Today", digest.today, ended: ended)
-                group("Yesterday", digest.yesterday, ended: ended)
-                AllHistoryRow(count: digest.total)
-            }
-        }
-        .backgroundPreferenceValue(HistoryDotCenters.self) { centers in
-            GeometryReader { proxy in
-                let points = centers.map { proxy[$0] }
-                if let first = points.min(by: { $0.y < $1.y }),
-                   let last = points.max(by: { $0.y < $1.y }),
-                   first.y < last.y
-                {
-                    Path { path in
-                        path.move(to: first)
-                        path.addLine(to: CGPoint(x: first.x, y: last.y))
-                    }
-                    .stroke(Theme.Palette.hairline, lineWidth: 1)
+        let digest = SessionHistoryDigest(ended: ended.records, isExpanded: isExpanded)
+        let last = digest.groups.last?.sessions.last?.id
+        Section {
+            ForEach(Array(digest.groups.enumerated()), id: \.element.title) { index, group in
+                HistoryGroupHeader(title: group.title, drawsLine: index > 0)
+                ForEach(group.sessions) { record in
+                    HistoryRow(
+                        record: record,
+                        repository: ended.repositories[record.id],
+                        target: ended.targets[record.id],
+                        isSelected: active?.id == record.worktree && open?.focused == record.id,
+                        canDelete: history?.isOpen(record.id) != true,
+                        startsLine: index == 0 && record.id == group.sessions.first?.id,
+                        endsLine: record.id == last,
+                        rename: {
+                            history?.rename(record.id, to: $0)
+                            // Its tab, if it is open to be read, shows the new name.
+                            renameAgentSession(record, to: $0)
+                        },
+                        delete: { history?.delete(record.id) }
+                    )
                 }
             }
-        }
-        .task(id: keys) {
-            guard let history else { return }
-            for key in keys { await history.load(key) }
-        }
-    }
-
-    @ViewBuilder
-    private func group(
-        _ title: String,
-        _ records: [AgentSession],
-        ended: (records: [AgentSession], repositories: [UUID: String], targets: [UUID: WorkspaceID])
-    ) -> some View {
-        if !records.isEmpty {
-            Text(title.uppercased())
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.Palette.tertiaryText)
-                .padding(.top, Theme.Spacing.normal)
-                .padding(.horizontal, Theme.Spacing.normal + 2)
-            ForEach(records) { record in
-                HistoryRow(
-                    record: record,
-                    repository: ended.repositories[record.id],
-                    target: ended.targets[record.id],
-                    isSelected: active?.id == record.worktree && open?.focused == record.id,
-                    canDelete: history?.isOpen(record.id) != true,
-                    rename: {
-                        history?.rename(record.id, to: $0)
-                        // Its tab, if it is open to be read, shows the new name.
-                        renameAgentSession(record, to: $0)
-                    },
-                    delete: { history?.delete(record.id) }
-                )
+        } footer: {
+            // Present even when empty, so reading the history, attached to
+            // it, still runs while there is nothing to show.
+            Group {
+                if digest.isEmpty {
+                    Color.clear.frame(height: 0)
+                } else {
+                    AllHistoryRow(count: digest.total, isExpanded: $isExpanded)
+                        .id(Self.footerID)
+                }
+            }
+            .task(id: keys) {
+                guard let history else { return }
+                for key in keys { await history.load(key) }
             }
         }
     }
 }
 
-/// Where each row's dot is, so the list can draw one line through them all.
-private struct HistoryDotCenters: PreferenceKey {
-    static let defaultValue: [Anchor<CGPoint>] = []
+/// Draws the part of the line through the history dots that falls in this
+/// row or header. Each draws its own, so the line has no need of a stack that
+/// wraps them all and the rows can be built lazily.
+private struct HistoryLine: ViewModifier {
+    /// Where the first row's dot is below its top, which is where the line
+    /// starts, and likewise where the last row's ends.
+    static let dotY = Theme.Spacing.normal - 2 + 5 + 4
+    static let x = Theme.Spacing.normal + 2 + 4 - 0.5
 
-    static func reduce(value: inout [Anchor<CGPoint>], nextValue: () -> [Anchor<CGPoint>]) {
-        value.append(contentsOf: nextValue())
+    var isDrawn = true
+    let startsAtDot: Bool
+    let endsAtDot: Bool
+
+    func body(content: Content) -> some View {
+        content.background(alignment: .topLeading) {
+            if isDrawn {
+                GeometryReader { proxy in
+                    // A point past each end, to close the gap the stack leaves
+                    // between one row and the next.
+                    let top = startsAtDot ? Self.dotY : -1
+                    let bottom = endsAtDot ? Self.dotY : proxy.size.height + 1
+                    Theme.Palette.hairline
+                        .frame(width: 1, height: max(bottom - top, 0))
+                        .offset(x: Self.x, y: top)
+                }
+            }
+        }
+    }
+}
+
+private struct HistoryGroupHeader: View {
+    let title: String
+
+    /// Whether the line runs through, from the group above to the one below.
+    let drawsLine: Bool
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Theme.Palette.tertiaryText)
+            .padding(.top, Theme.Spacing.normal)
+            .padding(.horizontal, Theme.Spacing.normal + 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(HistoryLine(isDrawn: drawsLine, startsAtDot: false, endsAtDot: false))
     }
 }
 
@@ -127,6 +153,11 @@ private struct HistoryRow: View {
 
     /// Whether no window has a tab open for it.
     let canDelete: Bool
+
+    /// Whether the line through the dots starts or ends at this row's, rather
+    /// than running on past it.
+    let startsLine: Bool
+    let endsLine: Bool
     let rename: (String) -> Void
     let delete: () -> Void
 
@@ -153,7 +184,6 @@ private struct HistoryRow: View {
             Circle()
                 .fill(Theme.Palette.tertiaryText)
                 .frame(width: 8, height: 8)
-                .anchorPreference(key: HistoryDotCenters.self, value: .center) { [$0] }
                 .padding(.top, 5)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -185,6 +215,7 @@ private struct HistoryRow: View {
         }
         .padding(.horizontal, Theme.Spacing.normal + 2)
         .padding(.vertical, Theme.Spacing.normal - 2)
+        .modifier(HistoryLine(startsAtDot: startsLine, endsAtDot: endsLine))
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                 .fill(isSelected || (isHovering && reason == nil && !isRenaming) ? Theme.Palette.control : .clear)
@@ -220,10 +251,15 @@ private struct HistoryRow: View {
     }
 }
 
-/// The way into the whole history, with how much there is. Its view is not
-/// built yet, so for now it only counts.
+/// How much history there is, and the toggle between the latest few and all
+/// of it. It is the section's footer, so it pins to the bottom of the sidebar
+/// while there is more history than fits, and its own fill keeps the rows
+/// scrolling under it from showing through.
 private struct AllHistoryRow: View {
     let count: Int
+    @Binding var isExpanded: Bool
+
+    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: Theme.Spacing.normal + 2) {
@@ -234,9 +270,25 @@ private struct AllHistoryRow: View {
             Spacer(minLength: 0)
             Text("\(count)")
                 .font(.system(size: 12))
+            PhIcon(Ph.caretDownBold, size: 10)
+                .rotationEffect(.degrees(isExpanded ? 180 : -90))
+                .animation(.easeOut(duration: 0.15), value: isExpanded)
         }
         .foregroundStyle(Theme.Palette.secondaryText)
         .padding(.horizontal, Theme.Spacing.normal + 2)
         .padding(.vertical, Theme.Spacing.normal)
+        .background {
+            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                .fill(isHovering ? Theme.Palette.control : .clear)
+        }
+        .background {
+            // Past the stack's own inset, so nothing shows beside the row.
+            Theme.Palette.window.padding(.horizontal, -Theme.Spacing.tight)
+        }
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .onTapGesture { isExpanded.toggle() }
+        .pointerStyle(.link)
+        .help(isExpanded ? "Show less" : "Show all history")
     }
 }

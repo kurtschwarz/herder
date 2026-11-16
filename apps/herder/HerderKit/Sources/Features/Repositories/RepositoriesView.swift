@@ -10,6 +10,9 @@ import TestSupport
 public struct RepositoriesView: View {
     private let model: RepositoriesModel
 
+    /// Whether the history lists every ended session. Per window, and not saved.
+    @State private var showsAllHistory = false
+
     /// What this window lists, read straight off the model. This was a `@Query`
     /// against SwiftData; Observation does the same job, and the sidebar no
     /// longer knows what backs it.
@@ -31,15 +34,26 @@ public struct RepositoriesView: View {
                 EmptyRepositories { model.beginAdding() }
             } else {
                 SessionLauncher(model: model)
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        OpenSessionsSection(model: model, repositories: shown)
-                        SessionHistorySection(sources: model.historySources(of: shown))
+                ScrollViewReader { scroll in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2, pinnedViews: [.sectionFooters]) {
+                            OpenSessionsSection(model: model, repositories: shown)
+                            SessionHistorySection(
+                                sources: model.historySources(of: shown),
+                                isExpanded: $showsAllHistory
+                            )
+                        }
+                        .padding(.horizontal, Theme.Spacing.tight)
+                        .padding(.bottom, Theme.Spacing.loose)
                     }
-                    .padding(.horizontal, Theme.Spacing.tight)
-                    .padding(.bottom, Theme.Spacing.loose)
+                    .scrollIndicators(.hidden)
+                    // The list gets shorter, and the offset may now be past
+                    // its end: bring the row back.
+                    .onChange(of: showsAllHistory) { _, isExpanded in
+                        guard !isExpanded else { return }
+                        scroll.scrollTo(SessionHistorySection.footerID, anchor: .bottom)
+                    }
                 }
-                .scrollIndicators(.hidden)
             }
         }
         // Worktrees are made and removed in a terminal, so coming back to the
