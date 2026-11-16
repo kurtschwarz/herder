@@ -24,9 +24,14 @@ struct FileTreeRow: Identifiable, Equatable {
     /// Git ignores it, or a folder around it. Drawn faded.
     var isIgnored = false
 
-    /// The mark it carries for what git says about it, or for what changed
-    /// inside it when it is a closed folder.
+    /// The letter it carries for what git says about it, or for what changed
+    /// inside it when it is a closed folder. Open folders carry none.
     var mark: GitMark?
+
+    /// What colours its name: what git says about it, or the most severe change
+    /// inside it when it is a folder. Unlike ``mark`` it does not depend on
+    /// whether a folder is open.
+    var tint: GitMark?
 
     var id: String {
         switch kind {
@@ -370,7 +375,10 @@ public final class FileTreeModel {
                 let isIgnored = underIgnored || worktree.status.isIgnored(key)
                 var row = FileTreeRow(kind: .entry(entry), depth: depth, parent: parent)
                 row.isIgnored = isIgnored
-                row.mark = isIgnored ? nil : mark(of: key, isDirectory: entry.isDirectory, isOpen: isOpen)
+                if !isIgnored {
+                    row.tint = tint(of: key, isDirectory: entry.isDirectory)
+                    row.mark = isOpen ? nil : row.tint
+                }
                 result.append(row)
                 if isOpen {
                     result += rows(in: key, depth: depth + 1, underIgnored: isIgnored)
@@ -386,14 +394,15 @@ public final class FileTreeModel {
     }
 
     /// A file wears what git says about it. A folder wears what changed inside
-    /// it, and only while it is closed: once it is open, the rows inside say it
-    /// better than a mark on the folder could.
-    private func mark(of path: PathKey, isDirectory: Bool, isOpen: Bool) -> GitMark? {
+    /// it, or, when nothing did, what git says about the folder itself: a new
+    /// folder is reported as one untracked entry and is not its own parent.
+    ///
+    /// The row shows this as a letter only while a folder is closed: once it is
+    /// open, the rows inside say it better than a letter on the folder could.
+    private func tint(of path: PathKey, isDirectory: Bool) -> GitMark? {
         guard let worktree else { return nil }
-        if isDirectory {
-            guard !isOpen else { return nil }
-            return worktree.status.rollup(of: path)
-        }
-        return worktree.status.status(of: path).flatMap(GitMark.init)
+        let own = worktree.status.status(of: path).flatMap(GitMark.init)
+        guard isDirectory else { return own }
+        return worktree.status.rollup(of: path) ?? own
     }
 }

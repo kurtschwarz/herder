@@ -638,6 +638,75 @@ import Testing
         #expect(marks(model).isEmpty)
     }
 
+    func tints(_ model: FileTreeModel) -> [String: GitMark] {
+        Dictionary(uniqueKeysWithValues: model.rows.compactMap { row in
+            guard case .entry(let entry) = row.kind, let tint = row.tint else { return nil }
+            return (entry.name, tint)
+        })
+    }
+
+    @Test func aChangedFilesNameIsTinted() async {
+        files.seed(children: [file("a.txt"), file("b.txt"), file("c.txt"), file("d.log")], of: root)
+        git.seed(status: [
+            "a.txt": .untracked,
+            "b.txt": .tracked(staged: .unchanged, unstaged: .modified),
+            "c.txt": .unmerged,
+            "d.log": .ignored,
+        ], in: root)
+
+        await model.setRoot(root)
+
+        #expect(tints(model) == ["a.txt": .untracked, "b.txt": .modified, "c.txt": .unmerged])
+    }
+
+    @Test func everyFolderAboveAChangeIsTintedButOnlyTheFileHasALetter() async {
+        let sources = dir("Sources")
+        let app = dir("App", in: sources.url)
+        files.seed(children: [sources], of: root)
+        files.seed(children: [app], of: sources.url)
+        files.seed(children: [file("a.swift", in: app.url)], of: app.url)
+        git.seed(status: ["Sources/App/a.swift": .tracked(staged: .unchanged, unstaged: .modified)], in: root)
+        await model.setRoot(root)
+        await model.toggle(sources.url)
+        await model.toggle(app.url)
+
+        #expect(tints(model) == ["Sources": .modified, "App": .modified, "a.swift": .modified])
+        #expect(marks(model) == ["a.swift": .modified])
+    }
+
+    @Test func aFolderWithAConflictAndAnEditBelowItIsTintedAsConflicted() async {
+        let sources = dir("Sources")
+        files.seed(children: [sources], of: root)
+        git.seed(status: [
+            "Sources/a.swift": .tracked(staged: .unchanged, unstaged: .modified),
+            "Sources/b.swift": .unmerged,
+        ], in: root)
+
+        await model.setRoot(root)
+
+        #expect(tints(model) == ["Sources": .unmerged])
+    }
+
+    @Test func aClosedUntrackedFolderWearsAQuestionMarkAndIsTinted() async {
+        let fresh = dir("fresh")
+        files.seed(children: [fresh], of: root)
+        git.seed(status: ["fresh": .untracked], in: root)
+
+        await model.setRoot(root)
+
+        #expect(marks(model) == ["fresh": .untracked])
+        #expect(tints(model) == ["fresh": .untracked])
+    }
+
+    @Test func anIgnoredRowIsNotTinted() async {
+        files.seed(children: [file("d.log")], of: root)
+        git.seed(ignored: ["d.log"], in: root)
+
+        await model.setRoot(root)
+
+        #expect(tints(model).isEmpty)
+    }
+
     @Test func aSelectionIsDroppedWhenItsFileGoesAway() async {
         files.seed(children: [file("a.txt")], of: root)
         await model.setRoot(root)

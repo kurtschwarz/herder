@@ -35,6 +35,7 @@ struct FileTreeRowView: View {
                 parent: row.parent,
                 isIgnored: row.isIgnored,
                 mark: row.mark,
+                tint: row.tint,
                 model: model,
                 focus: focus,
                 isHovering: $isHovering
@@ -56,6 +57,7 @@ private struct EntryLine: View {
     let parent: URL
     let isIgnored: Bool
     let mark: GitMark?
+    let tint: GitMark?
     let model: FileTreeModel
     let focus: FocusState<FileTreeFocus?>.Binding
     @Binding var isHovering: Bool
@@ -88,7 +90,7 @@ private struct EntryLine: View {
             } else {
                 Text(entry.name)
                     .font(.system(size: 13))
-                    .foregroundStyle(isSelected ? Theme.Palette.onViolet : Theme.Palette.text)
+                    .foregroundStyle(nameColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -172,6 +174,11 @@ private struct EntryLine: View {
         case .modified: return inside ? "Changes inside" : "Changed"
         case .unmerged: return inside ? "Conflicts inside" : "Conflicted"
         }
+    }
+
+    private var nameColor: Color {
+        if isSelected { return Theme.Palette.onViolet }
+        return tint.map(markColor) ?? Theme.Palette.text
     }
 
     private var iconColor: Color {
