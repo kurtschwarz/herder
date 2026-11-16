@@ -55,25 +55,30 @@ public struct RepositoriesView: View {
                                 sources: historySources,
                                 isExpanded: $showsAllHistory
                             )
+                            if !showsAllHistory, historyCount > 0 {
+                                AllHistoryRow(count: historyCount, isExpanded: $showsAllHistory)
+                            }
                         }
                         .padding(.horizontal, Theme.Spacing.tight)
                         .padding(.bottom, Theme.Spacing.loose)
                     }
                     .scrollIndicators(.hidden)
-                    // Rows fade out as they near the row below, rather than
-                    // running under it.
+                    // Expanded, the row is pinned under the list, and rows
+                    // fade out as they near it rather than running under it.
                     .mask(alignment: .bottom) {
                         VStack(spacing: 0) {
                             Color.black
-                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                                .frame(height: Theme.Spacing.loose)
+                            if showsAllHistory {
+                                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                    .frame(height: Theme.Spacing.loose)
+                            }
                         }
                     }
 
-                    if historyCount > 0 {
+                    if showsAllHistory, historyCount > 0 {
                         AllHistoryRow(count: historyCount, isExpanded: $showsAllHistory)
                             .padding(.horizontal, Theme.Spacing.tight)
-                }
+                    }
                 }
                 // Here rather than on the history, which a lazy stack
                 // may not build while there is nothing to show yet.
