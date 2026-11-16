@@ -78,6 +78,7 @@ public struct RepositoriesView: View {
                     if showsAllHistory, historyCount > 0 {
                         AllHistoryRow(count: historyCount, isExpanded: $showsAllHistory)
                             .padding(.horizontal, Theme.Spacing.tight)
+                            .padding(.bottom, Theme.Spacing.tight)
                     }
                 }
                 // Here rather than on the history, which a lazy stack
