@@ -26,6 +26,15 @@ public struct RepositoriesView: View {
 
     @Environment(AgentSessions.self) private var history: AgentSessions?
 
+    /// How many ended sessions the shown repositories have between them.
+    private var historyCount: Int {
+        guard let history else { return 0 }
+        var seen: Set<PathKey> = []
+        return historySources.reduce(0) { total, source in
+            seen.insert(source.key).inserted ? total + history.ended(in: source.key).count : total
+        }
+    }
+
     public init(model: RepositoriesModel) {
         self.model = model
     }
@@ -38,9 +47,9 @@ public struct RepositoriesView: View {
                 EmptyRepositories { model.beginAdding() }
             } else {
                 SessionLauncher(model: model)
-                ScrollViewReader { scroll in
+                VStack(spacing: 0) {
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 2, pinnedViews: [.sectionFooters]) {
+                        LazyVStack(alignment: .leading, spacing: 2) {
                             OpenSessionsSection(model: model, repositories: shown)
                             SessionHistorySection(
                                 sources: historySources,
@@ -51,18 +60,26 @@ public struct RepositoriesView: View {
                         .padding(.bottom, Theme.Spacing.loose)
                     }
                     .scrollIndicators(.hidden)
-                    // Here rather than on the history, which a lazy stack
-                    // may not build while there is nothing to show yet.
-                    .task(id: historySources.map(\.key)) {
-                        guard let history else { return }
-                        for source in historySources { await history.load(source.key) }
+                    // Rows fade out as they near the row below, rather than
+                    // running under it.
+                    .mask(alignment: .bottom) {
+                        VStack(spacing: 0) {
+                            Color.black
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: Theme.Spacing.loose)
+                        }
                     }
-                    // The list gets shorter, and the offset may now be past
-                    // its end: bring the row back.
-                    .onChange(of: showsAllHistory) { _, isExpanded in
-                        guard !isExpanded else { return }
-                        scroll.scrollTo(SessionHistorySection.footerID, anchor: .bottom)
-                    }
+
+                    if historyCount > 0 {
+                        AllHistoryRow(count: historyCount, isExpanded: $showsAllHistory)
+                            .padding(.horizontal, Theme.Spacing.tight)
+                }
+                }
+                // Here rather than on the history, which a lazy stack
+                // may not build while there is nothing to show yet.
+                .task(id: historySources.map(\.key)) {
+                    guard let history else { return }
+                    for source in historySources { await history.load(source.key) }
                 }
             }
         }

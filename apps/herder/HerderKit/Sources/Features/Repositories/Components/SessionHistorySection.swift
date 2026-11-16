@@ -38,11 +38,8 @@ struct SessionHistorySection: View {
         return (records, repositories, targets)
     }
 
-    /// The id the sidebar scrolls to, to keep "All history" in view.
-    static let footerID = "all-history"
-
     /// A section of the sidebar's lazy stack, so its rows are built as they
-    /// scroll into view and "All history" can pin to the bottom of the sidebar.
+    /// scroll into view.
     var body: some View {
         let ended = ended
         let digest = SessionHistoryDigest(ended: ended.records, isExpanded: isExpanded)
@@ -67,11 +64,6 @@ struct SessionHistorySection: View {
                         delete: { history?.delete(record.id) }
                     )
                 }
-            }
-        } footer: {
-            if !digest.isEmpty {
-                AllHistoryRow(count: digest.total, isExpanded: $isExpanded)
-                    .id(Self.footerID)
             }
         }
     }
@@ -240,10 +232,9 @@ private struct HistoryRow: View {
 }
 
 /// How much history there is, and the toggle between the latest few and all
-/// of it. It is the section's footer, so it pins to the bottom of the sidebar
-/// while there is more history than fits. A ghost button: no fill or border
-/// of its own beyond the hover.
-private struct AllHistoryRow: View {
+/// of it. It sits under the sidebar's scrolling list, which fades out above
+/// it. A ghost button: no fill or border of its own beyond the hover.
+struct AllHistoryRow: View {
     let count: Int
     @Binding var isExpanded: Bool
 
