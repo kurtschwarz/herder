@@ -12,6 +12,14 @@ struct SummaryTile<Detail: View>: View {
     var color: Color = Theme.Palette.accent
     @ViewBuilder var detail: Detail
 
+    private var captionText: some View {
+        Text(caption)
+            .font(.system(size: 12))
+            .foregroundStyle(Theme.Palette.secondaryText)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
             Text(title.uppercased())
@@ -24,12 +32,10 @@ struct SummaryTile<Detail: View>: View {
                 .monospacedDigit()
                 .foregroundStyle(Theme.Palette.text)
 
-            HStack(spacing: Theme.Spacing.tight) {
-                detail
-                Text(caption)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.Palette.secondaryText)
-                    .lineLimit(1)
+            // Side by side when they fit, else the detail over the caption.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.tight) { detail; captionText }
+                VStack(alignment: .leading, spacing: 2) { detail; captionText }
             }
 
             if let history {

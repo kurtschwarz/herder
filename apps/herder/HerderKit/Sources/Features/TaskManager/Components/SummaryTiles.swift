@@ -63,7 +63,6 @@ private struct PressureBadge: View {
             Text(label)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Theme.Palette.text)
-            Text("\u{00B7}").foregroundStyle(Theme.Palette.tertiaryText)
         }
     }
 
@@ -93,7 +92,6 @@ private struct SessionSplit: View {
             count(summary.working, "working", Theme.Palette.success)
             count(summary.waiting, "waiting", Theme.Palette.warning)
             count(summary.idle, "idle", Theme.Palette.tertiaryText)
-            Text("\u{00B7}").foregroundStyle(Theme.Palette.tertiaryText)
         }
     }
 
@@ -102,6 +100,8 @@ private struct SessionSplit: View {
             Circle().fill(color).frame(width: 6, height: 6)
             Text("\(value) \(label)")
                 .font(.system(size: 12))
+                .lineLimit(1)
+                .fixedSize()
                 .foregroundStyle(Theme.Palette.secondaryText)
         }
     }
