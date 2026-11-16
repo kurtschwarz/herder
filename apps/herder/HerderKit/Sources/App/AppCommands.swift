@@ -121,6 +121,12 @@ public struct AppCommands: Commands {
                 .disabled(toggleTerminal == nil)
         }
 
+        // Between View and Window, where a Mac app keeps its own tools.
+        CommandMenu("Tools") {
+            Button("Task Manager") { openWindow(id: TaskManagerWindow.id) }
+                .keyboardShortcut("t", modifiers: [.command, .option])
+        }
+
         CommandGroup(replacing: .saveItem) {
             Button("Save") { saveEditorFile?() }
                 .keyboardShortcut("s", modifiers: .command)

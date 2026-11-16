@@ -6,6 +6,7 @@ import Foundation
 import Observation
 import RepositoriesFeature
 import Services
+import TaskManagerFeature
 import TerminalFeature
 
 /// Composition root.
@@ -49,6 +50,10 @@ public final class AppEnvironment {
     /// window has open is the window's own: see ``makeWindow(id:restoring:)``.
     public let sessions: AgentSessions
 
+    /// Every tab with a process running, in any window. Each window's panels
+    /// write it as their processes start and end, and the Task Manager reads it.
+    public let processes: RunningProcesses
+
     /// Where windows' snapshots are kept, and which exist.
     let windows: WindowStore
 
@@ -75,6 +80,7 @@ public final class AppEnvironment {
     private let pty: any PTYClient
     private let commands: any CommandClient
     private let clock: any ClockClient
+    private let processMonitor: any ProcessMonitorClient
     private let leftovers: (any LeftoverAgentClient)?
     private let opencode: (any OpencodeIntegrationClient)?
 
@@ -175,6 +181,7 @@ public final class AppEnvironment {
         saveLocation: any SaveLocationClient = LiveSaveLocationClient(),
         pty: any PTYClient = LivePTYClient(),
         commands: any CommandClient = LiveCommandClient(),
+        processMonitor: any ProcessMonitorClient = LiveProcessMonitorClient(),
         leftovers: (any LeftoverAgentClient)? = nil,
         opencode: (any OpencodeIntegrationClient)? = nil,
         updater: (any UpdaterClient)? = nil,
@@ -190,6 +197,7 @@ public final class AppEnvironment {
         self.windows = WindowStore(snapshots: snapshots, state: persistence.state)
         self.agents = AgentCatalog(state: persistence.state)
         self.sessions = AgentSessions(state: persistence.state, clock: clock)
+        self.processes = RunningProcesses()
         self.worktrees = WorkspaceRegistry(
             files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
         )
@@ -201,6 +209,7 @@ public final class AppEnvironment {
         self.pty = pty
         self.commands = commands
         self.clock = clock
+        self.processMonitor = processMonitor
         self.leftovers = leftovers
         self.opencode = opencode
         self.updater = updater
@@ -217,7 +226,8 @@ public final class AppEnvironment {
         let repositoryList = RepositoriesModel(repositories: list, git: git, picker: folderPicker)
         let panel = AgentPanelModel(
             pty: pty, commands: commands, clock: clock, catalog: agents,
-            sessions: WindowAgentSessions(store: sessions, window: id)
+            sessions: WindowAgentSessions(store: sessions, window: id),
+            processes: processes
         )
         panel.historyKey = { [weak repositoryList] in await repositoryList?.historyKey(of: $0) }
         return WindowEnvironment(
@@ -226,12 +236,18 @@ public final class AppEnvironment {
             repositoryList: repositoryList,
             fileTree: FileTreeModel(store: worktrees),
             editor: EditorModel(store: worktrees, files: files, highlighter: highlighter, saveLocation: saveLocation),
-            terminal: TerminalModel(pty: pty, clock: clock),
+            terminal: TerminalModel(pty: pty, clock: clock, processes: processes, window: id),
             agentPanel: panel,
             worktrees: worktrees,
             windows: windows,
             restoring: snapshot
         )
+    }
+
+    /// The Task Manager's model. One per window it is shown in, which is one:
+    /// built when its window opens, so a closed one holds nothing.
+    func makeTaskManager() -> TaskManagerModel {
+        TaskManagerModel(monitor: processMonitor, processes: processes, clock: clock)
     }
 
     /// Gives a window that has just appeared its identity and its state.

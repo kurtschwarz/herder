@@ -145,6 +145,13 @@ let package = Package(
             swiftSettings: ui
         ),
 
+        .target(
+            name: "TaskManagerFeature",
+            dependencies: ["Core", "DesignSystem", "TestSupport"],
+            path: "Sources/Features/TaskManager",
+            swiftSettings: ui
+        ),
+
         // Composition root, not a feature: the one module that names concrete
         // service types, and so the one that may import `Services`. It lives
         // outside `Sources/Features/` because it is not one, and keeps the
@@ -154,7 +161,7 @@ let package = Package(
             dependencies: [
                 "Core", "Services", "DesignSystem", "TestSupport",
                 "RepositoriesFeature", "FileTreeFeature", "EditorFeature", "TerminalFeature",
-                "AgentSessionsFeature", "SettingsFeature",
+                "AgentSessionsFeature", "SettingsFeature", "TaskManagerFeature",
             ],
             path: "Sources/App",
             swiftSettings: ui
@@ -201,6 +208,12 @@ let package = Package(
             name: "AgentSessionsFeatureTests",
             dependencies: ["AgentSessionsFeature", "Core", "TestSupport"],
             path: "Tests/Features/AgentSessionsFeatureTests",
+            swiftSettings: ui
+        ),
+        .testTarget(
+            name: "TaskManagerFeatureTests",
+            dependencies: ["TaskManagerFeature", "Core", "TestSupport"],
+            path: "Tests/Features/TaskManagerFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(

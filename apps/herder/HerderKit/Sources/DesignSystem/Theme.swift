@@ -74,6 +74,10 @@ public enum Theme {
         /// The settings window. Fixed: it has one column of controls, and a
         /// wider window would only make the lines longer.
         public static let settingsWindow = CGSize(width: 780, height: 540)
+        /// The Task Manager: wide for its seven columns, and free to grow.
+        public static let taskManagerWindow = CGSize(width: 1180, height: 760)
+        /// The least that keeps the tiles and the columns from overlapping.
+        public static let minTaskManagerWindow = CGSize(width: 900, height: 520)
         /// The coloured tile beside a settings pane's name in the sidebar.
         public static let settingsIcon: CGFloat = 22
         /// The same tile at the head of the pane itself.

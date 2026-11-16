@@ -47,7 +47,8 @@ public struct AppView: View {
                 unsavedFiles: { window?.editor.unsavedFiles ?? [] },
                 saveAll: { await window?.editor.saveAll() ?? true },
                 hasTerminals: { window?.terminal.hasTerminals ?? false },
-                runningCommands: { await window?.terminal.runningCommands() ?? [] }
+                runningCommands: { await window?.terminal.runningCommands() ?? [] },
+                onWindow: { window?.hostWindow = $0 }
             )
         )
         // After the backgrounds, so the glass runs under the title bar too.

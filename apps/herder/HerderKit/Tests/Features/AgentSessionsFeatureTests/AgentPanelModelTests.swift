@@ -17,6 +17,7 @@ import Testing
     let catalog: AgentCatalog
     let open: WindowAgentSessions
     let commands = StubCommandClient()
+    let processes = RunningProcesses()
     static let lookup = "opencode session list --format json -n 20"
     let root = URL(filePath: "/code/api")
     let other = URL(filePath: "/code/web")
@@ -37,6 +38,7 @@ import Testing
             clock: SleepingClock(),
             catalog: catalog,
             sessions: open,
+            processes: processes,
             environment: ["SHELL": "/bin/sh"],
             sampleInterval: .milliseconds(10)
         )
@@ -787,6 +789,98 @@ import Testing
         await model.show(try await workspace(root, in: makeRegistry()))
 
         #expect(commands.calls.isEmpty)
+    }
+
+    // MARK: The Task Manager's list
+
+    @Test func aStartedSessionIsListedWithItsProcess() async throws {
+        let (model, _, _) = try await shown(sessions: 1)
+
+        let tab = try #require(model.activeTab)
+        let entry = try #require(processes.entry(tab.id))
+        #expect(entry.kind == .agentSession)
+        #expect(entry.pid == pty.sessions[0].pid)
+        #expect(entry.workspace == WorkspaceID(root))
+        #expect(entry.window == open.window)
+        #expect(entry.title() == model.subject(of: tab))
+    }
+
+    @Test func aSessionThatFailedToStartIsNotListed() async throws {
+        pty.failSpawns(with: .openFailed(1))
+
+        _ = try await shown(sessions: 1)
+
+        #expect(processes.entries.isEmpty)
+    }
+
+    @Test func aSessionIsListedWithTheStateTheSidebarReads() async throws {
+        let (model, _, _) = try await shown(sessions: 1)
+        let tab = try #require(model.activeTab)
+
+        let state = try #require(processes.entry(tab.id)).state()
+
+        #expect(state == open.sessions.first { $0.id == tab.id }?.state)
+        #expect(state == .idle)
+    }
+
+    @Test func anAgentThatCrashedStaysListedWithoutAProcessUntilItsTabCloses() async throws {
+        let (model, _, _) = try await shown(sessions: 1)
+        let tab = try #require(model.activeTab)
+
+        pty.sessions[0].exit(with: 1)
+        try await eventually("the tab notices") { model.activeTab?.phase == .exited(1) }
+
+        let entry = try #require(processes.entry(tab.id))
+        #expect(entry.pid == nil)
+        #expect(entry.state() == .exited(1))
+
+        model.close(tab)
+        #expect(processes.entry(tab.id) == nil)
+    }
+
+    @Test func aCleanExitTakesTheEntryWithTheTab() async throws {
+        let (model, _, _) = try await shown(sessions: 1)
+        let id = try #require(model.activeTab?.id)
+
+        pty.sessions[0].exit(with: 0)
+
+        try await eventually("the entry goes") { processes.entry(id) == nil }
+    }
+
+    @Test func startingAgainAfterACrashListsTheNewProcess() async throws {
+        let (model, _, _) = try await shown(sessions: 1)
+        let tab = try #require(model.activeTab)
+        pty.sessions[0].exit(with: 1)
+        try await eventually("the tab notices") { model.activeTab?.phase == .exited(1) }
+
+        await model.reattach(tab)
+
+        #expect(processes.entries.count == 1)
+        #expect(processes.entry(tab.id)?.pid == pty.sessions[1].pid)
+    }
+
+    @Test func closingTheWindowOrAWorkspaceTakesTheEntriesAway() async throws {
+        let (model, workspace, _) = try await shown(sessions: 2)
+        #expect(processes.entries.count == 2)
+
+        model.discard(workspace.id)
+        #expect(processes.entries.isEmpty)
+
+        let (second, _, _) = try await shown(sessions: 1)
+        second.terminateAll()
+        #expect(processes.entries.isEmpty)
+    }
+
+    @Test func showingFromTheTaskManagerAsksTheWindow() async throws {
+        let (model, workspace, _) = try await shown(sessions: 1)
+        let tab = try #require(model.activeTab)
+        nonisolated(unsafe) var asked: (UUID, WorkspaceID)?
+        model.onShowTab = { asked = ($0, $1) }
+
+        processes.entry(tab.id)?.show()
+
+        #expect(asked?.0 == tab.id)
+        #expect(asked?.1 == workspace.id)
     }
 }
 

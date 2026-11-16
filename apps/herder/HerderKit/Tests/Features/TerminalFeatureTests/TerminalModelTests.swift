@@ -14,6 +14,7 @@ import Testing
     let clock = VirtualClockClient()
     let state = InMemoryStateStore()
     let pty = StubPTYClient()
+    let processes = RunningProcesses()
     let root = URL(filePath: "/code/api")
     let other = URL(filePath: "/code/web")
     let home = URL(filePath: "/Users/kurt")
@@ -23,7 +24,7 @@ import Testing
     }
 
     func makeModel(environment: [String: String] = ["SHELL": "/bin/sh"]) -> TerminalModel {
-        TerminalModel(pty: pty, clock: clock, environment: environment, home: home)
+        TerminalModel(pty: pty, clock: clock, environment: environment, home: home, processes: processes)
     }
 
     func workspace(_ url: URL, in registry: WorkspaceRegistry) async throws -> Workspace {
@@ -569,6 +570,104 @@ import Testing
         #expect(!relaunched.isOpen)
         #expect(relaunched.tabs.isEmpty)
         #expect(pty.specs.count == 1)
+    }
+
+    // MARK: The Task Manager's list
+
+    @Test func aStartedShellIsListedWithItsProcess() async throws {
+        let (model, workspace, _) = try await shown(tabs: 1)
+
+        let tab = try #require(model.activeTab)
+        let entry = try #require(processes.entry(tab.id))
+        #expect(entry.kind == .terminal)
+        #expect(entry.pid == pty.sessions[0].pid)
+        #expect(entry.workspace == workspace.id)
+        #expect(entry.title() == tab.displayTitle)
+        #expect(entry.state() == nil)
+    }
+
+    @Test func aShellsEntryGoesWhenItsProcessDoes() async throws {
+        let (model, _, _) = try await shown(tabs: 1)
+        let id = try #require(model.activeTab?.id)
+
+        pty.sessions[0].exit(with: 1)
+
+        try await eventually("the entry goes") { processes.entry(id) == nil }
+        #expect(model.tabs.count == 1)
+    }
+
+    @Test func closingATabTakesItsEntryAway() async throws {
+        let (model, _, _) = try await shown(tabs: 2)
+        let tab = try #require(model.activeTab)
+
+        model.close(tab)
+
+        #expect(processes.entry(tab.id) == nil)
+        #expect(processes.entries.count == 1)
+    }
+
+    @Test func closingTheWindowOrAWorkspaceTakesTheEntriesAway() async throws {
+        let (model, workspace, _) = try await shown(tabs: 2)
+
+        model.discard(workspace.id)
+        #expect(processes.entries.isEmpty)
+
+        let (second, _, _) = try await shown(tabs: 1)
+        second.terminateAll()
+        #expect(processes.entries.isEmpty)
+    }
+
+    @Test func showingFromTheTaskManagerAsksTheWindow() async throws {
+        let (model, workspace, _) = try await shown(tabs: 1)
+        let tab = try #require(model.activeTab)
+        nonisolated(unsafe) var asked: (UUID, WorkspaceID)?
+        model.onShowTab = { asked = ($0, $1) }
+
+        processes.entry(tab.id)?.show()
+
+        #expect(asked?.0 == tab.id)
+        #expect(asked?.1 == workspace.id)
+    }
+
+    @Test func revealingBringsATabForwardAndOpensThePanel() async throws {
+        let (model, workspace, _) = try await shown(tabs: 2)
+        let first = model.tabs[0]
+        model.hide()
+        #expect(model.activeTab?.id != first.id)
+
+        model.reveal(first.id, in: workspace.id)
+
+        #expect(model.isOpen)
+        #expect(model.activeTab?.id == first.id)
+    }
+
+    @Test func revealingInAnotherWorkspaceWaitsUntilItIsShowing() async throws {
+        let registry = makeRegistry()
+        let model = makeModel()
+        let api = try await workspace(root, in: registry)
+        let web = try await workspace(other, in: registry)
+        await model.show(web)
+        await model.openTab()
+        let tab = try #require(model.activeTab)
+        // Web's panel closed, and the window on its way somewhere else.
+        model.hide()
+        await model.show(api)
+
+        model.reveal(tab.id, in: web.id)
+        #expect(!model.isOpen)
+        await model.show(web)
+
+        #expect(model.isOpen)
+        #expect(model.activeTab?.id == tab.id)
+    }
+
+    @Test func revealingATabThatIsNotThereDoesNothing() async throws {
+        let (model, workspace, _) = try await shown(tabs: 1)
+        model.hide()
+
+        model.reveal(UUID(), in: workspace.id)
+
+        #expect(!model.isOpen)
     }
 }
 
