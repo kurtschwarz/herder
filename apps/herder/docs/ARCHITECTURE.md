@@ -95,7 +95,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   ├── Vendor/                  # gitignored: HerderSyntaxFFI.xcframework (`just syntax`), GhosttyVt.xcframework (`just ghostty`)
 │   │   │   ├── Sources/
 │   │   │   │   ├── Core/
-│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Editor/, Files/, Git/, Processes/, Terminal/
+│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Daemon/, Editor/, Files/, Git/, Processes/, Terminal/
 │   │   │   │   │   ├── Services/        # service protocols
 │   │   │   │   │   ├── Workspace/       # WorkspaceRegistry, Workspace, snapshots, UI state
 │   │   │   │   │   ├── Repositories/    # RepositoryStore, RepositoryAccess
@@ -103,6 +103,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   ├── Services/
 │   │   │   │   │   ├── FileSystem/
 │   │   │   │   │   ├── Git/
+│   │   │   │   │   ├── Daemon/          # finds or starts herderd and does its handshake
 │   │   │   │   │   ├── Process/         # PTY spawning
 │   │   │   │   │   ├── Agents/
 │   │   │   │   │   ├── Highlighting/    # wraps the syntax-highlighter bindings
@@ -140,6 +141,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │
 └── packages/
     ├── herder-syntax-highlighter/       # Rust highlighter: stays here, owns its own build
+    ├── herderd/                         # Rust daemon that owns agent sessions and terminals; `just build` here, bundled by the app
     ├── herder-ghostty-vt/               # a pinned Ghostty commit and the recipe that builds libghostty-vt
     ├── opencode-theme/                  # the `herder` opencode theme the agent panel asks for; `just install`
     ├── opencode-plugin-osc-7501/        # opencode plugin that reports session status with OSC 7501; `just install`

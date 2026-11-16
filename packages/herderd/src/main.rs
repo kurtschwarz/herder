@@ -35,7 +35,9 @@ fn usage() -> io::Result<()> {
 fn listen(path: PathBuf) -> io::Result<()> {
     let listener = herderd::transport::bind(&path)?;
     for stream in listener.incoming() {
-        let stream = stream?;
+        // A failed accept (no descriptors left, a client that gave up) must
+        // not end a daemon that will own every session.
+        let Ok(stream) = stream else { continue };
         match herderd::transport::peer_is_owner(&stream) {
             Ok(true) => {}
             _ => continue,

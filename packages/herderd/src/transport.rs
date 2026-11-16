@@ -17,13 +17,26 @@ pub fn bind(path: &Path) -> io::Result<UnixListener> {
     if path.exists() {
         match UnixStream::connect(path) {
             Ok(_) => return Err(io::Error::new(io::ErrorKind::AddrInUse, "herderd is already running")),
-            Err(_) => std::fs::remove_file(path)?,
+            // Only these mean nobody is listening. Any other failure (no
+            // descriptors left, no permission) says nothing about whether a
+            // daemon is, and removing its socket would strand it.
+            Err(error) if matches!(error.kind(), io::ErrorKind::ConnectionRefused | io::ErrorKind::NotFound) => {
+                std::fs::remove_file(path)?;
+            }
+            Err(error) => return Err(error),
         }
     }
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let listener = UnixListener::bind(path)?;
+    // The socket is created with the process umask applied, so tighten it
+    // first: set afterwards, there is a moment it is open to others.
+    // SAFETY: `umask` has no preconditions.
+    let previous = unsafe { libc::umask(0o177) };
+    let bound = UnixListener::bind(path);
+    // SAFETY: as above.
+    unsafe { libc::umask(previous) };
+    let listener = bound?;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
     Ok(listener)
 }

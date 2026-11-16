@@ -29,4 +29,3 @@ _Avoid_: reconnect, restore.
 **Resume**:
 Starting a new process with an agent's resume command, so the agent picks the conversation back up. Today what a relaunch does; once herderd owns the processes it is only for a session whose process has ended.
 _Avoid_: reattach, restart.
-
