@@ -1,8 +1,8 @@
 import Foundation
 
 /// A path as people write it: `~` for the home folder and what is under it.
-public enum HomeRelativePath {
-    public static func label(for url: URL, home: URL) -> String {
+enum HomeRelativePath {
+    static func label(for url: URL, home: URL) -> String {
         let path = normalised(url)
         let home = normalised(home)
         if path == home { return "~" }

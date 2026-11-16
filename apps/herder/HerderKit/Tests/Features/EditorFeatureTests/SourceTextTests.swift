@@ -2,6 +2,8 @@ import Core
 import Foundation
 import Testing
 
+@testable import EditorFeature
+
 @Suite struct SourceTextTests {
     let token = SyntaxToken(range: NSRange(location: 0, length: 3), kind: .keyword)
 

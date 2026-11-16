@@ -85,7 +85,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   ├── Vendor/                  # gitignored: HerderSyntaxFFI.xcframework (`just syntax`), GhosttyVt.xcframework (`just ghostty`)
 │   │   │   ├── Sources/
 │   │   │   │   ├── Core/
-│   │   │   │   │   ├── Models/          # Sendable value types
+│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Editor/, Files/, Git/, Processes/, Terminal/
 │   │   │   │   │   ├── Services/        # service protocols
 │   │   │   │   │   ├── Workspace/       # WorkspaceRegistry, Workspace, snapshots, UI state
 │   │   │   │   │   ├── Repositories/    # RepositoryStore, RepositoryAccess
@@ -341,7 +341,7 @@ extension Workspace {
 ## Services
 
 - Protocols live in `Core/Services/`. Implementations live in `Services/<Area>/`. Every protocol has a fake in `TestSupport/Fakes/`, wrapped in `#if DEBUG` so a release build links an empty module.
-- **Pure logic that happens to be about an external system still belongs in `Core`.** `GitRefName` validates a branch name and `GitWorktreeLocation` works out where a worktree goes: both are string and URL arithmetic with no I/O, and a feature needs them to refuse a name as it is typed. Only the code that actually runs `git` is a service.
+- **Pure logic that happens to be about an external system still belongs in `Core`.** `GitWorktreeLocation` works out where a worktree goes: string and URL arithmetic with no I/O, which both a feature and the git service need. Logic only one feature reads, like `GitRefName` refusing a branch name as it is typed, lives in that feature. Only the code that actually runs `git` is a service.
 - Stateful services are `actor`s. Stateless ones are `Sendable` structs.
 - Services never hold references to views or view models.
 - Services report changes into the `Workspace` by calling its `@MainActor` methods. Views read from `Workspace` and feature models; they never call services for data. Feature models call services to perform actions.
@@ -510,7 +510,7 @@ A window listing every process Herder is running, grouped by what started it, wi
 **Three parts, kept apart so the logic runs without a process.**
 
 - **`ProcessMonitorClient` reads, and does nothing else.** One call, `sample()`, returns a raw `ProcessSample`: the root (Herder's own process) and every descendant (`proc_listchildpids`, recursively), each with its pid, parent, name, command line, *cumulative* CPU time, physical footprint, threads, start time and run state, plus the sample time, the core count, the physical RAM and the memory-pressure level. The live one is `Services/Process/LiveProcessMonitorClient`, off the main actor; the fake is `StubProcessMonitorClient`. A process that ends while the tree is being read is left out.
-- **Pure logic decides what the numbers mean**, all of it tested without real processes. `ProcessCPU` (a rate from two samples) is in `Core/Models`, beside the sample types the service returns. The rest is the Task Manager's alone, so it is internal to `TaskManagerFeature`, as `WorktreeActivity` is to `RepositoriesFeature`: `TaskTree` (which process belongs to which tab, and the rollups), `TaskSort`, `TaskFilter`, `TaskSummary` (the tiles) and `MetricHistory` (a sparkline's last minute).
+- **Pure logic decides what the numbers mean**, all of it tested without real processes. `ProcessCPU` (a rate from two samples) is in `Core/Models/Processes`, beside the sample types the service returns. The rest is the Task Manager's alone, so it is internal to `TaskManagerFeature`, as `WorktreeActivity` is to `RepositoriesFeature`: `TaskTree` (which process belongs to which tab, and the rollups), `TaskSort`, `TaskFilter`, `TaskSummary` (the tiles) and `MetricHistory` (a sparkline's last minute).
 - **`TaskManagerModel` holds what a person changes**: the sort, the filter and scope, which rows are open and which is selected, and the histories. It refreshes in `run()`, which the view starts from `.task`, so nothing is read while the window is closed. `TaskManagerWindow` also stops it when the `NSWindow` closes and restarts it when the window is key again, in case SwiftUI keeps a closed `Window` scene's content alive; whether it does is an assumption about SwiftUI that wants checking by hand. `run()` starts from nothing each time: the history is of this window being open, and a process has no rate until it has been seen twice.
 
 ### Who owns which process: `RunningProcesses`

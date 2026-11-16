@@ -199,6 +199,12 @@ let package = Package(
             swiftSettings: ui
         ),
         .testTarget(
+            name: "SettingsFeatureTests",
+            dependencies: ["SettingsFeature", "Core", "TestSupport"],
+            path: "Tests/Features/SettingsFeatureTests",
+            swiftSettings: ui
+        ),
+        .testTarget(
             name: "TerminalFeatureTests",
             dependencies: ["TerminalFeature", "Core", "TestSupport"],
             path: "Tests/Features/TerminalFeatureTests",

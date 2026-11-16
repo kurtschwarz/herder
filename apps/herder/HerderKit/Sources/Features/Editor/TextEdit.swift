@@ -1,14 +1,15 @@
+import Core
 import Foundation
 
 /// One change to a string: `replaced` in the old text became `length` new
 /// characters. An insert replaces nothing; a delete adds nothing.
 ///
 /// Offsets are UTF-16 code units, like ``SyntaxToken``.
-public struct TextEdit: Equatable, Sendable {
-    public let replaced: NSRange
-    public let length: Int
+struct TextEdit: Equatable, Sendable {
+    let replaced: NSRange
+    let length: Int
 
-    public init(replaced: NSRange, length: Int) {
+    init(replaced: NSRange, length: Int) {
         self.replaced = replaced
         self.length = length
     }
@@ -18,7 +19,7 @@ public struct TextEdit: Equatable, Sendable {
     /// Where `range` sits once this edit has been made, widened to take in
     /// anything the edit cut into. Used to keep a span that has to be
     /// repainted pointing at the right text.
-    public func carrying(_ range: NSRange) -> NSRange {
+    func carrying(_ range: NSRange) -> NSRange {
         let start = replaced.location
         let end = NSMaxRange(replaced)
         func moved(_ offset: Int, keeping edge: Int) -> Int {
@@ -45,7 +46,7 @@ extension [SyntaxToken] {
     /// - Text deleted or replaced across a token's edge takes that part of the
     ///   token with it and leaves the rest.
     /// - Everything after the edit moves by the change in length.
-    public func applying(_ edit: TextEdit) -> [SyntaxToken] {
+    func applying(_ edit: TextEdit) -> [SyntaxToken] {
         let start = edit.replaced.location
         let end = NSMaxRange(edit.replaced)
         let change = edit.change
@@ -79,7 +80,7 @@ extension [SyntaxToken] {
     /// Both runs must be positioned in the same text: shift the old one with
     /// ``applying(_:)`` first. Whatever the two share at the start and at the
     /// end is left out, so a keystroke that changes one token repaints one.
-    public func changedRange(to new: [SyntaxToken]) -> NSRange? {
+    func changedRange(to new: [SyntaxToken]) -> NSRange? {
         let shared = Swift.min(count, new.count)
         var head = 0
         while head < shared, self[head] == new[head] { head += 1 }

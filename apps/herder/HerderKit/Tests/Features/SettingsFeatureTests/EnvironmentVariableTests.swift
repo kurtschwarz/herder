@@ -1,6 +1,6 @@
 import Testing
 
-@testable import Core
+@testable import SettingsFeature
 
 @Suite struct EnvironmentVariableTests {
     @Test func rowsComeSortedByName() {
