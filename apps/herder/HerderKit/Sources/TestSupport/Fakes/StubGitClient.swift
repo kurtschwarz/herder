@@ -21,9 +21,17 @@ public final class StubGitClient: GitClient {
     private let summaries = Mutex<[String: GitChangeSummary?]>([:])
     private let changesAsked = Mutex<[URL]>([])
     private let changesFail = Mutex(false)
+    private let committed = Mutex<[ContentKey: String?]>([:])
+    private let contentsAsked = Mutex<[URL]>([])
+    private let contentsFail = Mutex(false)
     private let statusFails = Mutex(false)
     private let statusHeld = Mutex(false)
     private let statusWaiter = Mutex<CheckedContinuation<Void, Never>?>(nil)
+
+    private struct ContentKey: Hashable {
+        var path: String
+        var revision: String
+    }
 
     /// A call to `addWorktree`, as the stub saw it.
     public struct AddedWorktree: Equatable, Sendable {
@@ -172,6 +180,28 @@ public final class StubGitClient: GitClient {
         changesAsked.withLock { $0.append(worktree) }
         if changesFail.withLock({ $0 }) { throw GitClientError.commandFailed("git could not run") }
         return summaries.withLock { $0[FolderKey.of(worktree)] } ?? nil
+    }
+
+    /// Declares what `file` contained at `revision`. Unseeded, it was not
+    /// there, which is `nil`; seeding `nil` says the same on purpose.
+    public func seed(contents: String?, of file: URL, atRevision revision: String = "HEAD") {
+        committed.withLock { $0[ContentKey(path: PathKey(file).path, revision: revision)] = contents }
+    }
+
+    /// Makes `contents(of:atRevision:in:)` throw, as it would if git could not run.
+    public func failContentLookups(_ fails: Bool = true) {
+        contentsFail.withLock { $0 = fails }
+    }
+
+    /// Every file `contents(of:atRevision:in:)` has been asked about, in order.
+    public var contentLookups: [URL] {
+        contentsAsked.withLock { $0 }
+    }
+
+    public func contents(of file: URL, atRevision revision: String, in worktree: URL) async throws -> String? {
+        contentsAsked.withLock { $0.append(file) }
+        if contentsFail.withLock({ $0 }) { throw GitClientError.commandFailed("git could not run") }
+        return committed.withLock { $0[ContentKey(path: PathKey(file).path, revision: revision)] } ?? nil
     }
 
     public func repositoryKind(at url: URL) async throws -> GitRepositoryKind {

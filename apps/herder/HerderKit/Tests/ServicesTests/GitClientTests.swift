@@ -86,6 +86,46 @@ import Testing
         })
     }
 
+    @Test func contentsAreTheCommittedTextNotTheWorkingOrStagedOne() async throws {
+        let repo = try makeRepository("committed")
+        try FileManager.default.createDirectory(at: repo.appending(path: "sub"), withIntermediateDirectories: true)
+        try Data("committed\n".utf8).write(to: repo.appending(path: "sub/file.txt"))
+        try git("add", ".", in: repo)
+        try git("commit", "-m", "second", in: repo)
+        try Data("staged\n".utf8).write(to: repo.appending(path: "sub/file.txt"))
+        try git("add", ".", in: repo)
+        try Data("working\n".utf8).write(to: repo.appending(path: "sub/file.txt"))
+
+        let text = try await client.contents(of: repo.appending(path: "sub/file.txt"), atRevision: "HEAD", in: repo)
+
+        #expect(text == "committed\n")
+    }
+
+    @Test func contentsAreNilForAFileNotInTheRevision() async throws {
+        let repo = try makeRepository("not-committed")
+        try Data("new\n".utf8).write(to: repo.appending(path: "new.txt"))
+        try git("add", "new.txt", in: repo)
+
+        #expect(try await client.contents(of: repo.appending(path: "new.txt"), atRevision: "HEAD", in: repo) == nil)
+        #expect(try await client.contents(of: repo.appending(path: "nope.txt"), atRevision: "HEAD", in: repo) == nil)
+    }
+
+    @Test func contentsAreNilForAFileThatIsNotUTF8() async throws {
+        let repo = try makeRepository("binary")
+        try Data([0xFF, 0xFE, 0x00, 0x80]).write(to: repo.appending(path: "blob.bin"))
+        try git("add", ".", in: repo)
+        try git("commit", "-m", "binary", in: repo)
+
+        #expect(try await client.contents(of: repo.appending(path: "blob.bin"), atRevision: "HEAD", in: repo) == nil)
+    }
+
+    @Test func contentsAreNilOutsideARepository() async throws {
+        let plain = try makeDirectory("plain-contents")
+        try Data("x".utf8).write(to: plain.appending(path: "a.txt"))
+
+        #expect(try await client.contents(of: plain.appending(path: "a.txt"), atRevision: "HEAD", in: plain) == nil)
+    }
+
     @Test func changeSummaryCountsCommittedAndUncommittedLinesAgainstTheMergeBase() async throws {
         let repo = try makeRepository("changes")
         try git("checkout", "-b", "feature", in: repo)

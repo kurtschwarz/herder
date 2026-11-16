@@ -41,6 +41,14 @@ final class Buffer: NSObject, NSTextViewDelegate {
 
     var text: String { storage.string }
 
+    /// What `HEAD` has for this file, which the lines are compared with. `nil`
+    /// when there is nothing to compare with. Set by whoever fetches it.
+    var baseText: String?
+
+    /// The lines that differ from ``baseText``, as last worked out for the text
+    /// they were found in: see ``show(_:foundIn:)``.
+    private(set) var changes = LineChanges.none
+
     init(text: String) {
         storage = NSTextStorage(string: text, attributes: SyntaxAttributes.base)
         super.init()
@@ -133,6 +141,15 @@ final class Buffer: NSObject, NSTextViewDelegate {
         if let range { paint(range) }
     }
 
+    /// Hands the gutter `changes`, only if the buffer still holds the `text`
+    /// they were found in: a result that outlived an edit would mark the wrong
+    /// lines.
+    func show(_ changes: LineChanges, foundIn text: String) {
+        guard storage.string == text, self.changes != changes else { return }
+        self.changes = changes
+        gutter?.changes = changes
+    }
+
     /// Paints the tokens that touch `range`, after clearing the colour there.
     private func paint(_ range: NSRange) {
         let range = NSIntersectionRange(range, NSRange(location: 0, length: storage.length))
@@ -217,6 +234,7 @@ final class Buffer: NSObject, NSTextViewDelegate {
 
         let gutter = LineNumberGutter(scrollView: scrollView, textView: textView)
         gutter.textDidChange(to: storage.string)
+        gutter.changes = changes
         let highlight = CurrentLineHighlight(scrollView: scrollView, textView: textView)
         textView.onSelect = { [weak gutter, weak highlight] in
             gutter?.selectionDidChange()

@@ -334,6 +334,25 @@ public final class Workspace {
         status = derived
     }
 
+    /// What `path` contained at `HEAD`, for marking what has changed since, or
+    /// `nil` when there is nothing to compare with: git has it untracked,
+    /// ignored or in conflict, or `HEAD` has no UTF-8 text for it.
+    ///
+    /// A file staged as new has no `HEAD` version but is all change, so it
+    /// compares with the empty text. Asks about `HEAD` rather than the index
+    /// so that staging a change leaves it marked.
+    public func headContents(of path: PathKey) async -> String? {
+        guard isAvailable else { return nil }
+        switch status.status(of: path) {
+        case .untracked, .ignored, .unmerged:
+            return nil
+        case .tracked(let staged, let unstaged) where staged == .added || unstaged == .added:
+            return ""
+        case .tracked, nil:
+            return (try? await git.contents(of: path.url, atRevision: "HEAD", in: root.url)) ?? nil
+        }
+    }
+
     // MARK: - Changing
 
     /// Makes an empty file, or a folder, and shows it. Throws what the disk
