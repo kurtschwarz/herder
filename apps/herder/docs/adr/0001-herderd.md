@@ -26,7 +26,7 @@ The app first tries to connect to the socket. If nothing answers, it starts the 
 
 Why not launchd: an `SMAppService` agent needs a plist in the bundle, shows in System Settings ▸ Login Items, and is restarted by launchd after it exits, all of which are wrong for a daemon whose purpose is to hold sessions the user can see. It also makes a dev build and an installed release fight over one label. Spawning on demand needs none of that, and moving to launchd later changes only who starts the process.
 
-A dev build and an installed release share one socket, so whichever starts first serves both. That is the version-skew case above, and the handshake copes with it.
+A debug build and a release build use different sockets, `herderd-dev.sock` and `herderd.sock` in `Application Support/Herder/`, chosen by `#if DEBUG` in `LiveDaemonClient.socketName`. Each starts and talks to its own bundled daemon, so protocol changes under development are never tested against an installed daemon, and idle exit or session ownership in one never affects the other. Both can run at once.
 
 Costs accepted: after a reboot or logout there is no daemon until the app is opened, which matches there being no sessions to keep. If the daemon is killed, its sessions are lost either way.
 

@@ -83,4 +83,13 @@ import Testing
             return
         }
     }
+
+    @Test func aDebugBuildHasItsOwnSocket() throws {
+        #if DEBUG
+        #expect(LiveDaemonClient.socketName == "herderd-dev.sock")
+        #else
+        #expect(LiveDaemonClient.socketName == "herderd.sock")
+        #endif
+        #expect(try LiveDaemonClient.socketURL().lastPathComponent == LiveDaemonClient.socketName)
+    }
 }

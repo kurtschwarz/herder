@@ -149,7 +149,7 @@ public final class AppEnvironment {
         #endif
 
         let daemon = LiveDaemonClient(
-            socket: (try? LiveDaemonClient.socketURL()) ?? URL.temporaryDirectory.appending(path: "herderd.sock"),
+            socket: (try? LiveDaemonClient.socketURL()) ?? URL.temporaryDirectory.appending(path: LiveDaemonClient.socketName),
             executable: Bundle.main.url(forAuxiliaryExecutable: "herderd"),
             client: "Herder \(AppVersion(info: Bundle.main.infoDictionary ?? [:]).version)"
         )

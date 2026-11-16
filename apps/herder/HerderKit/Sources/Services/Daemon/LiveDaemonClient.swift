@@ -47,9 +47,19 @@ public final class LiveDaemonClient: DaemonClient {
         self.launch = launch
     }
 
+    /// The socket's file name. A debug build has its own, so a dev build and an
+    /// installed release each start and reach their own daemon.
+    public static var socketName: String {
+        #if DEBUG
+        "herderd-dev.sock"
+        #else
+        "herderd.sock"
+        #endif
+    }
+
     /// Where the daemon's socket is: beside the app's own state.
     public static func socketURL() throws -> URL {
-        try FileStateStore.liveRoot().appending(path: "herderd.sock")
+        try FileStateStore.liveRoot().appending(path: socketName)
     }
 
     @concurrent
