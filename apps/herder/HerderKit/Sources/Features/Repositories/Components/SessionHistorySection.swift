@@ -241,8 +241,8 @@ private struct HistoryRow: View {
 
 /// How much history there is, and the toggle between the latest few and all
 /// of it. It is the section's footer, so it pins to the bottom of the sidebar
-/// while there is more history than fits, and its own fill keeps the rows
-/// scrolling under it from showing through.
+/// while there is more history than fits. A ghost button: no fill or border
+/// of its own beyond the hover.
 private struct AllHistoryRow: View {
     let count: Int
     @Binding var isExpanded: Bool
@@ -268,14 +268,6 @@ private struct AllHistoryRow: View {
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                 .fill(isHovering ? Theme.Palette.control : .clear)
-        }
-        .background {
-            // The sidebar's own material, so the rows under the row are
-            // hidden without it standing out from the pane around it.
-            Color.clear.glassEffect(
-                .regular.tint(Theme.Palette.windowTint),
-                in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-            )
         }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
