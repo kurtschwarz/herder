@@ -270,8 +270,12 @@ private struct AllHistoryRow: View {
                 .fill(isHovering ? Theme.Palette.control : .clear)
         }
         .background {
-            // Past the stack's own inset, so nothing shows beside the row.
-            Theme.Palette.window.padding(.horizontal, -Theme.Spacing.tight)
+            // The sidebar's own material, so the rows under the row are
+            // hidden without it standing out from the pane around it.
+            Color.clear.glassEffect(
+                .regular.tint(Theme.Palette.windowTint),
+                in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+            )
         }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
