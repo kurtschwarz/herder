@@ -27,6 +27,31 @@ import Testing
         return try await list.add(url: url)
     }
 
+    @Test func searchingFiltersWorkspacesByNameIgnoringCaseAndDiacritics() async throws {
+        _ = try await addRepository("/code/Café")
+        _ = try await addRepository("/code/api")
+
+        #expect(model.matching("cafe").map(\.name) == ["Café"])
+        #expect(model.matching("AP").map(\.name) == ["api"])
+        #expect(model.matching("").count == 2)
+    }
+
+    @Test func searchingDoesNotLookAtPaths() async throws {
+        _ = try await addRepository("/code/api")
+
+        #expect(model.matching("code").isEmpty)
+    }
+
+    @Test func returnActsOnlyWhenOneWorkspaceMatches() async throws {
+        let api = try await addRepository("/code/api")
+        _ = try await addRepository("/code/app")
+
+        #expect(model.soleMatch(for: "api")?.id == api.id)
+        #expect(model.soleMatch(for: "ap") == nil)
+        #expect(model.soleMatch(for: "zzz") == nil)
+        #expect(model.soleMatch(for: "") == nil)
+    }
+
     @Test func refreshReadsTheWorktreesOfOpenRepositories() async throws {
         let repository = try await addRepository("/code/api")
 

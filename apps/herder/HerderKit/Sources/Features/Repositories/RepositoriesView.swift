@@ -117,14 +117,6 @@ private struct RepositoriesHeader: View {
                     ))
                 )
             }
-            Button { model.beginAdding() } label: {
-                PhIcon(Ph.folderSimplePlus, size: 18)
-            }
-            .buttonStyle(.icon)
-            .help("Add workspace")
-            // Centred under the wolf mark above it, which sits flush with the
-            // pane inset: the plate is wider than the mark, so it overhangs.
-            .padding(.trailing, -(Theme.Size.iconButton - Theme.Size.wolfMark.width) / 2)
         }
         // The selector is a plate of its own, so it sits off the pane's edge
         // by the same gap the pane sits off the window's.

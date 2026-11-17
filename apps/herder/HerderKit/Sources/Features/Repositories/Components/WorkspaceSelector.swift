@@ -57,8 +57,10 @@ struct WorkspaceSelector: View {
                 picked: picked,
                 isMultiple: isMultiple,
                 toggle: toggle,
-                selectAll: { setPicked(Set(model.repositories.map(\.id))) },
-                done: { isOpen = false }
+                addWorkspace: {
+                    isOpen = false
+                    model.beginAdding()
+                }
             )
         }
     }
@@ -72,10 +74,6 @@ struct WorkspaceSelector: View {
         case .single(let binding): binding.wrappedValue.map { [$0] } ?? []
         case .multiple(let binding): binding.wrappedValue
         }
-    }
-
-    private func setPicked(_ ids: Set<UUID>) {
-        if case .multiple(let binding) = selection { binding.wrappedValue = ids }
     }
 
     private func toggle(_ repository: Repository) {
@@ -93,17 +91,59 @@ struct WorkspaceSelector: View {
     }
 }
 
-/// The popover: one row per repository this window lists.
+/// The size of the list: the row and the cap on the list share one height, so
+/// exactly ten rows show with nothing peeking.
+private enum WorkspaceList {
+    static let rowHeight: CGFloat = 32
+    static let gap: CGFloat = 2
+    static let visibleRows: CGFloat = 10
+    static let maxHeight = visibleRows * rowHeight + (visibleRows - 1) * gap
+}
+
+/// The popover: a search field over one row per repository this window lists.
 private struct WorkspaceSelection: View {
     let model: RepositoriesModel
     let picked: Set<UUID>
     let isMultiple: Bool
     let toggle: (Repository) -> Void
-    let selectAll: () -> Void
-    let done: () -> Void
+    let addWorkspace: () -> Void
+
+    /// Reset each time the popover opens, because the popover's content is
+    /// made afresh then.
+    @State private var query = ""
+    @FocusState private var isSearching: Bool
+
+    private var matches: [Repository] { model.matching(query) }
+
+    private var searchShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+    }
+
+    private var search: some View {
+        HStack(spacing: Theme.Spacing.normal) {
+            PhIcon(Ph.magnifyingGlass, size: 14)
+                .foregroundStyle(Theme.Palette.secondaryText)
+            TextField("Search workspaces", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .focused($isSearching)
+                .onSubmit {
+                    if let repository = model.soleMatch(for: query) { toggle(repository) }
+                }
+        }
+        .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+        .frame(minHeight: Theme.Size.control)
+        .background(Theme.Palette.control, in: searchShape)
+        .overlay {
+            searchShape.strokeBorder(isSearching ? Theme.Palette.violet : Theme.Palette.hairline, lineWidth: 1)
+        }
+        .padding(.bottom, Theme.Spacing.normal)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            search
+
             if isMultiple {
                 Text("Show sessions from")
                     .textCase(.uppercase)
@@ -116,8 +156,14 @@ private struct WorkspaceSelection: View {
             }
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(model.repositories) { repository in
+                VStack(alignment: .leading, spacing: WorkspaceList.gap) {
+                    if matches.isEmpty {
+                        Text("No matching workspaces")
+                            .font(.callout)
+                            .foregroundStyle(Theme.Palette.tertiaryText)
+                            .padding(Theme.Spacing.normal)
+                    }
+                    ForEach(matches) { repository in
                         WorkspaceOption(
                             repository: repository,
                             model: model,
@@ -129,29 +175,18 @@ private struct WorkspaceSelection: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(maxHeight: 280)
+            .frame(maxHeight: WorkspaceList.maxHeight)
 
             if isMultiple {
                 Divider()
                     .padding(.vertical, Theme.Spacing.normal)
 
-                HStack(spacing: Theme.Spacing.normal) {
-                    Button(action: selectAll) {
-                        Text("Select all").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.secondary)
-                    .disabled(picked.count == model.repositories.count)
-
-                    Button(action: done) {
-                        Text("Done").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.primary)
-                    .keyboardShortcut(.defaultAction)
-                }
+                AddWorkspaceOption(action: addWorkspace)
             }
         }
         .padding(Theme.Spacing.normal)
         .frame(width: 260)
+        .onAppear { isSearching = true }
     }
 
     /// One workspace must be somewhere you can work in. Several must keep one
@@ -159,6 +194,39 @@ private struct WorkspaceSelection: View {
     private func isEnabled(_ repository: Repository) -> Bool {
         guard isMultiple else { return repository.isAvailable }
         return !picked.contains(repository.id) || picked.count > 1
+    }
+}
+
+/// The row under the list that opens the Add workspace modal. The ⌘O is a
+/// label: the File menu owns the shortcut.
+private struct AddWorkspaceOption: View {
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
+            PhIcon(Ph.folderSimplePlus, size: 16)
+                .foregroundStyle(Theme.Palette.secondaryText)
+            Text("Add workspace…")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.Palette.text)
+            Spacer(minLength: 0)
+            Text("⌘O")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.Palette.secondaryText)
+        }
+        .padding(.horizontal, Theme.Spacing.normal)
+        .frame(minHeight: WorkspaceList.rowHeight)
+        .background {
+            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                .fill(isHovering ? Theme.Palette.control : .clear)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: action)
+        .pointerStyle(.link)
+        .accessibilityAddTraits(.isButton)
+        .onHover { isHovering = $0 }
     }
 }
 
@@ -208,7 +276,7 @@ private struct WorkspaceOption: View {
             }
         }
         .padding(.horizontal, Theme.Spacing.normal)
-        .frame(minHeight: 32)
+        .frame(minHeight: WorkspaceList.rowHeight)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                 .fill(isHovering && isEnabled && !isRenaming ? Theme.Palette.control : .clear)

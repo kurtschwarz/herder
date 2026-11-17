@@ -180,7 +180,7 @@ private struct WindowView: View {
                 .environment(window.agentPanel.sessions)
                 .modifier(WindowActions(window: window, agents: environment.agents))
         }
-        // Where ⇧⌘N finds the window it should open the modal in.
+        // Where ⌘O finds the window it should open the modal in.
         .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
         .modifier(TabCommandValues(editor: window.editor, terminal: window.terminal, agents: window.agentPanel))
         .modifier(AgentCommandValues(agents: window.agentPanel))

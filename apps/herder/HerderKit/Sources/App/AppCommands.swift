@@ -89,8 +89,8 @@ public struct AppCommands: Commands {
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(newEditorFile == nil)
 
-            Button("Add Repository…") { beginAddingRepository?() }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+            Button("Add Workspace…") { beginAddingRepository?() }
+                .keyboardShortcut("o", modifiers: .command)
                 .disabled(beginAddingRepository == nil)
 
             Button("New Terminal Tab") { newTerminalTab?() }

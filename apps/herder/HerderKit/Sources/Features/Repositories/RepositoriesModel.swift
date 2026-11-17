@@ -75,6 +75,20 @@ public final class RepositoriesModel {
     /// The repositories this window lists, in its order.
     var repositories: [Repository] { list.repositories }
 
+    /// The workspaces whose name holds `query`, by name only. An empty query
+    /// is every one.
+    func matching(_ query: String) -> [Repository] {
+        guard !query.isEmpty else { return repositories }
+        return repositories.filter { $0.name.localizedStandardContains(query) }
+    }
+
+    /// The one workspace Return acts on: there is one only when exactly one
+    /// matches.
+    func soleMatch(for query: String) -> Repository? {
+        let found = matching(query)
+        return found.count == 1 ? found[0] : nil
+    }
+
     /// The ones the workspace selector has left on the sidebar.
     var shownRepositories: [Repository] { list.shown }
 
