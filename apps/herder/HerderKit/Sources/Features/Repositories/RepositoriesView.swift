@@ -121,7 +121,8 @@ private struct RepositoriesHeader: View {
         // The selector is a plate of its own, so it sits off the pane's edge
         // by the same gap the pane sits off the window's.
         .padding(.leading, model.repositories.isEmpty ? Theme.Spacing.paneInset : Theme.Spacing.windowPadding)
-        .padding(.trailing, Theme.Spacing.paneInset)
+        // The selector's trailing edge lines up with the launcher's plus below.
+        .padding(.trailing, model.repositories.isEmpty ? Theme.Spacing.paneInset : Theme.Spacing.windowPadding)
         // The plain title is matched by the file tree's header, so the two
         // stay level. The selector is taller, and tucks up under the traffic
         // lights instead.
