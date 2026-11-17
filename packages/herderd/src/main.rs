@@ -1,9 +1,9 @@
 use std::io;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::thread;
+use std::time::Duration;
 
-const USAGE: &str = "usage: herderd --socket PATH | --stdio | --version";
+const USAGE: &str = "usage: herderd --socket PATH [--idle-timeout SECONDS] | --stdio | --version";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -14,7 +14,7 @@ fn main() -> ExitCode {
         }
         Some("--stdio") => herderd::session::serve(io::stdin().lock(), io::stdout().lock()),
         Some("--socket") => match args.next() {
-            Some(path) => listen(PathBuf::from(path)),
+            Some(path) => idle_timeout(args).and_then(|grace| listen(PathBuf::from(path), grace)),
             None => usage(),
         },
         _ => usage(),
@@ -28,25 +28,24 @@ fn main() -> ExitCode {
     }
 }
 
-fn usage() -> io::Result<()> {
+fn usage<T>() -> io::Result<T> {
     Err(io::Error::new(io::ErrorKind::InvalidInput, USAGE))
 }
 
-fn listen(path: PathBuf) -> io::Result<()> {
-    let listener = herderd::transport::bind(&path)?;
-    for stream in listener.incoming() {
-        // A failed accept (no descriptors left, a client that gave up) must
-        // not end a daemon that will own every session.
-        let Ok(stream) = stream else { continue };
-        match herderd::transport::peer_is_owner(&stream) {
-            Ok(true) => {}
-            _ => continue,
-        }
-        thread::spawn(move || {
-            if let Ok(reader) = stream.try_clone() {
-                let _ = herderd::session::serve(reader, stream);
-            }
-        });
+/// How long to stay up with nothing to do. Tests shorten it.
+fn idle_timeout(mut args: impl Iterator<Item = String>) -> io::Result<Duration> {
+    match args.next().as_deref() {
+        None => Ok(herderd::idle::DEFAULT_GRACE),
+        Some("--idle-timeout") => args
+            .next()
+            .and_then(|seconds| seconds.parse::<f64>().ok())
+            .and_then(|seconds| Duration::try_from_secs_f64(seconds).ok())
+            .map_or_else(usage, Ok),
+        Some(_) => usage(),
     }
-    Ok(())
+}
+
+fn listen(path: PathBuf, grace: Duration) -> io::Result<()> {
+    let listener = herderd::transport::bind(&path)?;
+    herderd::transport::serve_until_idle(listener, &path, grace)
 }

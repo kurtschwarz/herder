@@ -3,11 +3,16 @@
 //! This is the one module that knows the connection is a local socket. The
 //! protocol and [`crate::session`] above it take any byte stream.
 
+use crate::idle::Activity;
+use crate::session;
 use std::io;
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 /// Binds the socket, replacing one left behind by a daemon that is gone.
 ///
@@ -41,6 +46,53 @@ pub fn bind(path: &Path) -> io::Result<UnixListener> {
     Ok(listener)
 }
 
+/// Serves clients on `listener` until the daemon has been idle for `grace`,
+/// then closes in an order that never leaves a client talking to a daemon that
+/// is going away: stop accepting, remove the socket, return.
+///
+/// Returns once the socket is gone, so the caller can exit. Connections already
+/// being served are not waited for: there are none, or the daemon was not idle.
+pub fn serve_until_idle(listener: UnixListener, path: &Path, grace: Duration) -> io::Result<()> {
+    let activity = Activity::new();
+    let acceptor = {
+        let activity = Arc::clone(&activity);
+        thread::spawn(move || accept_until_closed(&listener, &activity))
+    };
+
+    activity.wait_until_idle_for(grace);
+
+    // The accept thread is blocked in `accept`. Closed, it refuses the next
+    // connection and ends, and a connection of our own is that next one. If
+    // that cannot be made (no descriptors left), do not wait for a thread that
+    // may never wake: the exit that follows ends it.
+    if UnixStream::connect(path).is_ok() {
+        let _ = acceptor.join();
+    }
+
+    match std::fs::remove_file(path) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
+}
+
+fn accept_until_closed(listener: &UnixListener, activity: &Arc<Activity>) {
+    for stream in listener.incoming() {
+        // A failed accept (no descriptors left, a client that gave up) must
+        // not end a daemon that will own every session.
+        let Ok(stream) = stream else { continue };
+        if !matches!(peer_is_owner(&stream), Ok(true)) {
+            continue;
+        }
+        let Some(hold) = activity.client() else { return };
+        thread::spawn(move || {
+            let _hold = hold;
+            if let Ok(reader) = stream.try_clone() {
+                let _ = session::serve(reader, stream);
+            }
+        });
+    }
+}
+
 /// The user id of whoever is on the other end of the socket.
 pub fn peer_uid(stream: &UnixStream) -> io::Result<u32> {
     let mut uid: libc::uid_t = 0;
@@ -60,10 +112,14 @@ pub fn peer_is_owner(stream: &UnixStream) -> io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
 
     fn scratch(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("herderd-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
+        // `bind` narrows the umask for the whole process, so a directory made
+        // while another test is binding comes out unusable.
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         dir.join("d.sock")
     }
 
@@ -84,6 +140,63 @@ mod tests {
         let live = bind(&path).unwrap();
         assert_eq!(bind(&path).unwrap_err().kind(), io::ErrorKind::AddrInUse);
         drop(live);
+    }
+
+    const GRACE: Duration = Duration::from_millis(150);
+
+    fn serve_in_background(path: &Path) -> mpsc::Receiver<io::Result<()>> {
+        let listener = bind(path).unwrap();
+        let path = path.to_path_buf();
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = sender.send(serve_until_idle(listener, &path, GRACE));
+        });
+        receiver
+    }
+
+    #[test]
+    fn exits_when_idle_and_removes_its_socket() {
+        let path = scratch("idle");
+        let done = serve_in_background(&path);
+        done.recv_timeout(Duration::from_secs(5)).expect("exits when idle").unwrap();
+        assert!(!path.exists());
+        // The next app finds nothing, so it starts the bundled daemon.
+        assert!(UnixStream::connect(&path).is_err());
+    }
+
+    #[test]
+    fn a_connected_client_keeps_it_running_until_it_leaves() {
+        let path = scratch("held");
+        let done = serve_in_background(&path);
+        let client = UnixStream::connect(&path).unwrap();
+
+        assert!(done.recv_timeout(GRACE * 4).is_err());
+        assert!(path.exists());
+
+        drop(client);
+        done.recv_timeout(Duration::from_secs(5)).expect("exits after the client leaves").unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn a_client_arriving_during_the_countdown_cancels_it() {
+        let path = scratch("cancel");
+        let done = serve_in_background(&path);
+        thread::sleep(GRACE / 2);
+        let client = UnixStream::connect(&path).unwrap();
+        assert!(done.recv_timeout(GRACE * 4).is_err());
+
+        drop(client);
+        done.recv_timeout(Duration::from_secs(5)).expect("exits once it is idle again").unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn nothing_connects_once_it_has_exited() {
+        let path = scratch("refused");
+        let done = serve_in_background(&path);
+        done.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+        assert_eq!(UnixStream::connect(&path).unwrap_err().kind(), io::ErrorKind::NotFound);
     }
 
     #[test]

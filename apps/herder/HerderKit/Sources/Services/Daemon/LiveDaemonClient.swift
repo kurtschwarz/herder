@@ -11,8 +11,9 @@ import Synchronization
 /// leaves it alone. See ADR 0001 for why it is started this way and not by
 /// launchd.
 ///
-/// This slice only completes the handshake and lets go of the connection;
-/// nothing is sent over it yet.
+/// After the handshake the connection stays open for as long as this client
+/// lives, which is what keeps the daemon from exiting idle while the app runs.
+/// Nothing is sent over it yet.
 public final class LiveDaemonClient: DaemonClient {
     /// Starts `executable` with `arguments`, detached, and returns its pid.
     public typealias Launch = @Sendable (_ executable: URL, _ arguments: [String]) throws -> pid_t
@@ -20,10 +21,14 @@ public final class LiveDaemonClient: DaemonClient {
     private let socketURL: URL
     private let executable: URL?
     private let client: String
+    private let daemonArguments: [String]
     private let launch: Launch
     private let startTimeout: Duration
 
     private let launched = Mutex<[pid_t]>([])
+
+    /// The open connection that tells the daemon a client is here.
+    private let held = Mutex<Int32?>(nil)
 
     /// The processes this client started, so a test can end them.
     var launchedPIDs: [pid_t] { launched.withLock { $0 } }
@@ -33,18 +38,33 @@ public final class LiveDaemonClient: DaemonClient {
     ///   - executable: the daemon to start if nothing answers, or `nil` if
     ///     there is none to start.
     ///   - client: who is asking, for the daemon's log.
+    ///   - daemonArguments: extra arguments for a daemon this client starts, such
+    ///     as a shorter `--idle-timeout` for a test.
     public init(
         socket: URL,
         executable: URL?,
         client: String,
+        daemonArguments: [String] = [],
         startTimeout: Duration = .seconds(5),
         launch: @escaping Launch = LiveDaemonClient.spawnDetached
     ) {
         self.socketURL = socket
         self.executable = executable
         self.client = client
+        self.daemonArguments = daemonArguments
         self.startTimeout = startTimeout
         self.launch = launch
+    }
+
+    deinit { disconnect() }
+
+    /// Lets go of the connection, so the daemon may exit once it is idle. The
+    /// app never needs this: it holds the connection until it quits.
+    func disconnect() {
+        held.withLock { descriptor in
+            if let current = descriptor { close(current) }
+            descriptor = nil
+        }
     }
 
     /// The socket's file name. A debug build has its own, so a dev build and an
@@ -75,7 +95,7 @@ public final class LiveDaemonClient: DaemonClient {
             return .unavailable(reason: "herderd is not running and this build does not include it.")
         }
         do {
-            let pid = try launch(executable, ["--socket", path])
+            let pid = try launch(executable, ["--socket", path] + daemonArguments)
             launched.withLock { $0.append(pid) }
         } catch {
             return .unavailable(reason: "Could not start herderd: \(error.localizedDescription)")
@@ -99,7 +119,8 @@ public final class LiveDaemonClient: DaemonClient {
     /// Once something is, every outcome is a status.
     private func handshake(path: String) -> DaemonStatus? {
         guard let descriptor = Self.open(path) else { return nil }
-        defer { close(descriptor) }
+        var keep = false
+        defer { if !keep { close(descriptor) } }
 
         guard Self.writeAll(descriptor, DaemonWire.hello(client: client)) else {
             return .unavailable(reason: "herderd closed the connection.")
@@ -110,7 +131,16 @@ public final class LiveDaemonClient: DaemonClient {
         else {
             return .unavailable(reason: "herderd did not answer.")
         }
-        return DaemonWire.status(fromReply: payload)
+        let status = DaemonWire.status(fromReply: payload)
+        if case .connected = status {
+            keep = true
+            // A retry replaces the connection it already holds.
+            held.withLock { previous in
+                if let old = previous { close(old) }
+                previous = descriptor
+            }
+        }
+        return status
     }
 
     private static func open(_ path: String) -> Int32? {
