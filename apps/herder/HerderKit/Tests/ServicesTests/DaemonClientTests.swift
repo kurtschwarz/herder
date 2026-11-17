@@ -43,7 +43,7 @@ import Testing
     @Test(.enabled(if: LiveDaemonClientTests.built))
     func relaunchingAfterAnIdleExitStartsTheBundledBinaryAgain() async throws {
         let first = LiveDaemonClient(
-            socket: socket, executable: Self.binary, client: "test", daemonArguments: ["--idle-timeout", "0.3"]
+            socket: socket, executable: Self.binary, client: "test", daemonArguments: ["--idle-timeout", "1"]
         )
         let second = LiveDaemonClient(socket: socket, executable: Self.binary, client: "test")
         defer {

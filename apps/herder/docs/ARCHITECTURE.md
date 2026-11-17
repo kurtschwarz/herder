@@ -44,7 +44,7 @@ AppFeature            composition root: windows, menus, builds real services
 
 ### herderd
 
-`packages/herderd` is a separate process, started by the app on demand and left running when the app quits. It is the only thing on a host that starts or ends agent and terminal processes; files, git and the file watcher stay in the app. The decisions, and why, are in `docs/adr/0001-herderd.md`.
+`packages/herderd` is a separate process, started by the app on demand and left running when the app quits until it has been idle for ten minutes. It is the only thing on a host that starts or ends agent and terminal processes; files, git and the file watcher stay in the app. The decisions, and why, are in `docs/adr/0001-herderd.md`.
 
 - **Who owns what.** The daemon owns processes and (as it arrives) their screen state. The app owns everything the user sees and every file it touches. Persisted state names sessions by id and host; the daemon does not read the app's state.
 - **The protocol.** Length-prefixed frames of JSON over any byte stream, a version handshake first, additive changes only. `Core/Models/Daemon/DaemonWire` is the Swift half of `packages/herderd/src/protocol.rs`, and changing one means changing the other.

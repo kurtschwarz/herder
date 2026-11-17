@@ -62,9 +62,12 @@ pub fn serve_until_idle(listener: UnixListener, path: &Path, grace: Duration) ->
     activity.wait_until_idle_for(grace);
 
     // The accept thread is blocked in `accept`. Closed, it refuses the next
-    // connection and ends, and a connection of our own is that next one.
-    let _ = UnixStream::connect(path);
-    let _ = acceptor.join();
+    // connection and ends, and a connection of our own is that next one. If
+    // that cannot be made (no descriptors left), do not wait for a thread that
+    // may never wake: the exit that follows ends it.
+    if UnixStream::connect(path).is_ok() {
+        let _ = acceptor.join();
+    }
 
     match std::fs::remove_file(path) {
         Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
@@ -182,7 +185,18 @@ mod tests {
         thread::sleep(GRACE / 2);
         let client = UnixStream::connect(&path).unwrap();
         assert!(done.recv_timeout(GRACE * 4).is_err());
+
         drop(client);
+        done.recv_timeout(Duration::from_secs(5)).expect("exits once it is idle again").unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn nothing_connects_once_it_has_exited() {
+        let path = scratch("refused");
+        let done = serve_in_background(&path);
+        done.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+        assert_eq!(UnixStream::connect(&path).unwrap_err().kind(), io::ErrorKind::NotFound);
     }
 
     #[test]
