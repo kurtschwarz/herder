@@ -23,7 +23,7 @@ struct WorkspaceSelector: View {
     @State private var isOpen = false
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: Theme.Radius.control + 3, style: .continuous)
+        RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
     }
 
     var body: some View {
