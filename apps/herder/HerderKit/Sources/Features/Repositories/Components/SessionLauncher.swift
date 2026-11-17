@@ -19,8 +19,9 @@ struct SessionLauncher: View {
                 .help("Start a session")
             Button { ask(.build) } label: {
                 PhIcon(Ph.plusSquare, size: 16)
+                    .frame(width: Theme.Size.control + 4, height: Theme.Size.control + 4)
             }
-            .buttonStyle(.icon(size: Theme.Size.control + 4))
+            .buttonStyle(LauncherPlateStyle())
             .disabled(isDisabled)
             .help("New session\u{2026}")
         }
