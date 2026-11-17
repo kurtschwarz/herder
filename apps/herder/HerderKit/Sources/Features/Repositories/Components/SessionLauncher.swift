@@ -18,9 +18,10 @@ struct SessionLauncher: View {
             LauncherButton(title: "Build", icon: Ph.hammer, isDisabled: isDisabled) { start(.build) }
                 .help("Start a session")
             Button { ask(.build) } label: {
-                PhIcon(Ph.plusSquare, size: 16)
+                PhIcon(Ph.chatCenteredDots, size: 16)
+                    .frame(width: Theme.Size.control + 4, height: Theme.Size.control + 4)
             }
-            .buttonStyle(.icon(size: Theme.Size.control + 4))
+            .buttonStyle(LauncherPlateStyle())
             .disabled(isDisabled)
             .help("New session\u{2026}")
         }
