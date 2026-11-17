@@ -20,6 +20,7 @@ public final class LiveDaemonClient: DaemonClient {
     private let socketURL: URL
     private let executable: URL?
     private let client: String
+    private let daemonArguments: [String]
     private let launch: Launch
     private let startTimeout: Duration
 
@@ -33,16 +34,20 @@ public final class LiveDaemonClient: DaemonClient {
     ///   - executable: the daemon to start if nothing answers, or `nil` if
     ///     there is none to start.
     ///   - client: who is asking, for the daemon's log.
+    ///   - daemonArguments: extra arguments for a daemon this client starts, such
+    ///     as a shorter `--idle-timeout` for a test.
     public init(
         socket: URL,
         executable: URL?,
         client: String,
+        daemonArguments: [String] = [],
         startTimeout: Duration = .seconds(5),
         launch: @escaping Launch = LiveDaemonClient.spawnDetached
     ) {
         self.socketURL = socket
         self.executable = executable
         self.client = client
+        self.daemonArguments = daemonArguments
         self.startTimeout = startTimeout
         self.launch = launch
     }
@@ -75,7 +80,7 @@ public final class LiveDaemonClient: DaemonClient {
             return .unavailable(reason: "herderd is not running and this build does not include it.")
         }
         do {
-            let pid = try launch(executable, ["--socket", path])
+            let pid = try launch(executable, ["--socket", path] + daemonArguments)
             launched.withLock { $0.append(pid) }
         } catch {
             return .unavailable(reason: "Could not start herderd: \(error.localizedDescription)")

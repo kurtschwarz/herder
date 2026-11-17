@@ -40,6 +40,41 @@ import Testing
         #expect(finder.launchedPIDs.isEmpty)
     }
 
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func relaunchingAfterAnIdleExitStartsTheBundledBinaryAgain() async throws {
+        let first = LiveDaemonClient(
+            socket: socket, executable: Self.binary, client: "test", daemonArguments: ["--idle-timeout", "0.3"]
+        )
+        let second = LiveDaemonClient(socket: socket, executable: Self.binary, client: "test")
+        defer {
+            (first.launchedPIDs + second.launchedPIDs).forEach { kill($0, SIGKILL) }
+            try? FileManager.default.removeItem(at: socket)
+        }
+
+        guard case .connected = await first.connect() else {
+            Issue.record("expected the first daemon to start")
+            return
+        }
+        let oldPID = try #require(first.launchedPIDs.first)
+
+        // The handshake's connection is gone, so the daemon is idle and leaves,
+        // taking its socket with it.
+        let deadline = ContinuousClock.now + .seconds(10)
+        while FileManager.default.fileExists(atPath: socket.path(percentEncoded: false)), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(!FileManager.default.fileExists(atPath: socket.path(percentEncoded: false)))
+        var status: Int32 = 0
+        #expect(waitpid(oldPID, &status, 0) == oldPID)
+
+        guard case .connected = await second.connect() else {
+            Issue.record("expected a new daemon to start")
+            return
+        }
+        #expect(second.launchedPIDs.count == 1)
+        #expect(second.launchedPIDs.first != oldPID)
+    }
+
     @Test func nothingListeningAndNothingToStartIsUnavailable() async {
         let client = LiveDaemonClient(socket: socket, executable: nil, client: "test")
 
