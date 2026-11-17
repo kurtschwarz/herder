@@ -41,7 +41,7 @@ struct WorkspaceSelector: View {
                     .foregroundStyle(Theme.Palette.secondaryText)
             }
             .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-            .frame(maxWidth: .infinity, minHeight: Theme.Size.control)
+            .frame(maxWidth: .infinity, minHeight: Theme.Size.control + 4)
             .background(Theme.Palette.control, in: shape)
             .overlay {
                 shape.strokeBorder(isOpen ? Theme.Palette.violet : Theme.Palette.hairline, lineWidth: 1)
