@@ -15,6 +15,7 @@ public enum Ph {
     public static var caretDownBold: Image { icon("caret-down-bold") }
     public static var caretRightBold: Image { icon("caret-right-bold") }
     public static var caretUpDown: Image { icon("caret-up-down") }
+    public static var chatCenteredDots: Image { icon("chat-centered-dots") }
     public static var checkBold: Image { icon("check-bold") }
     public static var dotsThree: Image { icon("dots-three") }
     public static var file: Image { icon("file") }
@@ -27,7 +28,6 @@ public enum Ph {
     public static var magnifyingGlass: Image { icon("magnifying-glass") }
     public static var notepad: Image { icon("notepad") }
     public static var plus: Image { icon("plus") }
-    public static var plusSquare: Image { icon("plus-square") }
     public static var pushPinFill: Image { icon("push-pin-fill") }
     public static var sparkle: Image { icon("sparkle") }
     public static var sparkleFill: Image { icon("sparkle-fill") }
