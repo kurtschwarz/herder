@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/kurtschwarz/herder/compare/herder-v0.4.0...herder-v0.5.0) (2026-11-18)
+
+
+### Features
+
+* **herder:** badge explorer files against the diff base ([#105](https://github.com/kurtschwarz/herder/issues/105)) ([949b275](https://github.com/kurtschwarz/herder/commit/949b275e1c96d69d4a8c15e619dbb22a22e28c6a)), closes [#104](https://github.com/kurtschwarz/herder/issues/104)
+* **herderd:** exit when idle so an app update reaches it ([#100](https://github.com/kurtschwarz/herder/issues/100)) ([f88a4d5](https://github.com/kurtschwarz/herder/commit/f88a4d58d5213a0c835038179e99aa6b29e03c96)), closes [#90](https://github.com/kurtschwarz/herder/issues/90)
+* **herder:** mark changed lines in the editor gutter ([#96](https://github.com/kurtschwarz/herder/issues/96)) ([6c46049](https://github.com/kurtschwarz/herder/commit/6c46049966663db4245f15067cc49efc280df8a4))
+* **herder:** pick the diff base for the gutter from the editor header ([#103](https://github.com/kurtschwarz/herder/issues/103)) ([0466a61](https://github.com/kurtschwarz/herder/commit/0466a618f2525537b8e9193ae056483e5be436a8))
+* **herder:** search workspaces and add them from the selector popover ([#99](https://github.com/kurtschwarz/herder/issues/99)) ([283a048](https://github.com/kurtschwarz/herder/commit/283a048171f0bcf4a361db0fd72f0f0d87a3af22)), closes [#98](https://github.com/kurtschwarz/herder/issues/98)
+
+
+### Bug Fixes
+
+* **deps:** lock file maintenance ([#102](https://github.com/kurtschwarz/herder/issues/102)) ([72a209a](https://github.com/kurtschwarz/herder/commit/72a209a50fa6fe41f520d62992ef59da043a08f2))
+
 ## [0.4.0](https://github.com/kurtschwarz/herder/compare/herder-v0.3.3...herder-v0.4.0) (2026-11-16)
 
 
