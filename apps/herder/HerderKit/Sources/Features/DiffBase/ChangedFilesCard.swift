@@ -106,7 +106,11 @@ private struct ChangedFileRow: View {
         .opacity(isDeleted ? Theme.Opacity.ignored : 1)
         .padding(.horizontal, Theme.Spacing.loose)
         .frame(height: height)
-        .background(isHovering && !isDeleted ? Theme.Palette.control : .clear)
+        .background {
+            // A rectangle by name: the highlight is the row's own and has no
+            // corners to round.
+            Rectangle().fill(isHovering && !isDeleted ? Theme.Palette.control : .clear)
+        }
         .contentShape(Rectangle())
         .onTapGesture(perform: action)
         .accessibilityAddTraits(.isButton)
