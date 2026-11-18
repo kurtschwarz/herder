@@ -64,10 +64,18 @@ struct DiffBasePopover: View {
             heading("Other branch, tag or commit")
             search
 
+            let visible = model.visibleRows
             ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(model.rows) { row in
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(visible.rows) { row in
                         RefRow(row: row, isOn: row.base == model.base.ref) { pick(row.base) }
+                    }
+                    if visible.isTruncated {
+                        Text("Keep typing to narrow the list")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.Palette.tertiaryText)
+                            .padding(.horizontal, Theme.Spacing.normal)
+                            .padding(.vertical, Theme.Spacing.tight)
                     }
                 }
             }

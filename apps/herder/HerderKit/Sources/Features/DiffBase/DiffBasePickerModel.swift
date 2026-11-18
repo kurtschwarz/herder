@@ -91,6 +91,17 @@ final class DiffBasePickerModel {
         DiffBaseSearch.rows(for: query, refs: refs, commits: commits)
     }
 
+    /// How many rows are drawn. A repository with thousands of tags would
+    /// otherwise build every row each time the popover opens; typing narrows
+    /// the list to what is wanted.
+    static let visibleRowLimit = 40
+
+    /// The rows to draw, and whether more matched than are drawn.
+    var visibleRows: (rows: [DiffBaseSearch.Row], isTruncated: Bool) {
+        let all = rows
+        return (Array(all.prefix(Self.visibleRowLimit)), all.count > Self.visibleRowLimit)
+    }
+
     /// Everything the popover shows, asked for at once.
     func load() async {
         async let upstream = workspace.upstreamName()
@@ -100,17 +111,21 @@ final class DiffBasePickerModel {
         async let allRefs = workspace.refs()
         async let latest = workspace.recentCommits(limit: DiffBaseSearch.recentCommitCount)
 
-        upstreamName = await upstream
+        // Everything is waited for before anything is set, so the popover
+        // redraws once with the lot instead of once per answer.
+        let (name, now, ahead, before) = await (upstream, uncommitted, toUpstream, previous)
+        let (allRefsFound, latestFound) = await (allRefs, latest)
+
         var found: [Preset: GitChangeSummary] = [:]
-        if let summary = await uncommitted { found[.uncommitted] = summary }
-        if let summary = await toUpstream { found[.upstream] = summary }
-        let before = await previous
+        if let now { found[.uncommitted] = now }
+        if let ahead { found[.upstream] = ahead }
         if let before { found[.previousCommit] = before }
+        upstreamName = name
         // No merge-base for `HEAD~1` is a root commit.
         hasPreviousCommit = before != nil
         counts = found
-        refs = await allRefs
-        commits = await latest
+        refs = allRefsFound
+        commits = latestFound
 
         cache.upstreamName = upstreamName
         cache.counts = counts
