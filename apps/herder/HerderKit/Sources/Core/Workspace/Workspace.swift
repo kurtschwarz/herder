@@ -337,7 +337,16 @@ public final class Workspace {
             return
         }
         guard isAvailable else { return }
-        let derived = WorktreeStatus(answer)
+        var tree = answer
+        let revision = diffBase.revision
+        if revision != GitDiffBase.head {
+            // Badges follow the diff base. Without an answer, keep what is
+            // marked rather than badging against the wrong base.
+            guard let files = try? await git.changedFiles(since: revision, in: root.url) else { return }
+            tree = answer.comparing(with: files)
+        }
+        guard isAvailable else { return }
+        let derived = WorktreeStatus(tree)
         guard status != derived else { return }
         status = derived
     }
