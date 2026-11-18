@@ -37,7 +37,9 @@ public struct DiffBaseTrigger: View {
                         .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-                .frame(minHeight: Theme.Size.iconButton)
+                // Shorter than the breadcrumb row, which has no padding under
+                // it: at the row's own height the pill touches the hairline.
+                .frame(minHeight: Theme.Size.iconButton - 6)
                 .background(warns ? Theme.Palette.warning.opacity(0.12) : Theme.Palette.control, in: shape)
                 .overlay {
                     shape.strokeBorder(
