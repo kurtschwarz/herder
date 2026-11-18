@@ -23,6 +23,7 @@ public enum Ph {
     public static var folderSimplePlus: Image { icon("folder-simple-plus") }
     public static var gearSixFill: Image { icon("gear-six-fill") }
     public static var gitBranch: Image { icon("git-branch") }
+    public static var gitCommit: Image { icon("git-commit") }
     public static var gitDiff: Image { icon("git-diff") }
     public static var gitFork: Image { icon("git-fork") }
     public static var hammer: Image { icon("hammer") }
@@ -32,6 +33,7 @@ public enum Ph {
     public static var pushPinFill: Image { icon("push-pin-fill") }
     public static var sparkle: Image { icon("sparkle") }
     public static var sparkleFill: Image { icon("sparkle-fill") }
+    public static var tag: Image { icon("tag") }
     public static var terminal: Image { icon("terminal") }
     public static var trash: Image { icon("trash") }
     public static var warningFill: Image { icon("warning-fill") }

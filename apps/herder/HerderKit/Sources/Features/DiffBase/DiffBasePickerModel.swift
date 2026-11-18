@@ -36,6 +36,8 @@ final class DiffBasePickerModel {
     private(set) var hasPreviousCommit = true
     private(set) var refs: [GitRef] = []
     private(set) var commits: [GitCommit] = []
+    /// The lines changed against the custom base, when there is one.
+    private(set) var customCounts: GitChangeSummary?
 
     init(workspace: Workspace) {
         self.workspace = workspace
@@ -87,6 +89,51 @@ final class DiffBasePickerModel {
         }
     }
 
+    /// One choice in the strip across the top.
+    struct Segment: Identifiable {
+        var ref: String
+        var label: String
+        var detail: String
+        var id: String { ref }
+    }
+
+    /// The presets that apply, then the base picked from search if there is one.
+    var segments: [Segment] {
+        var result = [Segment(ref: Preset.uncommitted.ref, label: "HEAD", detail: "Edits since your last commit")]
+        result.append(Segment(
+            ref: Preset.upstream.ref,
+            label: upstreamName ?? "upstream",
+            detail: "Unpushed commits plus uncommitted edits"
+        ))
+        if hasPreviousCommit {
+            result.append(Segment(
+                ref: Preset.previousCommit.ref,
+                label: "HEAD~1",
+                detail: "The last commit plus uncommitted edits"
+            ))
+        }
+        if let custom = customRef {
+            result.append(Segment(
+                ref: custom,
+                label: DiffBaseName.display(custom),
+                detail: "\(customKind) \u{2014} everything since it forked, plus uncommitted edits"
+            ))
+        }
+        return result
+    }
+
+    var selectedSegment: Segment? {
+        segments.first { $0.ref == base.ref }
+            ?? (base.ref == upstreamName ? segments.first { $0.ref == Preset.upstream.ref } : nil)
+    }
+
+    /// The lines changed against the selected segment, when they are known.
+    var selectedCounts: GitChangeSummary? {
+        guard let selected = selectedSegment else { return nil }
+        if let preset = Preset.allCases.first(where: { $0.ref == selected.ref }) { return counts[preset] }
+        return customCounts
+    }
+
     var rows: [DiffBaseSearch.Row] {
         DiffBaseSearch.rows(for: query, refs: refs, commits: commits)
     }
@@ -94,7 +141,7 @@ final class DiffBasePickerModel {
     /// How many rows are drawn. A repository with thousands of tags would
     /// otherwise build every row each time the popover opens; typing narrows
     /// the list to what is wanted.
-    static let visibleRowLimit = 40
+    static let visibleRowLimit = 24
 
     /// The rows to draw, and whether more matched than are drawn.
     var visibleRows: (rows: [DiffBaseSearch.Row], isTruncated: Bool) {
@@ -110,11 +157,14 @@ final class DiffBasePickerModel {
         async let previous = workspace.changeSummary(against: Preset.previousCommit.ref)
         async let allRefs = workspace.refs()
         async let latest = workspace.recentCommits(limit: DiffBaseSearch.recentCommitCount)
+        let custom = customRef
+        async let customFound: GitChangeSummary? = custom == nil ? nil : workspace.changeSummary(against: custom!)
 
         // Everything is waited for before anything is set, so the popover
         // redraws once with the lot instead of once per answer.
         let (name, now, ahead, before) = await (upstream, uncommitted, toUpstream, previous)
         let (allRefsFound, latestFound) = await (allRefs, latest)
+        let customSummary = await customFound
 
         var found: [Preset: GitChangeSummary] = [:]
         if let now { found[.uncommitted] = now }
@@ -128,6 +178,7 @@ final class DiffBasePickerModel {
         if counts != found { counts = found }
         if refs != allRefsFound { refs = allRefsFound }
         if commits != latestFound { commits = latestFound }
+        if customCounts != customSummary { customCounts = customSummary }
 
         cache.upstreamName = upstreamName
         cache.counts = counts
