@@ -25,6 +25,7 @@ struct SelectionPill: View {
 /// it, a question, and the canned ones.
 struct SelectionPrompt: View {
     static let width: CGFloat = 460
+    private static let sendSize: CGFloat = 24
 
     @Bindable var state: SelectionPromptState
 
@@ -124,6 +125,9 @@ struct SelectionPrompt: View {
                 .textFieldStyle(.plain)
                 .lineLimit(1...6)
                 .focused($isFocused)
+                // As tall as the send button, so one line sits level with it
+                // and a longer one grows down towards it.
+                .frame(minHeight: Self.sendSize, alignment: .center)
                 .onKeyPress(.return, phases: .down) { press in
                     // A newline is Shift+Return's, which the field takes.
                     if press.modifiers.contains(.shift) { return .ignored }
@@ -136,7 +140,7 @@ struct SelectionPrompt: View {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.Palette.onViolet)
-                    .frame(width: 24, height: 24)
+                    .frame(width: Self.sendSize, height: Self.sendSize)
                     .background(Theme.Palette.violet, in: Circle())
             }
             .buttonStyle(.plain)
