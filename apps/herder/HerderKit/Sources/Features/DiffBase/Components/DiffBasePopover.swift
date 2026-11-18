@@ -164,12 +164,12 @@ private struct OptionRow<Content: View>: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.normal) {
+            // Always takes its width, so ticked and unticked rows line up.
+            PhIcon(Ph.checkBold, size: 12)
+                .foregroundStyle(Theme.Palette.text)
+                .opacity(isOn ? 1 : 0)
+                .frame(width: 14)
             content
-            if isOn {
-                Spacer(minLength: 0)
-                PhIcon(Ph.checkBold, size: 12)
-                    .foregroundStyle(Theme.Palette.text)
-            }
         }
         .padding(.horizontal, Theme.Spacing.normal)
         .padding(.vertical, Theme.Spacing.tight)
