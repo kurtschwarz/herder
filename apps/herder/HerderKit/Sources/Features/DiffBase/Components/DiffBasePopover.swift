@@ -57,6 +57,9 @@ struct DiffBasePopover: View {
             chips
         }
         .padding(Theme.Spacing.normal + Theme.Spacing.tight)
+        // The arrow takes some of the top edge, so the header needs more
+        // room above it than the sides have.
+        .padding(.top, Theme.Spacing.normal)
         .frame(width: 340)
         .task {
             // After the opening animation, which a relayout would drop frames
