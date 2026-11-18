@@ -9,6 +9,11 @@ public struct DiffBaseTrigger: View {
 
     @State private var isOpen = false
 
+    /// When the popover last went away. A click on the button while it is open
+    /// closes it on the way down, as any click outside does, and would then
+    /// open it again on the way up.
+    @State private var closedAt = Date.distantPast
+
     public init(workspace: Workspace) {
         self.workspace = workspace
     }
@@ -21,7 +26,13 @@ public struct DiffBaseTrigger: View {
         if workspace.checkout != nil {
             let base = workspace.diffBase
             let warns = !base.isResolved
-            Button { isOpen.toggle() } label: {
+            Button {
+                if isOpen {
+                    isOpen = false
+                } else if Date.now.timeIntervalSince(closedAt) > 0.3 {
+                    isOpen = true
+                }
+            } label: {
                 HStack(spacing: Theme.Spacing.tight + 2) {
                     PhIcon(Ph.gitDiff, size: 12)
                         .foregroundStyle(warns ? Theme.Palette.warning : Theme.Palette.secondaryText)
@@ -53,6 +64,9 @@ public struct DiffBaseTrigger: View {
             .pointerStyle(.link)
             .help(warns ? DiffBaseName.warning(for: base) : "Choose what the editor compares with")
             .onHover { if $0 { Task { await DiffBasePickerModel.prefetch(for: workspace) } } }
+            .onChange(of: isOpen) { _, open in
+                if !open { closedAt = .now }
+            }
             .background {
                 UnanimatedPopover(isPresented: $isOpen) {
                     DiffBasePopover(workspace: workspace) { isOpen = false }
