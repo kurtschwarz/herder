@@ -134,10 +134,13 @@ struct DiffBasePopover: View {
         .frame(height: 104)
     }
 
+    /// Stays open, so the choice can be seen taking effect and changed again.
+    /// Return in the search field is what closes it.
     private func pick(_ ref: String) {
         Task {
             await model.pick(ref)
-            close()
+            // A base picked from search has no counts until it is asked for.
+            await model.load()
         }
     }
 }
