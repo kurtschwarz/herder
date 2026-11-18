@@ -77,7 +77,7 @@ final class SelectionPromptController {
         settling = Task { [weak self] in
             while true {
                 try? await Task.sleep(for: Self.settleDelay)
-                guard !Task.isCancelled, let self else { return }
+                guard !Task.isCancelled else { return }
                 if NSEvent.pressedMouseButtons & 1 == 0 { break }
             }
             self?.showPill()
