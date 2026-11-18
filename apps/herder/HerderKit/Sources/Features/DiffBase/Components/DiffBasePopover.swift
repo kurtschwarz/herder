@@ -31,6 +31,7 @@ struct DiffBasePopover: View {
                     .lineLimit(1)
             }
             .padding(.horizontal, Theme.Spacing.normal)
+            .padding(.top, Theme.Spacing.normal)
             .padding(.bottom, Theme.Spacing.normal)
 
             heading("Show changes against")
