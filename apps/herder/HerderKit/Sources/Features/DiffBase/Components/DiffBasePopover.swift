@@ -50,7 +50,7 @@ struct DiffBasePopover: View {
                 OptionRow(isOn: true, action: {}) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(DiffBaseName.display(custom))
-                            .font(.system(size: 13, design: .monospaced))
+                            .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(Theme.Palette.text)
                             .lineLimit(1)
                         Text(model.customKind)
@@ -108,7 +108,7 @@ struct DiffBasePopover: View {
             HStack(alignment: .top, spacing: Theme.Spacing.normal) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
-                        .font(.system(size: 13, design: isMonospaced ? .monospaced : .default))
+                        .font(.system(size: isMonospaced ? 12 : 13, design: isMonospaced ? .monospaced : .default))
                         .foregroundStyle(Theme.Palette.text)
                         .lineLimit(1)
                     Text(detail)
@@ -197,7 +197,7 @@ private struct RefRow: View {
                 PhIcon(icon, size: 13)
                     .foregroundStyle(Theme.Palette.secondaryText)
                 Text(title)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(Theme.Palette.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
