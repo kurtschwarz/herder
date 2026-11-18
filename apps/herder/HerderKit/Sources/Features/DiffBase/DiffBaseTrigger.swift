@@ -22,24 +22,24 @@ public struct DiffBaseTrigger: View {
             let base = workspace.diffBase
             let warns = !base.isResolved
             Button { isOpen.toggle() } label: {
-                HStack(spacing: Theme.Spacing.normal) {
-                    PhIcon(Ph.gitDiff, size: 14)
+                HStack(spacing: Theme.Spacing.tight + 2) {
+                    PhIcon(Ph.gitDiff, size: 12)
                         .foregroundStyle(warns ? Theme.Palette.warning : Theme.Palette.secondaryText)
                     HStack(spacing: Theme.Spacing.tight) {
                         Text("Changes vs")
-                            .font(.system(size: 12))
+                            .font(.system(size: 11))
                         Text(DiffBaseName.display(base.name))
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(.system(size: 11, design: .monospaced))
                     }
                     .foregroundStyle(warns ? Theme.Palette.warning : Theme.Palette.text)
                     .lineLimit(1)
-                    PhIcon(Ph.caretUpDown, size: 10)
+                    PhIcon(Ph.caretUpDown, size: 9)
                         .foregroundStyle(Theme.Palette.secondaryText)
                 }
-                .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-                // Shorter than the breadcrumb row, which has no padding under
+                .padding(.horizontal, Theme.Spacing.normal)
+                // Well under the breadcrumb row, which has no padding below
                 // it: at the row's own height the pill touches the hairline.
-                .frame(minHeight: Theme.Size.iconButton - 6)
+                .frame(minHeight: 20)
                 .background(warns ? Theme.Palette.warning.opacity(0.12) : Theme.Palette.control, in: shape)
                 .overlay {
                     shape.strokeBorder(
