@@ -26,6 +26,7 @@ final class DiffBasePickerModel {
     }
 
     private let workspace: Workspace
+    private let cache: DiffBaseCache
 
     var query = ""
 
@@ -38,6 +39,22 @@ final class DiffBasePickerModel {
 
     init(workspace: Workspace) {
         self.workspace = workspace
+        let cache = workspace.uiState(DiffBaseCache.self)
+        self.cache = cache
+        upstreamName = cache.upstreamName
+        counts = cache.counts
+        hasPreviousCommit = cache.hasPreviousCommit
+        refs = cache.refs
+        commits = cache.commits
+    }
+
+    /// Fills the cache ahead of the popover opening, unless it was filled
+    /// moments ago. Asked for when the pointer reaches the trigger, which is
+    /// the one thing that says a popover is about to be wanted.
+    static func prefetch(for workspace: Workspace) async {
+        let cache = workspace.uiState(DiffBaseCache.self)
+        if let loadedAt = cache.loadedAt, Date.now.timeIntervalSince(loadedAt) < 5 { return }
+        await DiffBasePickerModel(workspace: workspace).load()
     }
 
     var base: GitDiffBase { workspace.diffBase }
@@ -94,6 +111,13 @@ final class DiffBasePickerModel {
         counts = found
         refs = await allRefs
         commits = await latest
+
+        cache.upstreamName = upstreamName
+        cache.counts = counts
+        cache.hasPreviousCommit = hasPreviousCommit
+        cache.refs = refs
+        cache.commits = commits
+        cache.loadedAt = .now
     }
 
     func pick(_ ref: String) async {

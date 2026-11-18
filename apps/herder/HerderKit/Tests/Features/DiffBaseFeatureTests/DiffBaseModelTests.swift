@@ -44,6 +44,18 @@ import Testing
         #expect(model.presets == [.uncommitted, .upstream, .previousCommit])
     }
 
+    @Test func aSecondPickerStartsWithWhatTheFirstFound() async throws {
+        git.seed(refs: [GitRef(name: "main", kind: .branch, date: .now)], in: root)
+        git.seed(mergeBase: "prev", of: "HEAD~1")
+        let workspace = try await start()
+        await DiffBasePickerModel.prefetch(for: workspace)
+
+        let second = DiffBasePickerModel(workspace: workspace)
+
+        #expect(second.refs.map(\.name) == ["main"])
+        #expect(second.hasPreviousCommit)
+    }
+
     @Test func previousCommitIsHiddenOnARootCommit() async throws {
         let model = DiffBasePickerModel(workspace: try await start())
 
