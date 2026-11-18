@@ -106,7 +106,6 @@ private struct ChangedFileRow: View {
         .background(isHovering && !isDeleted ? Theme.Palette.control : .clear)
         .contentShape(Rectangle())
         .onTapGesture(perform: action)
-        .pointerStyle(isDeleted ? nil : .link)
         .accessibilityAddTraits(.isButton)
         .onHover { isHovering = $0 }
         .help(isDeleted ? "Deleted files can\u{2019}t be opened" : file.path)
