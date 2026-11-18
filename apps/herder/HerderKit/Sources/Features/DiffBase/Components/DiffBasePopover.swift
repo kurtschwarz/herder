@@ -150,6 +150,9 @@ private struct RefChip: View {
 
     @State private var isHovering = false
 
+    /// The popover's width less its padding and the scroll bar.
+    private static let maxWidth: CGFloat = 300
+
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
     }
@@ -162,8 +165,13 @@ private struct RefChip: View {
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Theme.Palette.text)
                 .lineLimit(1)
+                .truncationMode(.middle)
         }
         .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+        // A chip is as wide as its name, and a name can be longer than the
+        // popover: capped, the name is cut in the middle instead of widening
+        // everything above it.
+        .frame(maxWidth: Self.maxWidth, alignment: .leading)
         .frame(height: 28)
         .background(isHovering ? Theme.Palette.controlPressed : Theme.Palette.control, in: shape)
         .overlay { shape.strokeBorder(isOn ? Theme.Palette.violet : Theme.Palette.hairline, lineWidth: 1) }
