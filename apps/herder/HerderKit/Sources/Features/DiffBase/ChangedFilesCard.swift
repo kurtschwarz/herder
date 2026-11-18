@@ -1,3 +1,4 @@
+import AppKit
 import Core
 import DesignSystem
 import SwiftUI
@@ -79,6 +80,7 @@ private struct ChangedFileRow: View {
     let action: () -> Void
 
     @State private var isHovering = false
+    @State private var hasCursor = false
 
     private var name: String { (file.path as NSString).lastPathComponent }
     private var folder: String { (file.path as NSString).deletingLastPathComponent }
@@ -114,7 +116,18 @@ private struct ChangedFileRow: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: action)
         .accessibilityAddTraits(.isButton)
-        .onHover { isHovering = $0 }
+        // The hand is set by hand: `.pointerStyle(.link)` draws a rounded
+        // highlight of its own over the row.
+        .onHover { hovering in
+            isHovering = hovering
+            guard hovering != hasCursor, hovering ? !isDeleted : true else { return }
+            hasCursor = hovering
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .onDisappear {
+            if hasCursor { NSCursor.pop() }
+            hasCursor = false
+        }
         .help(isDeleted ? "Deleted files can\u{2019}t be opened" : file.path)
     }
 
