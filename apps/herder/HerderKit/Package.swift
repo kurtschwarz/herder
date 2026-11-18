@@ -125,6 +125,13 @@ let package = Package(
         ),
 
         .target(
+            name: "DiffBaseFeature",
+            dependencies: ["Core", "DesignSystem", "TestSupport"],
+            path: "Sources/Features/DiffBase",
+            swiftSettings: ui
+        ),
+
+        .target(
             name: "TerminalFeature",
             dependencies: ["Core", "DesignSystem", "TestSupport", "TerminalUI"],
             path: "Sources/Features/Terminal",
@@ -160,7 +167,7 @@ let package = Package(
             name: "AppFeature",
             dependencies: [
                 "Core", "Services", "DesignSystem", "TestSupport",
-                "RepositoriesFeature", "FileTreeFeature", "EditorFeature", "TerminalFeature",
+                "RepositoriesFeature", "FileTreeFeature", "EditorFeature", "DiffBaseFeature", "TerminalFeature",
                 "AgentSessionsFeature", "SettingsFeature", "TaskManagerFeature",
             ],
             path: "Sources/App",
@@ -196,6 +203,12 @@ let package = Package(
             name: "EditorFeatureTests",
             dependencies: ["EditorFeature", "Core", "Services", "TestSupport"],
             path: "Tests/Features/EditorFeatureTests",
+            swiftSettings: ui
+        ),
+        .testTarget(
+            name: "DiffBaseFeatureTests",
+            dependencies: ["DiffBaseFeature", "Core", "TestSupport"],
+            path: "Tests/Features/DiffBaseFeatureTests",
             swiftSettings: ui
         ),
         .testTarget(

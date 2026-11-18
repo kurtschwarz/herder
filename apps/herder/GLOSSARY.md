@@ -29,3 +29,9 @@ _Avoid_: reconnect, restore.
 **Resume**:
 Starting a new process with an agent's resume command, so the agent picks the conversation back up. Today what a relaunch does; once herderd owns the processes it is only for a session whose process has ended.
 _Avoid_: reattach, restart.
+
+## Editor
+
+**Diff base**:
+The revision whose merge-base with `HEAD` the editor compares the working copy against, for the gutter's change markers and the empty editor's changed-files list. Remembered per worktree; defaults to `HEAD`, which the picker calls Uncommitted. A stored ref that no longer resolves is kept, and `HEAD` is used until it comes back.
+_Avoid_: base branch (that is what a new session is cut from), compare target.

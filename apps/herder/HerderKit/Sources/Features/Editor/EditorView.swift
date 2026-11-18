@@ -7,16 +7,30 @@ import TestSupport
 /// surface of its own: it sits straight on the window, and the file tree is the
 /// only floating pane beside it. The status bar under it is the composition
 /// root's, with ``EditorFileStatus`` as the editor's part of it.
-public struct EditorView: View {
+///
+/// Two slots, so the composition root can put another feature's views in the
+/// pane without this one importing it: one at the trailing end of the
+/// breadcrumb row, and one under the subtitle when no file is open.
+public struct EditorView<BreadcrumbTrailing: View, EmptyState: View>: View {
     private let model: EditorModel
 
     /// What the first breadcrumb step is called, in place of the worktree's
     /// folder name.
     private let rootName: String?
 
-    public init(model: EditorModel, rootName: String? = nil) {
+    private let breadcrumbTrailing: BreadcrumbTrailing
+    private let emptyState: EmptyState
+
+    public init(
+        model: EditorModel,
+        rootName: String? = nil,
+        @ViewBuilder breadcrumbTrailing: () -> BreadcrumbTrailing,
+        @ViewBuilder emptyState: () -> EmptyState
+    ) {
         self.model = model
         self.rootName = rootName
+        self.breadcrumbTrailing = breadcrumbTrailing()
+        self.emptyState = emptyState()
     }
 
     private var breadcrumb: [String] {
@@ -40,7 +54,7 @@ public struct EditorView: View {
                 // in that band is drawn but dead, which read as a tab you had
                 // to click three times.
                 EditorTabBar(model: model)
-                Breadcrumb(components: breadcrumb, isDeleted: model.isDeleted)
+                Breadcrumb(components: breadcrumb, isDeleted: model.isDeleted) { breadcrumbTrailing }
                 Rectangle().fill(Theme.Palette.hairline).frame(height: 1)
                 if model.isStale {
                     StaleBanner(
@@ -78,10 +92,21 @@ public struct EditorView: View {
                 Text(failure.reason)
             }
         } else {
-            Text("Select a file to read it.")
-                .font(.callout)
-                .foregroundStyle(Theme.Palette.secondaryText)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: Theme.Spacing.normal) {
+                PhIcon(Ph.file, size: 40)
+                    .foregroundStyle(Theme.Palette.tertiaryText)
+                Text("No file open")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.text)
+                Text("Pick a file from the explorer, or ask the agent to open one.")
+                    .font(.callout)
+                    .foregroundStyle(Theme.Palette.secondaryText)
+                    .multilineTextAlignment(.center)
+                emptyState
+                    .padding(.top, Theme.Spacing.normal)
+            }
+            .padding(Theme.Spacing.loose)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // As in the tab bar, empty space is where a double-click
                 // starts a new file.
                 .background { DoubleClickSurface { Task { await model.newUntitled() } } }
@@ -115,6 +140,12 @@ public struct EditorView: View {
     }
 }
 
+extension EditorView where BreadcrumbTrailing == EmptyView, EmptyState == EmptyView {
+    public init(model: EditorModel, rootName: String? = nil) {
+        self.init(model: model, rootName: rootName, breadcrumbTrailing: { EmptyView() }, emptyState: { EmptyView() })
+    }
+}
+
 /// Shown over a buffer whose file changed on disk while it held unsaved edits.
 /// Neither answer is the default: either loses something.
 private struct StaleBanner: View {
@@ -141,9 +172,10 @@ private struct StaleBanner: View {
 
 /// Where the file sits, from the worktree's folder down. Plain text: orientation,
 /// not navigation. A file that has gone from disk has its name struck through.
-private struct Breadcrumb: View {
+private struct Breadcrumb<Trailing: View>: View {
     let components: [String]
     let isDeleted: Bool
+    @ViewBuilder let trailing: Trailing
 
     var body: some View {
         HStack(spacing: Theme.Spacing.normal) {
@@ -161,6 +193,10 @@ private struct Breadcrumb: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            // Fixed, so the breadcrumb is what truncates when the row is narrow.
+            trailing
+                .fixedSize()
+                .layoutPriority(1)
         }
         .frame(minHeight: Theme.Size.iconButton)
         .padding(.horizontal, Theme.Spacing.paneInset)

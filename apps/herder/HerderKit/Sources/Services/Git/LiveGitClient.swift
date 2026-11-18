@@ -228,27 +228,116 @@ public struct LiveGitClient: GitClient {
         guard try await gitDirectory(of: worktree) != nil else { return nil }
         let root = PathKey(worktree).path
 
-        func succeeds(_ arguments: [String]) throws -> Bool {
-            try runGit(["-C", root] + arguments, allowing: [1]).0 == 0
-        }
+        guard let base = try defaultBranch(at: root), let fork = try mergeBase(of: base, at: root) else { return nil }
+        return try shortstat(since: fork, at: root)
+    }
 
+    @concurrent
+    public func mergeBase(of ref: String, in worktree: URL) async throws -> String? {
+        guard try await gitDirectory(of: worktree) != nil else { return nil }
+        return try mergeBase(of: ref, at: PathKey(worktree).path)
+    }
+
+    /// `@{upstream}` of the checked-out branch, shortened; failing that the
+    /// default branch.
+    @concurrent
+    public func upstream(in worktree: URL) async throws -> String? {
+        guard try await gitDirectory(of: worktree) != nil else { return nil }
+        let root = PathKey(worktree).path
+        let (code, name) = try runGit(
+            ["-C", root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], allowing: [1]
+        )
+        let tracked = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if code == 0, !tracked.isEmpty { return tracked }
+        return try defaultBranch(at: root)
+    }
+
+    @concurrent
+    public func shortstat(since sha: String, in worktree: URL) async throws -> GitChangeSummary? {
+        guard try await gitDirectory(of: worktree) != nil else { return nil }
+        return try shortstat(since: sha, at: PathKey(worktree).path)
+    }
+
+    /// Two runs rather than one `--raw`: `--name-status` has the status letters
+    /// and `--numstat` has the counts, and neither has both. `--no-ext-diff`
+    /// and `--no-textconv` keep a user's diff drivers out of output that is
+    /// parsed.
+    @concurrent
+    public func changedFiles(since sha: String, in worktree: URL) async throws -> [GitChangedFile] {
+        guard try await gitDirectory(of: worktree) != nil else { return [] }
+        let root = PathKey(worktree).path
+        let common = ["-C", root, "diff", "--no-ext-diff", "--no-textconv", "-M", "-z"]
+        let (statusCode, nameStatus) = try runGit(common + ["--name-status", sha], allowing: [])
+        let (statCode, numstat) = try runGit(common + ["--numstat", sha], allowing: [])
+        guard statusCode == 0, statCode == 0 else { return [] }
+        return GitChangedFile.parse(nameStatus: nameStatus, numstat: numstat)
+    }
+
+    @concurrent
+    public func refs(in worktree: URL) async throws -> [GitRef] {
+        guard try await gitDirectory(of: worktree) != nil else { return [] }
+        let (code, output) = try runGit([
+            "-C", PathKey(worktree).path,
+            "for-each-ref", "--format=%(refname)%00%(committerdate:unix)",
+            "refs/heads", "refs/remotes", "refs/tags",
+        ], allowing: [])
+        guard code == 0 else { return [] }
+        return GitRef.parse(output)
+    }
+
+    @concurrent
+    public func recentCommits(limit: Int, in worktree: URL) async throws -> [GitCommit] {
+        guard try await gitDirectory(of: worktree) != nil else { return [] }
+        // Exit 128 is a repository with no commit yet.
+        let (code, output) = try runGit([
+            "-C", PathKey(worktree).path, "log", "-n", "\(limit)", "--format=%H%x00%ct%x00%s",
+        ], allowing: [])
+        guard code == 0 else { return [] }
+        return GitCommit.parse(output)
+    }
+
+    @concurrent
+    public func commit(matching revision: String, in worktree: URL) async throws -> GitCommit? {
+        // A leading dash would be read as an option.
+        guard !revision.hasPrefix("-"), try await gitDirectory(of: worktree) != nil else { return nil }
+        let root = PathKey(worktree).path
+        let (code, sha) = try runGit(
+            ["-C", root, "rev-parse", "--verify", "--quiet", "\(revision)^{commit}"], allowing: [1]
+        )
+        let full = sha.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard code == 0, !full.isEmpty else { return nil }
+        let (logCode, output) = try runGit(
+            ["-C", root, "log", "-n", "1", "--format=%H%x00%ct%x00%s", full], allowing: []
+        )
+        guard logCode == 0 else { return nil }
+        return GitCommit.parse(output).first
+    }
+
+    /// `origin/HEAD` if it is set and exists, else `main`, else `master`.
+    private func defaultBranch(at root: String) throws -> String? {
         let (originCode, originHead) = try runGit(
             ["-C", root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], allowing: [1]
         )
-        guard let base = GitDefaultBranch.resolve(
+        return GitDefaultBranch.resolve(
             originHead: originCode == 0 ? originHead.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
-            exists: { (try? succeeds(["rev-parse", "--verify", "--quiet", "\($0)^{commit}"])) ?? false }
-        ) else { return nil }
+            exists: { (try? runGit(
+                ["-C", root, "rev-parse", "--verify", "--quiet", "\($0)^{commit}"], allowing: [1]
+            ).0 == 0) ?? false }
+        )
+    }
 
-        // No merge-base is a history that shares nothing with the default
-        // branch, or no commit yet: nothing to measure from.
-        let (code, mergeBase) = try runGit(["-C", root, "merge-base", "HEAD", base], allowing: [1])
-        let fork = mergeBase.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard code == 0, !fork.isEmpty else { return nil }
+    /// No merge-base is a ref that names nothing, a history that shares
+    /// nothing with `HEAD`, or no commit yet: nothing to measure from.
+    private func mergeBase(of ref: String, at root: String) throws -> String? {
+        guard !ref.hasPrefix("-") else { return nil }
+        let (code, output) = try runGit(["-C", root, "merge-base", "HEAD", ref], allowing: [1])
+        let fork = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return code == 0 && !fork.isEmpty ? fork : nil
+    }
 
-        let (diffCode, stat) = try runGit(["-C", root, "diff", "--shortstat", fork], allowing: [])
-        guard diffCode == 0 else { return nil }
-        return GitChangeSummary.parse(shortstat: stat)
+    private func shortstat(since sha: String, at root: String) throws -> GitChangeSummary? {
+        let (code, stat) = try runGit(["-C", root, "diff", "--shortstat", sha], allowing: [])
+        return code == 0 ? GitChangeSummary.parse(shortstat: stat) : nil
     }
 
     /// `git show` of the file as `revision` has it, which is its text exactly as

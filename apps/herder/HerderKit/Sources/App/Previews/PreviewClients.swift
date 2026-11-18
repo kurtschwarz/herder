@@ -54,6 +54,13 @@ struct PreviewGitClient: GitClient {
         GitChangeSummary(insertions: 107, deletions: 19)
     }
     func contents(of file: URL, atRevision revision: String, in worktree: URL) async throws -> String? { nil }
+    func mergeBase(of ref: String, in worktree: URL) async throws -> String? { nil }
+    func upstream(in worktree: URL) async throws -> String? { "origin/main" }
+    func shortstat(since sha: String, in worktree: URL) async throws -> GitChangeSummary? { nil }
+    func changedFiles(since sha: String, in worktree: URL) async throws -> [GitChangedFile] { [] }
+    func refs(in worktree: URL) async throws -> [GitRef] { [] }
+    func recentCommits(limit: Int, in worktree: URL) async throws -> [GitCommit] { [] }
+    func commit(matching revision: String, in worktree: URL) async throws -> GitCommit? { nil }
     func worktrees(at url: URL) async throws -> [GitWorktree] {
         [
             GitWorktree(path: url, checkout: .branch("main"), isMainWorkingTree: true),

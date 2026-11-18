@@ -62,7 +62,11 @@ extension Workspace {
 
     /// This workspace as it goes to `StateStore`.
     public var snapshot: WorkspaceSnapshot {
-        WorkspaceSnapshot(id: id, uiState: persistableUIState())
+        WorkspaceSnapshot(
+            id: id,
+            uiState: persistableUIState(),
+            diffBase: diffBase.isUncommitted ? nil : diffBase.ref
+        )
     }
 
     /// Takes the UI state out of `snapshot` and holds it until the features ask.
@@ -74,6 +78,9 @@ extension Workspace {
     /// a workspace without opening a pane does not forget that pane's layout.
     public func restore(from snapshot: WorkspaceSnapshot) {
         pendingUIState = snapshot.uiState
+        if let ref = snapshot.diffBase {
+            diffBase = GitDiffBase(ref: ref, name: ref, revision: GitDiffBase.head, isResolved: true)
+        }
     }
 
     /// Every piece of UI state worth persisting, encoded, plus anything

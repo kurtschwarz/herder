@@ -821,9 +821,9 @@ public final class EditorModel {
         await refreshBase(of: document, at: key, in: worktree)
     }
 
-    // MARK: - Changes since HEAD
+    // MARK: - Changes since the diff base
 
-    /// Fetches what `HEAD` has for the file showing and marks the lines that
+    /// Fetches what the diff base has for the file showing and marks the lines that
     /// differ from it. Runs with every read, which is every change the
     /// workspace reports for the tab showing and the moment a tab is shown:
     /// that is what picks up a commit or a switch of branch, with no watch on
@@ -831,7 +831,7 @@ public final class EditorModel {
     private func refreshBase(of document: Document, at key: PathKey, in worktree: Workspace) async {
         baseGeneration += 1
         let mine = baseGeneration
-        let base = await worktree.headContents(of: key)
+        let base = await worktree.baseContents(of: key)
         guard mine == baseGeneration, key == fileKey, let buffer = buffers[document.buffer] else { return }
         buffer.baseText = base
         compare(buffer, after: nil)

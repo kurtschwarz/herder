@@ -27,6 +27,14 @@ public final class StubGitClient: GitClient {
     private let statusFails = Mutex(false)
     private let statusHeld = Mutex(false)
     private let statusWaiter = Mutex<CheckedContinuation<Void, Never>?>(nil)
+    private let mergeBases = Mutex<[String: String?]>([:])
+    private let upstreams = Mutex<[String: String?]>([:])
+    private let shortstats = Mutex<[String: GitChangeSummary?]>([:])
+    private let changedLists = Mutex<[String: [GitChangedFile]]>([:])
+    private let changedAsked = Mutex<[String]>([])
+    private let refLists = Mutex<[String: [GitRef]]>([:])
+    private let commitLists = Mutex<[String: [GitCommit]]>([:])
+    private let commitLookups = Mutex<[String: GitCommit]>([:])
 
     private struct ContentKey: Hashable {
         var path: String
@@ -202,6 +210,74 @@ public final class StubGitClient: GitClient {
         contentsAsked.withLock { $0.append(file) }
         if contentsFail.withLock({ $0 }) { throw GitClientError.commandFailed("git could not run") }
         return committed.withLock { $0[ContentKey(path: PathKey(file).path, revision: revision)] } ?? nil
+    }
+
+    /// Declares the merge-base of `HEAD` and `ref`. Unseeded, `ref` names
+    /// nothing, which is `nil`; seeding `nil` says the same on purpose.
+    public func seed(mergeBase: String?, of ref: String) {
+        mergeBases.withLock { $0[ref] = mergeBase }
+    }
+
+    public func mergeBase(of ref: String, in worktree: URL) async throws -> String? {
+        mergeBases.withLock { $0[ref] } ?? nil
+    }
+
+    /// Declares what the checked-out branch tracks, or the default branch.
+    public func seed(upstream: String?, in worktree: URL) {
+        upstreams.withLock { $0[FolderKey.of(worktree)] = upstream }
+    }
+
+    public func upstream(in worktree: URL) async throws -> String? {
+        upstreams.withLock { $0[FolderKey.of(worktree)] } ?? nil
+    }
+
+    /// Declares the lines changed between `sha` and the working tree.
+    public func seed(shortstat: GitChangeSummary?, since sha: String) {
+        shortstats.withLock { $0[sha] = shortstat }
+    }
+
+    public func shortstat(since sha: String, in worktree: URL) async throws -> GitChangeSummary? {
+        shortstats.withLock { $0[sha] } ?? nil
+    }
+
+    /// Declares the files changed between `sha` and the working tree.
+    public func seed(changedFiles: [GitChangedFile], since sha: String) {
+        changedLists.withLock { $0[sha] = changedFiles }
+    }
+
+    /// Every revision `changedFiles(since:in:)` has been asked about, in order.
+    public var changedFileLookups: [String] {
+        changedAsked.withLock { $0 }
+    }
+
+    public func changedFiles(since sha: String, in worktree: URL) async throws -> [GitChangedFile] {
+        changedAsked.withLock { $0.append(sha) }
+        return changedLists.withLock { $0[sha] } ?? []
+    }
+
+    public func seed(refs: [GitRef], in worktree: URL) {
+        refLists.withLock { $0[FolderKey.of(worktree)] = refs }
+    }
+
+    public func refs(in worktree: URL) async throws -> [GitRef] {
+        refLists.withLock { $0[FolderKey.of(worktree)] } ?? []
+    }
+
+    public func seed(commits: [GitCommit], in worktree: URL) {
+        commitLists.withLock { $0[FolderKey.of(worktree)] = commits }
+    }
+
+    public func recentCommits(limit: Int, in worktree: URL) async throws -> [GitCommit] {
+        Array((commitLists.withLock { $0[FolderKey.of(worktree)] } ?? []).prefix(limit))
+    }
+
+    /// Declares that `revision` names `commit`.
+    public func seed(commit: GitCommit, matching revision: String) {
+        commitLookups.withLock { $0[revision] = commit }
+    }
+
+    public func commit(matching revision: String, in worktree: URL) async throws -> GitCommit? {
+        commitLookups.withLock { $0[revision] }
     }
 
     public func repositoryKind(at url: URL) async throws -> GitRepositoryKind {

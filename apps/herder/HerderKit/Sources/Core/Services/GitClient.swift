@@ -56,4 +56,36 @@ public protocol GitClient: Sendable {
     /// What `file` contained at `revision` in the working tree at `worktree`.
     /// `nil` when the file is not in that revision, or is not UTF-8.
     func contents(of file: URL, atRevision revision: String, in worktree: URL) async throws -> String?
+
+    /// The merge-base of `HEAD` and `ref`, as a SHA. `nil` when `ref` names
+    /// nothing, or shares no history with `HEAD`.
+    ///
+    /// The merge-base rather than `ref` itself, so that commits other people
+    /// pushed to a moved upstream do not show up as changes made here. For an
+    /// ancestor such as `HEAD~1` the merge-base is the ref.
+    func mergeBase(of ref: String, in worktree: URL) async throws -> String?
+
+    /// What the branch checked out in `worktree` tracks, such as `origin/main`,
+    /// or the repository's default branch (see ``GitDefaultBranch``) when it
+    /// tracks nothing. `nil` when there is neither.
+    func upstream(in worktree: URL) async throws -> String?
+
+    /// Lines inserted and deleted in tracked files between `sha` and the
+    /// working tree, staged and unstaged together. `nil` when git cannot say.
+    func shortstat(since sha: String, in worktree: URL) async throws -> GitChangeSummary?
+
+    /// Tracked files whose working copy differs from `sha`, staged and
+    /// unstaged together, sorted by path. Untracked and ignored files are not
+    /// in it.
+    func changedFiles(since sha: String, in worktree: URL) async throws -> [GitChangedFile]
+
+    /// Local branches, remote branches and tags, newest tip first.
+    func refs(in worktree: URL) async throws -> [GitRef]
+
+    /// The `limit` most recent commits reachable from `HEAD`.
+    func recentCommits(limit: Int, in worktree: URL) async throws -> [GitCommit]
+
+    /// The commit `revision` names, for a SHA or an abbreviation of one. `nil`
+    /// when it names no commit.
+    func commit(matching revision: String, in worktree: URL) async throws -> GitCommit?
 }

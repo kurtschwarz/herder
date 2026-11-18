@@ -117,6 +117,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   │   └── TerminalUI/      # shared building blocks, module <Name>UI; the only importer of GhosttyVt
 │   │   │   │   ├── Features/
 │   │   │   │   │   ├── Editor/          # module EditorFeature
+│   │   │   │   │   ├── DiffBase/        # module DiffBaseFeature
 │   │   │   │   │   ├── FileTree/        # module FileTreeFeature
 │   │   │   │   │   ├── Repositories/    # module RepositoriesFeature
 │   │   │   │   │   ├── AgentSessions/   # module AgentSessionsFeature
@@ -232,7 +233,7 @@ let package = Package(
             name: "AppFeature",
             dependencies: [
                 "Core", "Services", "DesignSystem", "TestSupport",
-                "EditorFeature", "FileTreeFeature", "RepositoriesFeature",
+                "EditorFeature", "DiffBaseFeature", "FileTreeFeature", "RepositoriesFeature",
             ],
             path: "Sources/App",
             swiftSettings: ui

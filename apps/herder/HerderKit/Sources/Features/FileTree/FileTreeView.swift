@@ -198,6 +198,13 @@ private struct PreviewGit: GitClient {
     func status(in worktree: URL) async throws -> GitWorktreeStatus { GitWorktreeStatus(root: PathKey(worktree)) }
     func changeSummary(in worktree: URL) async throws -> GitChangeSummary? { nil }
     func contents(of file: URL, atRevision revision: String, in worktree: URL) async throws -> String? { nil }
+    func mergeBase(of ref: String, in worktree: URL) async throws -> String? { nil }
+    func upstream(in worktree: URL) async throws -> String? { nil }
+    func shortstat(since sha: String, in worktree: URL) async throws -> GitChangeSummary? { nil }
+    func changedFiles(since sha: String, in worktree: URL) async throws -> [GitChangedFile] { [] }
+    func refs(in worktree: URL) async throws -> [GitRef] { [] }
+    func recentCommits(limit: Int, in worktree: URL) async throws -> [GitCommit] { [] }
+    func commit(matching revision: String, in worktree: URL) async throws -> GitCommit? { nil }
 }
 
 private struct PreviewWatcher: FileWatcherClient {
