@@ -37,8 +37,9 @@ public struct ChangedFilesCard: View {
                     Spacer(minLength: 0)
                     DiffBaseTrigger(workspace: workspace)
                 }
-                .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-                .padding(.vertical, Theme.Spacing.normal)
+                .padding(.horizontal, Theme.Spacing.loose)
+                .padding(.top, Theme.Spacing.loose)
+                .padding(.bottom, Theme.Spacing.normal)
 
                 if !files.isEmpty {
                     ScrollView {
@@ -53,6 +54,9 @@ public struct ChangedFilesCard: View {
                     }
                     .scrollBounceBehavior(.basedOnSize)
                     .frame(maxHeight: Self.rowHeight * Self.visibleRows)
+                    .padding(.bottom, Theme.Spacing.normal)
+                } else {
+                    Spacer().frame(height: Theme.Spacing.normal)
                 }
             }
             .frame(maxWidth: 520)
@@ -100,7 +104,7 @@ private struct ChangedFileRow: View {
             LineCounts(insertions: file.insertions, deletions: file.deletions)
         }
         .opacity(isDeleted ? Theme.Opacity.ignored : 1)
-        .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+        .padding(.horizontal, Theme.Spacing.loose)
         .frame(height: height)
         .background(isHovering && !isDeleted ? Theme.Palette.control : .clear)
         .contentShape(Rectangle())
