@@ -51,7 +51,7 @@ public struct DiffBaseTrigger: View {
             .pointerStyle(.link)
             .help(warns ? DiffBaseName.warning(for: base) : "Choose what the editor compares with")
             .popover(isPresented: $isOpen, arrowEdge: .bottom) {
-                DiffBasePopover(model: DiffBasePickerModel(workspace: workspace)) { isOpen = false }
+                DiffBasePopover(workspace: workspace) { isOpen = false }
             }
         }
     }

@@ -33,6 +33,12 @@ import Testing
         #expect(picked == "v1.0")
     }
 
+    @Test func returnWithNothingTypedPicksNothingEvenWithOneRow() async {
+        let rows = DiffBaseSearch.rows(for: "", refs: [refs[0]], commits: [])
+        #expect(rows.count == 1)
+        #expect(await DiffBaseSearch.submission(for: "", rows: rows, commit: { _ in nil }) == nil)
+    }
+
     @Test func returnWithSeveralMatchesPicksNothing() async {
         let rows = DiffBaseSearch.rows(for: "/", refs: refs, commits: commits)
         #expect(rows.count == 2)

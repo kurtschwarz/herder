@@ -56,7 +56,8 @@ final class DiffBasePickerModel {
 
     /// The ref the user picked from search, which no preset row stands for.
     var customRef: String? {
-        Preset.allCases.contains { $0.ref == base.ref } ? nil : base.ref
+        let isPreset = Preset.allCases.contains { $0.ref == base.ref } || base.ref == upstreamName
+        return isPreset ? nil : base.ref
     }
 
     /// What kind of thing the custom base is, for its row.

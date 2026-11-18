@@ -27,9 +27,10 @@ public struct ChangedFilesCard: View {
     public var body: some View {
         if workspace.checkout != nil {
             let files = model.files ?? []
+            let header = model.files.map { title(count: $0.count) } ?? ""
             VStack(spacing: 0) {
                 HStack(spacing: Theme.Spacing.normal) {
-                    Text(title(count: files.count))
+                    Text(header)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Theme.Palette.text)
                         .lineLimit(1)

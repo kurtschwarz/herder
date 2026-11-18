@@ -4,10 +4,17 @@ import SwiftUI
 
 /// The popover: presets with their counts, then a search over everything else.
 struct DiffBasePopover: View {
-    let model: DiffBasePickerModel
     let close: () -> Void
 
+    /// Held here, not made by the trigger, so a redraw of the trigger while
+    /// the popover is open does not hand it a fresh one with an empty search.
+    @State private var model: DiffBasePickerModel
     @FocusState private var isSearching: Bool
+
+    init(workspace: Workspace, close: @escaping () -> Void) {
+        _model = State(initialValue: DiffBasePickerModel(workspace: workspace))
+        self.close = close
+    }
 
     private var searchShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)

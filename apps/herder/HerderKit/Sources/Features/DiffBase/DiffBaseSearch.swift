@@ -49,8 +49,10 @@ enum DiffBaseSearch {
         rows: [Row],
         commit: (String) async -> GitCommit?
     ) async -> String? {
-        if rows.count == 1 { return rows[0].base }
         let query = query.trimmingCharacters(in: .whitespaces)
+        // Nothing typed lists everything, which is not a match.
+        guard !query.isEmpty else { return nil }
+        if rows.count == 1 { return rows[0].base }
         guard looksLikeSHA(query) else { return nil }
         return await commit(query)?.sha
     }
