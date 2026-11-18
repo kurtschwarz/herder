@@ -41,7 +41,6 @@ public struct ChangedFilesCard: View {
                 .padding(.vertical, Theme.Spacing.normal)
 
                 if !files.isEmpty {
-                    Rectangle().fill(Theme.Palette.hairline).frame(height: 1)
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(files, id: \.path) { file in
