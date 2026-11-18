@@ -236,16 +236,28 @@ public final class AgentPanelModel {
     /// Brings a session forward in `workspace`, which the window is showing or
     /// on its way to: the tab goes in front now, and takes the keyboard once
     /// it is on screen.
-    public func reveal(_ id: UUID, in workspace: WorkspaceID) {
+    public func reveal(_ id: UUID, in workspace: WorkspaceID, takingFocus: Bool = true) {
         guard tabsByWorkspace[workspace]?.contains(where: { $0.id == id }) == true else { return }
         activeByWorkspace[workspace] = id
         if self.workspace?.id == workspace {
-            focusRequest += 1
+            if takingFocus { focusRequest += 1 }
             Task { await resumeActive() }
         } else {
-            pendingFocus = true
+            if takingFocus { pendingFocus = true }
         }
         publish()
+    }
+
+    /// Types `text` into the terminal of session `id`, wherever in this
+    /// window it is open: pasted, so the agent takes newlines as part of it
+    /// and does not act on them, then Return if `submit`. Does nothing for a
+    /// session whose terminal UI is not running.
+    public func send(_ text: String, to id: UUID, submit: Bool) {
+        guard let tab = tabsByWorkspace.values.joined().first(where: { $0.id == id }), tab.phase == .running,
+              let screen = tab.screen
+        else { return }
+        screen.paste(text)
+        if submit { screen.send(text: "\r") }
     }
 
     /// Asks for a new session in `id`, with `agent` or the one used last. If

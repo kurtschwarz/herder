@@ -36,6 +36,10 @@ final class Buffer: NSObject, NSTextViewDelegate {
     private var textView: NSTextView?
     private var gutter: LineNumberGutter?
 
+    /// The ⌘L pill and the prompt it opens, with what was typed in it and not
+    /// sent.
+    private(set) lazy var selectionPrompt = SelectionPromptController { [unowned self] in storage.string }
+
     /// Made on first use: a restored window with fifteen tabs shows one.
     private(set) lazy var pane: CodePane = makePane()
 
@@ -73,6 +77,7 @@ final class Buffer: NSObject, NSTextViewDelegate {
         edited = nil
         layout.removeRenderingAttribute(.foregroundColor, for: layout.documentRange)
         undoManager.removeAllActions()
+        selectionPrompt.textDidChange()
         textView?.setSelectedRange(NSRange(location: 0, length: 0))
         gutter?.textDidChange(to: text)
     }
@@ -236,14 +241,21 @@ final class Buffer: NSObject, NSTextViewDelegate {
         gutter.textDidChange(to: storage.string)
         gutter.changes = changes
         let highlight = CurrentLineHighlight(scrollView: scrollView, textView: textView)
-        textView.onSelect = { [weak gutter, weak highlight] in
+        textView.onSelect = { [weak self, weak gutter, weak highlight] in
             gutter?.selectionDidChange()
             highlight?.selectionDidChange()
+            self?.selectionPrompt.selectionDidChange()
         }
+        textView.onPrompt = { [weak self] in self?.selectionPrompt.toggle() }
+        textView.onMouseDown = { [weak self] in self?.selectionPrompt.mouseDown() }
         self.textView = textView
         self.gutter = gutter
         let pane = CodePane(scrollView: scrollView, gutter: gutter, highlight: highlight)
-        pane.onLayout = { [weak self] in self?.scrollIfLaidOut() }
+        pane.onLayout = { [weak self] in
+            self?.scrollIfLaidOut()
+            self?.selectionPrompt.layoutOverlays()
+        }
+        selectionPrompt.attach(to: pane, textView: textView)
         return pane
     }
 
@@ -254,6 +266,7 @@ final class Buffer: NSObject, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         gutter?.textDidChange(to: storage.string)
+        selectionPrompt.textDidChange()
         onEdit()
     }
 

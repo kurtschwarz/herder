@@ -37,4 +37,8 @@ extension EnvironmentValues {
     /// How a feature asks this window to close an open agent session. See
     /// ``CloseAgentSessionAction``; carried here for the reason above.
     @Entry public var closeAgentSession: CloseAgentSessionAction = .inert
+
+    /// How a feature asks this window to type into an open agent session. See
+    /// ``SendToAgentSessionAction``; carried here for the reason above.
+    @Entry public var sendToAgentSession: SendToAgentSessionAction = .inert
 }

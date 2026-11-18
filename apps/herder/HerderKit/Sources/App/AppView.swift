@@ -305,10 +305,11 @@ private struct WindowActions: ViewModifier {
         content
             .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
             .environment(\.startAgentSession, StartAgentSessionAction { window.startAgentSession(in: $0, agent: $1, mode: $2) })
-            .environment(\.showAgentSession, ShowAgentSessionAction { window.showAgentSession($0) })
+            .environment(\.showAgentSession, ShowAgentSessionAction { window.showAgentSession($0, takingFocus: $1) })
             .environment(\.resumeAgentSession, ResumeAgentSessionAction { window.resumeAgentSession($0, in: $1) })
             .environment(\.renameAgentSession, RenameAgentSessionAction { window.agentPanel.rename($0.id, to: $1) })
             .environment(\.closeAgentSession, CloseAgentSessionAction { window.agentPanel.close($0.id) })
+            .environment(\.sendToAgentSession, SendToAgentSessionAction { window.agentPanel.send($1, to: $0, submit: $2) })
             // What the sidebar offers when it starts a session.
             .environment(agents)
     }

@@ -14,6 +14,12 @@ import TestSupport
 public struct EditorView<BreadcrumbTrailing: View, EmptyState: View>: View {
     private let model: EditorModel
 
+    @Environment(Workspace.self) private var workspace: Workspace?
+    @Environment(WindowAgentSessions.self) private var sessions: WindowAgentSessions?
+    @Environment(\.sendToAgentSession) private var sendToAgentSession
+    @Environment(\.showAgentSession) private var showAgentSession
+    @Environment(\.startAgentSession) private var startAgentSession
+
     /// What the first breadcrumb step is called, in place of the worktree's
     /// folder name.
     private let rootName: String?
@@ -117,8 +123,19 @@ public struct EditorView<BreadcrumbTrailing: View, EmptyState: View>: View {
     private func body(of content: EditorModel.Content?) -> some View {
         switch content {
         case .text:
-            if let buffer = model.activeBuffer {
-                CodeTextView(buffer: buffer)
+            if let buffer = model.activeBuffer, let tab = model.activeTab {
+                CodeTextView(
+                    buffer: buffer,
+                    prompt: SelectionPromptContext(
+                        file: tab,
+                        worktree: workspace,
+                        isUnsaved: model.isDirty(tab),
+                        sessions: sessions,
+                        send: sendToAgentSession,
+                        show: showAgentSession,
+                        start: startAgentSession
+                    )
+                )
                     .opacity(model.isDeleted ? Theme.Opacity.ignored : 1)
             }
         case .unavailable(let reason):
