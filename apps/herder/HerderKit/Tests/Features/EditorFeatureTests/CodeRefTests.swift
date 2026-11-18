@@ -99,6 +99,32 @@ import Testing
         #expect(text == "Sources/Foo.swift:2-3 (unsaved)\n```swift\ntwo\nthree\n```")
     }
 
+    @Test func theLineRangeIsFirstAndLastJoinedByADash() {
+        #expect(ref(range: NSRange(location: 0, length: 19)).text == "@Sources/Foo.swift#L1-4")
+    }
+
+    @Test func aSelectionOfOneLineHasNoDashInEitherForm() {
+        let caret = NSRange(location: 9, length: 0)
+        #expect(ref(range: caret).text == "@Sources/Foo.swift#L3")
+        #expect(ref(range: caret, unsaved: true).text == "Sources/Foo.swift:3 (unsaved)\n```swift\nthree\n```")
+    }
+
+    @Test func aSelectionEndingAtALineStartKeepsASingleLineRange() {
+        // "one\n": the next line is not reached.
+        #expect(ref(range: NSRange(location: 0, length: 4)).text == "@Sources/Foo.swift#L1")
+    }
+
+    @Test func theLastLineOfAFileWithoutABreakHasNoBlankLineInTheFence() {
+        let text = "one\ntwo"
+        let ref = ref(range: NSRange(location: 4, length: 3), in: text, unsaved: true)
+        #expect(ref.text == "Sources/Foo.swift:2 (unsaved)\n```swift\ntwo\n```")
+    }
+
+    @Test func aFileWithNoExtensionHasABareFence() {
+        let text = ref("/code/api/Makefile", range: NSRange(location: 0, length: 3), unsaved: true).text
+        #expect(text == "Makefile:1 (unsaved)\n```\none\n```")
+    }
+
     @Test func anUntitledBufferIsAlwaysUnsaved() {
         let file = PathKey.untitled("Untitled", in: Self.root)
         let ref = CodeRef(
