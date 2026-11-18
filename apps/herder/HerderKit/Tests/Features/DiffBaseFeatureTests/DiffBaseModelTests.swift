@@ -47,6 +47,7 @@ import Testing
     @Test func aSecondPickerStartsWithWhatTheFirstFound() async throws {
         git.seed(refs: [GitRef(name: "main", kind: .branch, date: .now)], in: root)
         git.seed(mergeBase: "prev", of: "HEAD~1")
+        git.seed(shortstat: GitChangeSummary(insertions: 1, deletions: 1), since: "prev")
         let workspace = try await start()
         await DiffBasePickerModel.prefetch(for: workspace)
 
