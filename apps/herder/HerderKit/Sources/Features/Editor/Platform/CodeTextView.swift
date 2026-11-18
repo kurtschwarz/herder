@@ -12,11 +12,15 @@ import SwiftUI
 struct CodeTextView: NSViewRepresentable {
     let buffer: Buffer
 
+    /// What the selection prompt reaches out to, which the buffer cannot see.
+    let prompt: SelectionPromptContext
+
     func makeNSView(context: Context) -> PaneHost {
         PaneHost()
     }
 
     func updateNSView(_ host: PaneHost, context: Context) {
+        buffer.selectionPrompt.context = prompt
         host.show(buffer)
     }
 }

@@ -35,3 +35,11 @@ _Avoid_: reattach, restart.
 **Diff base**:
 The revision whose merge-base with `HEAD` the editor compares the working copy against, for the gutter's change markers and the empty editor's changed-files list. Remembered per worktree; defaults to `HEAD`, which the picker calls Uncommitted. A stored ref that no longer resolves is kept, and `HEAD` is used until it comes back.
 _Avoid_: base branch (that is what a new session is cut from), compare target.
+
+**Selection prompt**:
+The overlay that opens on the editor's selection with ⌘L, from which a code ref and some feedback are typed into an agent session in the same worktree. Anchored to the selected lines, it scrolls with them; unsent feedback is kept in memory per buffer. Herder can only reach an agent by typing into its terminal, so what it sends is pasted text.
+_Avoid_: popover (it is not an `NSPopover`), inline chat.
+
+**Code ref**:
+A pointer at whole lines of a file, in the form an agent reads: `@path#L10-12`, with the path relative to the worktree, else absolute, and quoted if it has a space. For a buffer with unsaved edits, whose line numbers the disk would not match, it is `path:10-12 (unsaved)` followed by the lines in a fenced block.
+_Avoid_: mention, link, snippet.

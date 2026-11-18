@@ -196,8 +196,8 @@ final class WindowEnvironment {
     /// can only start a session in the workspace it is showing.
     /// Brings an open session forward from the sidebar: its worktree shown,
     /// its tab in front. The panel is told first, for the same reason as below.
-    func showAgentSession(_ session: AgentSession) {
-        agentPanel.reveal(session.id, in: session.worktree)
+    func showAgentSession(_ session: AgentSession, takingFocus: Bool = true) {
+        agentPanel.reveal(session.id, in: session.worktree, takingFocus: takingFocus)
         activate(session.worktree)
     }
 
