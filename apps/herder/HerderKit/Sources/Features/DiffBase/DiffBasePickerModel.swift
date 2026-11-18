@@ -97,14 +97,9 @@ final class DiffBasePickerModel {
         var id: String { ref }
     }
 
-    /// The presets that apply, then the base picked from search if there is one.
+    /// The presets that apply, nearest first, then the base picked from search if there is one.
     var segments: [Segment] {
         var result = [Segment(ref: Preset.uncommitted.ref, label: "HEAD", detail: "Edits since your last commit")]
-        result.append(Segment(
-            ref: Preset.upstream.ref,
-            label: upstreamName ?? "upstream",
-            detail: "Unpushed commits plus uncommitted edits"
-        ))
         if hasPreviousCommit {
             result.append(Segment(
                 ref: Preset.previousCommit.ref,
@@ -112,6 +107,11 @@ final class DiffBasePickerModel {
                 detail: "The last commit plus uncommitted edits"
             ))
         }
+        result.append(Segment(
+            ref: Preset.upstream.ref,
+            label: upstreamName ?? "upstream",
+            detail: "Unpushed commits plus uncommitted edits"
+        ))
         if let custom = customRef {
             result.append(Segment(
                 ref: custom,
