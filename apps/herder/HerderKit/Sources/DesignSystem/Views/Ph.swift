@@ -23,6 +23,7 @@ public enum Ph {
     public static var folderSimplePlus: Image { icon("folder-simple-plus") }
     public static var gearSixFill: Image { icon("gear-six-fill") }
     public static var gitBranch: Image { icon("git-branch") }
+    public static var gitDiff: Image { icon("git-diff") }
     public static var gitFork: Image { icon("git-fork") }
     public static var hammer: Image { icon("hammer") }
     public static var magnifyingGlass: Image { icon("magnifying-glass") }

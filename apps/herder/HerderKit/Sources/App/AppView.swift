@@ -1,6 +1,7 @@
 import AgentSessionsFeature
 import Core
 import DesignSystem
+import DiffBaseFeature
 import EditorFeature
 import FileTreeFeature
 import RepositoriesFeature
@@ -207,7 +208,23 @@ private struct WindowView: View {
 
             VStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    EditorView(model: window.editor, rootName: activeWorkspaceName)
+                    EditorView(
+                        model: window.editor,
+                        rootName: activeWorkspaceName,
+                        breadcrumbTrailing: {
+                            if let workspace = window.activeWorkspace {
+                                DiffBaseTrigger(workspace: workspace)
+                            }
+                        },
+                        emptyState: {
+                            if let workspace = window.activeWorkspace {
+                                ChangedFilesCard(workspace: workspace) { url in
+                                    Task { await window.editor.open(url) }
+                                }
+                                .id(workspace.id)
+                            }
+                        }
+                    )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     if window.terminal.isOpen {

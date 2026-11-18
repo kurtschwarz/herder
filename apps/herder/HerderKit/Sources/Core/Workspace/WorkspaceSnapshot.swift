@@ -22,9 +22,15 @@ public struct WorkspaceSnapshot: Codable, Sendable, Equatable {
     /// adding something a feature wants remembered needs no change here.
     public var uiState: [String: Data]
 
-    public init(id: WorkspaceID, uiState: [String: Data] = [:]) {
+    /// The ref the editor compares the working copy with, when it is not the
+    /// default. See ``GitDiffBase``. A new field: a snapshot without it is the
+    /// default.
+    public var diffBase: String?
+
+    public init(id: WorkspaceID, uiState: [String: Data] = [:], diffBase: String? = nil) {
         self.id = id
         self.uiState = uiState
+        self.diffBase = diffBase
     }
 
     public init(from decoder: any Decoder) throws {
@@ -32,5 +38,6 @@ public struct WorkspaceSnapshot: Codable, Sendable, Equatable {
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
         id = try container.decode(WorkspaceID.self, forKey: .id)
         uiState = try container.decodeIfPresent([String: Data].self, forKey: .uiState) ?? [:]
+        diffBase = try container.decodeIfPresent(String.self, forKey: .diffBase)
     }
 }

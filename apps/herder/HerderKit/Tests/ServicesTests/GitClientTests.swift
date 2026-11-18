@@ -174,6 +174,44 @@ import Testing
         #expect(try await client.changeSummary(in: plain) == nil)
     }
 
+    @Test func mergeBaseOfAnAncestorIsTheAncestorAndOfNothingIsNil() async throws {
+        let repo = try makeRepository("merge-base")
+        try Data("x\na\n".utf8).write(to: repo.appending(path: "README.md"))
+        try git("commit", "-am", "second", in: repo)
+        let first = try git("rev-parse", "HEAD~1", in: repo).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        #expect(try await client.mergeBase(of: "HEAD~1", in: repo) == first)
+        #expect(try await client.mergeBase(of: "nope", in: repo) == nil)
+        #expect(try await client.mergeBase(of: "--output=x", in: repo) == nil)
+    }
+
+    @Test func changedFilesListTrackedChangesWithCountsAndLeaveUntrackedOut() async throws {
+        let repo = try makeRepository("changed-files")
+        try Data("a\nb\nc\n".utf8).write(to: repo.appending(path: "README.md"))
+        try Data("new\n".utf8).write(to: repo.appending(path: "added.txt"))
+        try git("add", "added.txt", in: repo)
+        try Data("loose\n".utf8).write(to: repo.appending(path: "untracked.txt"))
+
+        let files = try await client.changedFiles(since: "HEAD", in: repo)
+
+        #expect(files.map(\.path) == ["added.txt", "README.md"])
+        #expect(files.map(\.status) == [.added, .modified])
+        #expect(files[0].insertions == 1)
+    }
+
+    @Test func refsAndCommitsAreListedAndAShaAbbreviationResolves() async throws {
+        let repo = try makeRepository("refs")
+        try git("tag", "v1", in: repo)
+        try git("branch", "other", in: repo)
+        let sha = try git("rev-parse", "HEAD", in: repo).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let refs = try await client.refs(in: repo)
+        #expect(Set(refs.map(\.name)) == ["main", "other", "v1"])
+        #expect(try await client.recentCommits(limit: 5, in: repo).map(\.sha) == [sha])
+        #expect(try await client.commit(matching: String(sha.prefix(7)), in: repo)?.sha == sha)
+        #expect(try await client.commit(matching: "feedbeef", in: repo) == nil)
+    }
+
     @Test func statusFindsWhatGitIgnoresIncludingNestedRulesAndNegations() async throws {
         let repo = try makeRepository("repo")
         try Data("*.log\nbuild/\n!keep.log\n".utf8).write(to: repo.appending(path: ".gitignore"))

@@ -99,6 +99,12 @@ public final class Workspace {
     /// branch, or not a git worktree.
     public private(set) var changes: GitChangeSummary?
 
+    /// What the editor compares the working copy with. The ref is chosen with
+    /// ``setDiffBase(_:)`` and remembered; the rest is worked out on each read,
+    /// so a ref that moves is followed. Until the first read finishes a
+    /// restored ref compares with `HEAD`.
+    public internal(set) var diffBase = GitDiffBase.uncommitted
+
     /// False once the worktree's folder has gone from under the watcher, which
     /// `git worktree remove` in a terminal does. Nothing tries to render a
     /// half-dead tree after that.
@@ -306,6 +312,8 @@ public final class Workspace {
     }
 
     private func readStatus() async {
+        await readDiffBase()
+
         // Asked here because a switch of branch writes `HEAD` in the git
         // directory, which is the same sign a drain already waits for.
         if let derived = try? await git.checkout(of: root.url), isAvailable, checkout != derived {
@@ -334,23 +342,125 @@ public final class Workspace {
         status = derived
     }
 
-    /// What `path` contained at `HEAD`, for marking what has changed since, or
-    /// `nil` when there is nothing to compare with: git has it untracked,
-    /// ignored or in conflict, or `HEAD` has no UTF-8 text for it.
+    /// Resolves ``diffBase`` to the revision to compare with. A lookup that
+    /// fails keeps the last answer, as the others here do.
+    private func readDiffBase() async {
+        let ref = diffBase.ref
+        guard ref != GitDiffBase.head else { return }
+
+        do {
+            var name: String? = ref
+            if ref == GitDiffBase.upstream { name = try await git.upstream(in: root.url) }
+            let fork = try await name.asyncFlatMap { try await git.mergeBase(of: $0, in: root.url) }
+
+            let derived = GitDiffBase(
+                ref: ref,
+                name: name ?? ref,
+                revision: fork ?? GitDiffBase.head,
+                isResolved: fork != nil
+            )
+            // The user may have picked another while git was being asked.
+            if isAvailable, diffBase.ref == ref, diffBase != derived { diffBase = derived }
+        } catch {}
+    }
+
+    /// Compares the working copy with `ref` from now on, and remembers the
+    /// choice. Reads again before returning, which is what makes every open
+    /// buffer take the new base.
+    public func setDiffBase(_ ref: String) async {
+        guard ref != diffBase.ref else { return }
+        diffBase = GitDiffBase(ref: ref, name: ref, revision: GitDiffBase.head, isResolved: true)
+        scheduleSnapshotSave()
+        await refresh()
+    }
+
+    /// What `path` contained at the diff base, for marking what has changed
+    /// since, or `nil` when there is nothing to compare with: git has it
+    /// untracked, ignored or in conflict, or the base has no UTF-8 text for it.
     ///
-    /// A file staged as new has no `HEAD` version but is all change, so it
-    /// compares with the empty text. Asks about `HEAD` rather than the index
-    /// so that staging a change leaves it marked.
-    public func headContents(of path: PathKey) async -> String? {
+    /// A file the base does not have is all change, so it compares with the
+    /// empty text. Asks about the base rather than the index so that staging a
+    /// change leaves it marked.
+    public func baseContents(of path: PathKey) async -> String? {
         guard isAvailable else { return nil }
+        let revision = diffBase.revision
+        let relative = path.isInside(root) ? String(path.path.dropFirst(root.path.count + 1)) : nil
+
         switch status.status(of: path) {
         case .untracked, .ignored, .unmerged:
             return nil
-        case .tracked(let staged, let unstaged) where staged == .added || unstaged == .added:
+        case .tracked(let staged, let unstaged) where revision == GitDiffBase.head && (staged == .added || unstaged == .added):
             return ""
         case .tracked, nil:
-            return (try? await git.contents(of: path.url, atRevision: "HEAD", in: root.url)) ?? nil
+            if let text = (try? await git.contents(of: path.url, atRevision: revision, in: root.url)) ?? nil {
+                return text
+            }
+            // `HEAD` has every file git calls unchanged. A merge-base further
+            // back may not, and may have had it under another name.
+            guard revision != GitDiffBase.head, let relative,
+                  let files = try? await git.changedFiles(since: revision, in: root.url),
+                  let file = files.first(where: { $0.path == relative })
+            else { return nil }
+            switch file.status {
+            case .added: return ""
+            case .renamed:
+                guard let previous = file.previousPath else { return nil }
+                return (try? await git.contents(of: root.url.appending(path: previous), atRevision: revision, in: root.url)) ?? nil
+            case .modified, .deleted: return nil
+            }
         }
+    }
+
+    // MARK: - Diff base
+
+    /// The tracked files that differ from the diff base, by path. Leaves out
+    /// what git has in conflict, which has no single change to show.
+    public func changedFiles() async -> [GitChangedFile] {
+        guard isAvailable else { return [] }
+        let files = (try? await git.changedFiles(since: diffBase.revision, in: root.url)) ?? []
+        return files.filter { file in
+            if case .unmerged? = status.status(of: root.appending(file.path)) { return false }
+            return true
+        }
+    }
+
+    /// Lines inserted and deleted between `ref`'s merge-base with `HEAD` and the
+    /// working copy. `nil` when `ref` resolves to nothing, as `HEAD~1` does on
+    /// a first commit. `@{upstream}` stands for the branch it tracks.
+    public func changeSummary(against ref: String) async -> GitChangeSummary? {
+        guard isAvailable, ref != GitDiffBase.head else {
+            return (try? await git.shortstat(since: GitDiffBase.head, in: root.url)) ?? nil
+        }
+        do {
+            guard let name = ref == GitDiffBase.upstream ? try await git.upstream(in: root.url) : ref,
+                  let fork = try await git.mergeBase(of: name, in: root.url)
+            else { return nil }
+            return try await git.shortstat(since: fork, in: root.url)
+        } catch {
+            return nil
+        }
+    }
+
+    /// What `@{upstream}` stands for: the tracked branch, or the default one.
+    public func upstreamName() async -> String? {
+        guard isAvailable else { return nil }
+        return (try? await git.upstream(in: root.url)) ?? nil
+    }
+
+    public func refs() async -> [GitRef] {
+        guard isAvailable else { return [] }
+        return (try? await git.refs(in: root.url)) ?? []
+    }
+
+    public func recentCommits(limit: Int) async -> [GitCommit] {
+        guard isAvailable else { return [] }
+        return (try? await git.recentCommits(limit: limit, in: root.url)) ?? []
+    }
+
+    /// The commit a pasted SHA or abbreviation names, if it names one.
+    public func commit(matching revision: String) async -> GitCommit? {
+        guard isAvailable else { return nil }
+        return (try? await git.commit(matching: revision, in: root.url)) ?? nil
     }
 
     // MARK: - Changing
@@ -540,9 +650,17 @@ public final class Workspace {
         listings = [:]
         status = .empty
         changes = nil
+        diffBase = GitDiffBase(ref: diffBase.ref, name: diffBase.name, revision: GitDiffBase.head, isResolved: true)
         dirty = []
         needsFullScan = false
         stop()
         notify()
+    }
+}
+
+private extension Optional {
+    func asyncFlatMap<T>(_ transform: (Wrapped) async throws -> T?) async rethrows -> T? {
+        guard let self else { return nil }
+        return try await transform(self)
     }
 }
