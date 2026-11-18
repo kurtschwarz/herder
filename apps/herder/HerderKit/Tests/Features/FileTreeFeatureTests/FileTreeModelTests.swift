@@ -12,6 +12,7 @@ import Testing
     let clock = VirtualClockClient()
     let state = InMemoryStateStore()
     let model: FileTreeModel
+    let registry: WorkspaceRegistry
     let root = URL(filePath: "/code/api")
 
     /// Stands in for the window showing this worktree. Since 4g a workspace
@@ -20,7 +21,7 @@ import Testing
     let window = NSObject()
 
     init() {
-        let registry = WorkspaceRegistry(
+        registry = WorkspaceRegistry(
             files: files,
             git: git,
             watcher: watcher,
@@ -768,5 +769,91 @@ import Testing
 
         #expect(model.status.rollup(of: PathKey(sources.url)) == .modified)
         #expect(model.status.rollup(of: PathKey(root)) == .modified)
+    }
+
+    // MARK: - Diff base
+
+    func pickBase(_ ref: String) async throws {
+        let workspace = try #require(await registry.open(WorkspaceID(PathKey(root))))
+        await workspace.setDiffBase(ref)
+    }
+
+    @Test func aFileDifferingFromTheBaseIsBadgedAndItsFolderRollsUp() async throws {
+        let sources = dir("Sources")
+        files.seed(children: [sources, file("a.txt")], of: root)
+        git.seed(mergeBase: "abc", of: "main")
+        git.seed(
+            changedFiles: [
+                GitChangedFile(path: "Sources/deep/b.swift", status: .modified),
+                GitChangedFile(path: "a.txt", status: .added),
+            ],
+            since: "abc"
+        )
+        await model.setRoot(root)
+        #expect(marks(model).isEmpty)
+
+        try await pickBase("main")
+
+        #expect(marks(model) == ["a.txt": .modified, "Sources": .modified])
+    }
+
+    @Test func aFileMatchingTheBaseIsNotBadgedEvenIfItChangedAndChangedBack() async throws {
+        files.seed(children: [file("a.txt")], of: root)
+        git.seed(mergeBase: "abc", of: "main")
+        git.seed(status: ["a.txt": .tracked(staged: .unchanged, unstaged: .modified)], in: root)
+        await model.setRoot(root)
+        #expect(marks(model) == ["a.txt": .modified])
+
+        try await pickBase("main")
+
+        #expect(marks(model).isEmpty)
+    }
+
+    @Test func aFileDeletedSinceTheBaseMarksItsFolder() async throws {
+        files.seed(children: [dir("Sources")], of: root)
+        git.seed(mergeBase: "abc", of: "main")
+        git.seed(changedFiles: [GitChangedFile(path: "Sources/Gone.swift", status: .deleted)], since: "abc")
+        await model.setRoot(root)
+
+        try await pickBase("main")
+
+        #expect(marks(model) == ["Sources": .modified])
+    }
+
+    @Test func untrackedIgnoredAndConflictedFilesKeepTheirBadgesAgainstABase() async throws {
+        files.seed(children: [file("a.txt"), file("c.txt"), file("d.log")], of: root)
+        git.seed(mergeBase: "abc", of: "main")
+        git.seed(status: ["a.txt": .untracked, "c.txt": .unmerged, "d.log": .ignored], in: root)
+        git.seed(changedFiles: [GitChangedFile(path: "c.txt", status: .modified)], since: "abc")
+        await model.setRoot(root)
+
+        try await pickBase("main")
+
+        #expect(marks(model) == ["a.txt": .untracked, "c.txt": .unmerged])
+        #expect(ignoredNames(model) == ["d.log"])
+    }
+
+    @Test func anUnresolvedRefBadgesAgainstHead() async throws {
+        files.seed(children: [file("a.txt")], of: root)
+        git.seed(status: ["a.txt": .tracked(staged: .unchanged, unstaged: .modified)], in: root)
+        git.seed(changedFiles: [GitChangedFile(path: "other.txt", status: .modified)], since: "HEAD")
+        await model.setRoot(root)
+
+        try await pickBase("nowhere")
+
+        #expect(marks(model) == ["a.txt": .modified])
+    }
+
+    @Test func goingBackToUncommittedRestoresTheStatusBadges() async throws {
+        files.seed(children: [file("a.txt")], of: root)
+        git.seed(mergeBase: "abc", of: "main")
+        git.seed(status: ["a.txt": .tracked(staged: .unchanged, unstaged: .modified)], in: root)
+        await model.setRoot(root)
+        try await pickBase("main")
+        #expect(marks(model).isEmpty)
+
+        try await pickBase(GitDiffBase.head)
+
+        #expect(marks(model) == ["a.txt": .modified])
     }
 }

@@ -17,4 +17,34 @@ public struct GitWorktreeStatus: Sendable, Equatable {
         self.root = root
         self.entries = entries
     }
+
+    /// The same tree with its tracked paths read against a diff base instead
+    /// of `HEAD` and the index: `files` are what differs from the base, so a
+    /// file changed and changed back is no longer here, and one the base
+    /// lacks is added. Untracked, ignored and conflicted entries are kept as
+    /// they were.
+    ///
+    /// A rename also leaves its old path as deleted, as `git status` does, so
+    /// the folder it left can say something went missing.
+    public func comparing(with files: [GitChangedFile]) -> GitWorktreeStatus {
+        var result = entries.filter { _, status in
+            if case .tracked = status { return false }
+            return true
+        }
+        for file in files {
+            let path = root.appending(file.path)
+            if case .unmerged? = entries[path] { continue }
+            switch file.status {
+            case .modified: result[path] = .tracked(staged: .unchanged, unstaged: .modified)
+            case .added: result[path] = .tracked(staged: .unchanged, unstaged: .added)
+            case .deleted: result[path] = .tracked(staged: .unchanged, unstaged: .deleted)
+            case .renamed:
+                result[path] = .tracked(staged: .unchanged, unstaged: .renamed)
+                if let previous = file.previousPath {
+                    result[root.appending(previous)] = .tracked(staged: .unchanged, unstaged: .deleted)
+                }
+            }
+        }
+        return GitWorktreeStatus(root: root, entries: result)
+    }
 }
