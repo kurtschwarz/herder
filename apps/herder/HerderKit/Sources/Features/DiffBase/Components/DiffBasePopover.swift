@@ -80,7 +80,10 @@ struct DiffBasePopover: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(maxHeight: 180)
+            // Fixed, so the popover is the same size when it opens as when
+            // the answers arrive: a size that changes under the opening
+            // animation is what makes it stutter.
+            .frame(height: 180)
 
             Divider().padding(.vertical, Theme.Spacing.normal)
             Text("Remembered per worktree. Drives the gutter change markers and the changed-files list.")
@@ -91,7 +94,12 @@ struct DiffBasePopover: View {
         }
         .padding(Theme.Spacing.normal)
         .frame(width: 320)
-        .task { await model.load() }
+        .task {
+            // After the opening animation, which a relayout would drop frames
+            // from. What was cached is already showing.
+            try? await Task.sleep(for: .milliseconds(300))
+            await model.load()
+        }
         .onAppear { isSearching = true }
         .onExitCommand(perform: close)
     }

@@ -120,12 +120,14 @@ final class DiffBasePickerModel {
         if let now { found[.uncommitted] = now }
         if let ahead { found[.upstream] = ahead }
         if let before { found[.previousCommit] = before }
-        upstreamName = name
+        // Only what differs is set, so a reload that found nothing new does
+        // not redraw.
+        if upstreamName != name { upstreamName = name }
         // No merge-base for `HEAD~1` is a root commit.
-        hasPreviousCommit = before != nil
-        counts = found
-        refs = allRefsFound
-        commits = latestFound
+        if hasPreviousCommit != (before != nil) { hasPreviousCommit = before != nil }
+        if counts != found { counts = found }
+        if refs != allRefsFound { refs = allRefsFound }
+        if commits != latestFound { commits = latestFound }
 
         cache.upstreamName = upstreamName
         cache.counts = counts
