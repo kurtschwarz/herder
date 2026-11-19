@@ -104,6 +104,48 @@ public enum DaemonWire {
         }
     }
 
+    /// What a `status` result says about each path, which it gives relative to
+    /// the working tree whose key is `root`.
+    public static func status(fromResult result: [String: Any], root: PathKey) -> GitWorktreeStatus? {
+        guard let records = result["entries"] as? [[String: Any]] else { return nil }
+        var entries: [PathKey: GitStatus] = [:]
+        for record in records {
+            guard let path = record["path"] as? String,
+                  let status = record["status"] as? [String: Any],
+                  let value = gitStatus(fromRecord: status)
+            else { return nil }
+            entries[root.appending(path)] = value
+        }
+        return GitWorktreeStatus(root: root, entries: entries)
+    }
+
+    private static func gitStatus(fromRecord record: [String: Any]) -> GitStatus? {
+        switch record["type"] as? String {
+        case "untracked": return .untracked
+        case "ignored": return .ignored
+        case "unmerged": return .unmerged
+        case "tracked":
+            guard let staged = (record["staged"] as? String).flatMap(change),
+                  let unstaged = (record["unstaged"] as? String).flatMap(change)
+            else { return nil }
+            return .tracked(staged: staged, unstaged: unstaged)
+        default: return nil
+        }
+    }
+
+    private static func change(_ name: String) -> GitChange? {
+        switch name {
+        case "unchanged": .unchanged
+        case "added": .added
+        case "modified": .modified
+        case "deleted": .deleted
+        case "renamed": .renamed
+        case "copied": .copied
+        case "type_changed": .typeChanged
+        default: nil
+        }
+    }
+
     /// What a `worktrees` result lists, in the daemon's order.
     public static func worktrees(fromResult result: [String: Any]) -> [GitWorktree]? {
         guard let records = result["worktrees"] as? [[String: Any]] else { return nil }

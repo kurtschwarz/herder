@@ -5,7 +5,7 @@ import Synchronization
 /// `GitClient` that asks herderd, bound to the one host it runs on. See ADR 0002.
 ///
 /// Only the layout operations (`repositoryKind`, `worktrees`, `branches`,
-/// `gitDirectory`, `checkout`) go to the daemon so far. The rest are still
+/// `gitDirectory`, `checkout`) and `status` go to the daemon so far. The rest are still
 /// answered by `local`, a `LiveGitClient`, until each is ported; when the last
 /// one is, `local` and `LiveGitClient` are deleted and the daemon being
 /// unreachable is the only way a call fails.
@@ -53,14 +53,17 @@ public struct DaemonGitClient: GitClient {
         return checkout
     }
 
+    public func status(in worktree: URL) async throws -> GitWorktreeStatus {
+        let root = PathKey(worktree)
+        let result = try await ask("status", ["path": root.path])
+        guard let status = DaemonWire.status(fromResult: result, root: root) else { throw Self.unrecognised }
+        return status
+    }
+
     // MARK: - Still local
 
     public func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {
         try await local.addWorktree(in: repository, at: path, newBranch: newBranch, from: base)
-    }
-
-    public func status(in worktree: URL) async throws -> GitWorktreeStatus {
-        try await local.status(in: worktree)
     }
 
     public func changeSummary(in worktree: URL) async throws -> GitChangeSummary? {

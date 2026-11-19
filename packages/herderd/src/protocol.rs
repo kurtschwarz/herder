@@ -61,6 +61,7 @@ pub enum GitOp {
     Branches { path: String },
     GitDirectory { path: String },
     Checkout { path: String },
+    Status { path: String },
 }
 
 /// What a working tree has checked out.
@@ -74,6 +75,36 @@ pub enum Checkout {
     Detached {
         sha: String,
     },
+}
+
+/// One column of git's two-letter status code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Change {
+    Unchanged,
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
+    Copied,
+    TypeChanged,
+}
+
+/// What git knows about one path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PathStatus {
+    Tracked { staged: Change, unstaged: Change },
+    Unmerged,
+    Untracked,
+    Ignored,
+}
+
+/// A path under the working tree's root, and what git says about it.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StatusEntry {
+    pub path: String,
+    pub status: PathStatus,
 }
 
 /// One working tree of a repository, in the order the sidebar shows them.
@@ -117,6 +148,12 @@ pub enum GitResult {
     /// be read.
     Checkout {
         checkout: Option<Checkout>,
+    },
+    /// `root` is the working tree, resolved; each entry's `path` is relative to
+    /// it. No entries for a folder that is not a working tree.
+    Status {
+        root: String,
+        entries: Vec<StatusEntry>,
     },
 }
 

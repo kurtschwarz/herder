@@ -153,4 +153,31 @@ import Testing
         #expect(DaemonWire.branches(fromResult: ["branches": ["a", "b"]]) == ["a", "b"])
         #expect(DaemonWire.branches(fromResult: [:]) == nil)
     }
+
+    @Test func statusEntriesAreKeyedUnderTheRoot() throws {
+        let root = PathKey(URL(filePath: "/tmp"))
+        let status = try #require(DaemonWire.status(fromResult: [
+            "root": "/tmp",
+            "entries": [
+                ["path": "a", "status": ["type": "untracked"]],
+                ["path": "b", "status": ["type": "ignored"]],
+                ["path": "c", "status": ["type": "unmerged"]],
+                ["path": "d", "status": ["type": "tracked", "staged": "renamed", "unstaged": "type_changed"]],
+            ],
+        ], root: root))
+
+        #expect(status.entries == [
+            root.appending("a"): .untracked,
+            root.appending("b"): .ignored,
+            root.appending("c"): .unmerged,
+            root.appending("d"): .tracked(staged: .renamed, unstaged: .typeChanged),
+        ])
+    }
+
+    @Test func aStatusEntryItCannotReadIsNotAnAnswer() {
+        let root = PathKey(URL(filePath: "/tmp"))
+        let bad = ["entries": [["path": "a", "status": ["type": "mystery"]]]]
+        #expect(DaemonWire.status(fromResult: bad, root: root) == nil)
+        #expect(DaemonWire.status(fromResult: [:], root: root) == nil)
+    }
 }

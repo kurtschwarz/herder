@@ -9,6 +9,7 @@ pub mod cli;
 mod kind;
 mod layout;
 mod natural;
+mod status;
 
 use crate::protocol::{GitError, GitOp, GitResult};
 
@@ -27,6 +28,7 @@ pub fn handle(op: &GitOp) -> Result<GitResult, GitError> {
         GitOp::GitDirectory { path } => {
             Ok(GitResult::GitDirectory { path: layout::git_directory(path) })
         }
+        GitOp::Status { path } => status::status(path),
         GitOp::Checkout { path } => Ok(GitResult::Checkout { checkout: layout::checkout(path) }),
     }
 }
