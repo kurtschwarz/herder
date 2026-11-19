@@ -1,13 +1,22 @@
 //! One connection, over any byte stream.
 
 use crate::frame::{read_frame, write_frame};
-use crate::protocol::{ClientMessage, DaemonMessage, HostId, MAX_PROTOCOL, MIN_PROTOCOL, negotiate};
+use crate::git;
+use crate::protocol::{
+    ClientMessage, DaemonMessage, GitOp, HostId, MAX_PROTOCOL, MIN_PROTOCOL, negotiate,
+};
 use std::io::{self, Read, Write};
+use std::sync::{Mutex, mpsc};
+use std::thread;
+
+/// How many git requests run at once for one connection. Bounded so a burst of
+/// requests cannot start a thread, and a repository walk, apiece.
+const GIT_WORKERS: usize = 4;
 
 /// Serves one client until it hangs up. Takes a reader and a writer rather than
 /// a socket so the same code runs over a Unix socket, a child's stdio or a
 /// test's buffers.
-pub fn serve<R: Read, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
+pub fn serve<R: Read, W: Write + Send>(mut input: R, mut output: W) -> io::Result<()> {
     let Some(first) = read_frame(&mut input)? else {
         return Ok(());
     };
@@ -29,7 +38,9 @@ pub fn serve<R: Read, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
         }
         // Not a hello: the first message is always one, so this is not a
         // client of ours. Close without answering.
-        Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidData, "expected hello")),
+        Ok(ClientMessage::GitRequest { .. }) | Err(_) => {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "expected hello"));
+        }
     };
 
     let incompatible = matches!(reply, DaemonMessage::Incompatible { .. });
@@ -39,10 +50,56 @@ pub fn serve<R: Read, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
         return Ok(());
     }
 
-    // No further messages exist yet: hold the connection until the client
-    // leaves, ignoring what it sends.
-    while read_frame(&mut input)?.is_some() {}
-    Ok(())
+    serve_requests(input, output)
+}
+
+/// Reads requests until the client leaves, answering git requests on a small
+/// pool of workers. Responses may arrive in any order; `id` ties each to its
+/// request.
+fn serve_requests<R: Read, W: Write + Send>(mut input: R, output: W) -> io::Result<()> {
+    let output = Mutex::new(output);
+    let (jobs, queue) = mpsc::channel::<(u64, GitOp)>();
+    let queue = Mutex::new(queue);
+
+    thread::scope(|scope| {
+        for _ in 0..GIT_WORKERS {
+            scope.spawn(|| {
+                loop {
+                    // The lock is released before the work starts.
+                    let next = queue.lock().ok().and_then(|queue| queue.recv().ok());
+                    let Some((id, op)) = next else { return };
+                    let reply = respond(id, &op);
+                    let Ok(bytes) = serde_json::to_vec(&reply) else {
+                        continue;
+                    };
+                    if let Ok(mut output) = output.lock() {
+                        let _ = write_frame(&mut *output, &bytes);
+                    }
+                }
+            });
+        }
+
+        // Dropping `jobs` when this loop ends is what lets the workers finish.
+        let result = (|| {
+            while let Some(frame) = read_frame(&mut input)? {
+                // Anything else is ignored: a newer client may say more than
+                // this daemon knows.
+                if let Ok(ClientMessage::GitRequest { id, op }) = serde_json::from_slice(&frame) {
+                    let _ = jobs.send((id, op));
+                }
+            }
+            Ok(())
+        })();
+        drop(jobs);
+        result
+    })
+}
+
+fn respond(id: u64, op: &GitOp) -> DaemonMessage {
+    match git::handle(op) {
+        Ok(result) => DaemonMessage::GitResponse { id, result: Some(result), error: None },
+        Err(error) => DaemonMessage::GitResponse { id, result: None, error: Some(error) },
+    }
 }
 
 #[cfg(test)]
@@ -62,14 +119,14 @@ mod tests {
     #[test]
     fn welcomes_a_compatible_client() {
         let reply = exchange(&ClientMessage::Hello {
-            min_protocol: 1,
-            max_protocol: 1,
+            min_protocol: MIN_PROTOCOL,
+            max_protocol: MAX_PROTOCOL,
             client: "test".into(),
         });
         assert_eq!(
             reply,
             DaemonMessage::Welcome {
-                protocol: 1,
+                protocol: MAX_PROTOCOL,
                 daemon_version: env!("CARGO_PKG_VERSION").into(),
                 host: HostId::local(),
             }
@@ -85,7 +142,11 @@ mod tests {
         });
         assert!(matches!(
             reply,
-            DaemonMessage::Incompatible { min_protocol: MIN_PROTOCOL, max_protocol: MAX_PROTOCOL, .. }
+            DaemonMessage::Incompatible {
+                min_protocol: MIN_PROTOCOL,
+                max_protocol: MAX_PROTOCOL,
+                ..
+            }
         ));
     }
 

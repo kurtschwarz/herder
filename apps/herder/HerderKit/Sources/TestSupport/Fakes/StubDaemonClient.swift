@@ -1,12 +1,13 @@
 #if DEBUG
 import Core
+import Foundation
 import Synchronization
 
 /// `DaemonClient` that reaches nothing. A test says what the daemon answers.
 public final class StubDaemonClient: DaemonClient {
     private let state: Mutex<(status: DaemonStatus, calls: Int)>
 
-    public init(status: DaemonStatus = .connected(DaemonInfo(daemonVersion: "0.0.0", protocolVersion: 1, host: "local"))) {
+    public init(status: DaemonStatus = .connected(DaemonInfo(daemonVersion: "0.0.0", protocolVersion: DaemonWire.supported.upperBound, host: "local"))) {
         state = Mutex((status, 0))
     }
 
@@ -18,11 +19,19 @@ public final class StubDaemonClient: DaemonClient {
         state.withLock { $0.status = status }
     }
 
+    public func request(_ payload: Data) async throws -> Data {
+        throw StubDaemonClientError.unreachable
+    }
+
     public func connect() async -> DaemonStatus {
         state.withLock { state in
             state.calls += 1
             return state.status
         }
     }
+}
+
+public enum StubDaemonClientError: Error, Equatable {
+    case unreachable
 }
 #endif

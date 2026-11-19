@@ -14,7 +14,7 @@ A local daemon, **herderd**, owns every agent session and terminal process. The 
 - **A framed protocol over any byte stream.** A frame is a big-endian `u32` length and that many bytes, at most 16 MiB. Payloads are JSON tagged by `type`. The first frame on a connection is the client's `hello`, which carries the range of protocol versions it speaks, and the daemon answers `welcome` with the version chosen or `incompatible` with its own range. Locally the stream is a Unix domain socket, mode 0600, with the peer's uid checked by `getpeereid`. `frame`, `protocol` and `session` take any `Read`/`Write`, so an SSH `--stdio` transport needs no change to them. `herderd --stdio` already serves one connection that way.
 - **Terminal output goes through the protocol**, with backpressure. Passing the PTY descriptor with `SCM_RIGHTS` is allowed only as a local fast path, never the only path.
 - **Records carry a host.** Every session and worktree the protocol names carries a `HostId`, with `local` as one host, so a remote host later does not migrate persisted keys. `welcome` already names the daemon's host.
-- **The daemon is the only thing on a host that starts or ends agent and terminal processes.** Files, git and the file watcher stay in the app.
+- **The daemon is the only thing on a host that starts or ends agent and terminal processes.** Files and the file watcher stay in the app. (Git moved to the daemon: see [0002](0002-git-in-herderd.md).)
 - **The app keeps its seams.** `PTYClient` and `ProcessMonitorClient` gain daemon-backed implementations, chosen in `AppEnvironment`. Core, the features and the fakes do not change.
 - **Screen state lives in the daemon**, with libghostty-vt hosted in Rust, so a reattached tab shows what was on screen.
 

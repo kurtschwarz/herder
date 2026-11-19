@@ -6,7 +6,7 @@ import Foundation
 public enum DaemonWire {
     /// The versions this build of the app speaks. Raise `supported.upperBound`
     /// when the app starts using a message the daemon gained in that version.
-    public static let supported = 1...1
+    public static let supported = 2...2
 
     /// A frame is a big-endian `UInt32` length and then that many bytes.
     public static let headerSize = 4
@@ -62,5 +62,49 @@ public enum DaemonWire {
             break
         }
         return .unavailable(reason: "Unrecognised reply from herderd.")
+    }
+
+    // MARK: - Git
+
+    /// The payload of a `git_request`: `op` and its arguments in one flat
+    /// object beside the `id`. Paths are strings on the daemon's host.
+    public static func gitRequest(id: Int, op: String, arguments: [String: String] = [:]) -> Data {
+        var message: [String: Any] = ["type": "git_request", "id": id, "op": op]
+        for (key, value) in arguments { message[key] = value }
+        return (try? JSONSerialization.data(withJSONObject: message, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+    }
+
+    /// The `result` of the `git_response` to request `id`. Throws what the
+    /// daemon said when it answered with an `error`, and a failure of its own
+    /// when the reply is not the answer to this request.
+    public static func gitResult(fromReply payload: Data, id: Int) throws -> [String: Any] {
+        guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              object["type"] as? String == "git_response",
+              object["id"] as? Int == id
+        else { throw GitClientError.commandFailed("Unrecognised reply from herderd.") }
+
+        if let error = object["error"] as? [String: Any] {
+            throw GitClientError.commandFailed(error["message"] as? String ?? "herderd could not run git.")
+        }
+        guard let result = object["result"] as? [String: Any] else {
+            throw GitClientError.commandFailed("Unrecognised reply from herderd.")
+        }
+        return result
+    }
+
+    /// What a `repository_kind` result says.
+    public static func repositoryKind(fromResult result: [String: Any]) -> GitRepositoryKind? {
+        switch result["kind"] as? String {
+        case "main_working_tree": .mainWorkingTree
+        case "bare": .bare
+        case "not_a_repository": .notARepository
+        case "linked_worktree":
+            // Resolved the way every other URL the app keeps is, so the two
+            // spell a folder the same way when they are compared.
+            (result["main_repository"] as? String).map {
+                .linkedWorktree(mainRepository: URL(filePath: $0, directoryHint: .isDirectory).resolvingSymlinksInPath())
+            }
+        default: nil
+        }
     }
 }

@@ -9,9 +9,13 @@
 use serde::{Deserialize, Serialize};
 
 /// The oldest protocol version this build speaks.
-pub const MIN_PROTOCOL: u32 = 1;
+///
+/// 2 is the version that added git. Raised together with [`MAX_PROTOCOL`]
+/// because nothing used the daemon before it, so there is no older app to keep
+/// serving.
+pub const MIN_PROTOCOL: u32 = 2;
 /// The newest protocol version this build speaks.
-pub const MAX_PROTOCOL: u32 = 1;
+pub const MAX_PROTOCOL: u32 = 2;
 
 /// Which machine a record belongs to. Every session and worktree the protocol
 /// names carries one, so a second host later is not a migration of the keys
@@ -38,6 +42,53 @@ pub enum ClientMessage {
         /// Who is asking, for the daemon's log: "Herder 0.3.3".
         client: String,
     },
+    /// Asks for one git operation. The answer is a [`DaemonMessage::GitResponse`]
+    /// with the same `id`.
+    GitRequest {
+        id: u64,
+        #[serde(flatten)]
+        op: GitOp,
+    },
+}
+
+/// A git operation and its arguments. Paths are strings on the daemon's host,
+/// never the app's idea of one.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum GitOp {
+    RepositoryKind { path: String },
+}
+
+/// What a folder is, as far as git is concerned.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RepositoryKind {
+    MainWorkingTree,
+    Bare,
+    LinkedWorktree { main_repository: String },
+    NotARepository,
+}
+
+/// The answer to a [`GitOp`], shaped per operation.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum GitResult {
+    RepositoryKind(RepositoryKind),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GitErrorCode {
+    /// Git ran, or could have, and refused.
+    Failed,
+    /// The request itself was not one the daemon could act on.
+    InvalidRequest,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GitError {
+    pub code: GitErrorCode,
+    pub message: String,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,10 +103,15 @@ pub enum DaemonMessage {
     },
     /// No version in common. The connection closes after this, and the
     /// ranges are what the app shows the user.
-    Incompatible {
-        min_protocol: u32,
-        max_protocol: u32,
-        daemon_version: String,
+    Incompatible { min_protocol: u32, max_protocol: u32, daemon_version: String },
+    /// The outcome of a [`ClientMessage::GitRequest`]: exactly one of `result`
+    /// and `error`.
+    GitResponse {
+        id: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        result: Option<GitResult>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<GitError>,
     },
 }
 
@@ -72,15 +128,15 @@ mod tests {
 
     #[test]
     fn picks_the_highest_shared_version() {
-        assert_eq!(negotiate(1, 1), Some(1));
+        assert_eq!(negotiate(MAX_PROTOCOL, MAX_PROTOCOL), Some(MAX_PROTOCOL));
         assert_eq!(negotiate(1, 9), Some(MAX_PROTOCOL));
-        assert_eq!(negotiate(0, 1), Some(1));
+        assert_eq!(negotiate(0, MAX_PROTOCOL), Some(MAX_PROTOCOL));
     }
 
     #[test]
     fn no_overlap_is_no_version() {
         assert_eq!(negotiate(MAX_PROTOCOL + 1, MAX_PROTOCOL + 3), None);
-        assert_eq!(negotiate(0, MIN_PROTOCOL.saturating_sub(1)), None);
+        assert_eq!(negotiate(0, MIN_PROTOCOL - 1), None);
     }
 
     #[test]
@@ -93,11 +149,48 @@ mod tests {
     #[test]
     fn welcome_carries_the_host() {
         let welcome = DaemonMessage::Welcome {
-            protocol: 1,
+            protocol: 2,
             daemon_version: "0.1.0".into(),
             host: HostId::local(),
         };
         let json = serde_json::to_string(&welcome).unwrap();
-        assert_eq!(json, r#"{"type":"welcome","protocol":1,"daemon_version":"0.1.0","host":"local"}"#);
+        assert_eq!(
+            json,
+            r#"{"type":"welcome","protocol":2,"daemon_version":"0.1.0","host":"local"}"#
+        );
+    }
+
+    #[test]
+    fn a_git_request_is_one_flat_object() {
+        let request =
+            ClientMessage::GitRequest { id: 7, op: GitOp::RepositoryKind { path: "/r".into() } };
+        let json = serde_json::to_string(&request).unwrap();
+        assert_eq!(json, r#"{"type":"git_request","id":7,"op":"repository_kind","path":"/r"}"#);
+        assert_eq!(serde_json::from_str::<ClientMessage>(&json).unwrap(), request);
+    }
+
+    #[test]
+    fn a_git_response_holds_a_result_or_an_error() {
+        let ok = DaemonMessage::GitResponse {
+            id: 7,
+            result: Some(GitResult::RepositoryKind(RepositoryKind::LinkedWorktree {
+                main_repository: "/r".into(),
+            })),
+            error: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&ok).unwrap(),
+            r#"{"type":"git_response","id":7,"result":{"kind":"linked_worktree","main_repository":"/r"}}"#
+        );
+
+        let failed = DaemonMessage::GitResponse {
+            id: 8,
+            result: None,
+            error: Some(GitError { code: GitErrorCode::Failed, message: "no".into() }),
+        };
+        assert_eq!(
+            serde_json::to_string(&failed).unwrap(),
+            r#"{"type":"git_response","id":8,"error":{"code":"failed","message":"no"}}"#
+        );
     }
 }

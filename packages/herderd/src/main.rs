@@ -12,7 +12,7 @@ fn main() -> ExitCode {
             println!("{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
-        Some("--stdio") => herderd::session::serve(io::stdin().lock(), io::stdout().lock()),
+        Some("--stdio") => herderd::session::serve(io::stdin(), io::stdout()),
         Some("--socket") => match args.next() {
             Some(path) => idle_timeout(args).and_then(|grace| listen(PathBuf::from(path), grace)),
             None => usage(),

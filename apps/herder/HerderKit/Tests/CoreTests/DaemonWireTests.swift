@@ -29,15 +29,15 @@ import Testing
 
         #expect(body.count == length)
         #expect(String(decoding: body, as: UTF8.self)
-            == #"{"client":"Herder 1.0","max_protocol":1,"min_protocol":1,"type":"hello"}"#)
+            == #"{"client":"Herder 1.0","max_protocol":2,"min_protocol":2,"type":"hello"}"#)
     }
 
     @Test func aWelcomeIsConnected() {
         let status = DaemonWire.status(fromReply: json(
-            #"{"type":"welcome","protocol":1,"daemon_version":"0.1.0","host":"local"}"#
+            #"{"type":"welcome","protocol":2,"daemon_version":"0.1.0","host":"local"}"#
         ))
 
-        #expect(status == .connected(DaemonInfo(daemonVersion: "0.1.0", protocolVersion: 1, host: "local")))
+        #expect(status == .connected(DaemonInfo(daemonVersion: "0.1.0", protocolVersion: 2, host: "local")))
     }
 
     @Test func anIncompatibleReplyKeepsBothRangesToShow() {
@@ -70,5 +70,52 @@ import Testing
             Issue.record("expected unavailable for \(reply)")
             return
         }
+    }
+
+    // MARK: - Git
+
+    @Test func aGitRequestIsOneFlatObject() {
+        let payload = DaemonWire.gitRequest(id: 7, op: "repository_kind", arguments: ["path": "/r"])
+
+        #expect(String(decoding: payload, as: UTF8.self)
+            == #"{"id":7,"op":"repository_kind","path":"/r","type":"git_request"}"#)
+    }
+
+    @Test func aGitResultIsTheResultOfTheMatchingResponse() throws {
+        let result = try DaemonWire.gitResult(
+            fromReply: json(#"{"type":"git_response","id":7,"result":{"kind":"bare"}}"#), id: 7
+        )
+
+        #expect(result["kind"] as? String == "bare")
+    }
+
+    @Test func aGitErrorIsWhatTheDaemonSaid() {
+        #expect(throws: GitClientError.commandFailed("no")) {
+            try DaemonWire.gitResult(
+                fromReply: json(#"{"type":"git_response","id":7,"error":{"code":"failed","message":"no"}}"#), id: 7
+            )
+        }
+    }
+
+    @Test(arguments: [
+        "not json",
+        #"{"type":"git_response","id":8,"result":{}}"#,
+        #"{"type":"welcome","id":7}"#,
+        #"{"type":"git_response","id":7}"#,
+    ])
+    func aReplyThatIsNotTheAnswerIsAFailure(reply: String) {
+        #expect(throws: GitClientError.self) {
+            try DaemonWire.gitResult(fromReply: json(reply), id: 7)
+        }
+    }
+
+    @Test func repositoryKindsReadBack() {
+        #expect(DaemonWire.repositoryKind(fromResult: ["kind": "main_working_tree"]) == .mainWorkingTree)
+        #expect(DaemonWire.repositoryKind(fromResult: ["kind": "bare"]) == .bare)
+        #expect(DaemonWire.repositoryKind(fromResult: ["kind": "not_a_repository"]) == .notARepository)
+        #expect(DaemonWire.repositoryKind(fromResult: ["kind": "linked_worktree", "main_repository": "/r"])
+            == .linkedWorktree(mainRepository: URL(filePath: "/r", directoryHint: .isDirectory).resolvingSymlinksInPath()))
+        #expect(DaemonWire.repositoryKind(fromResult: ["kind": "linked_worktree"]) == nil)
+        #expect(DaemonWire.repositoryKind(fromResult: ["kind": "mystery"]) == nil)
     }
 }

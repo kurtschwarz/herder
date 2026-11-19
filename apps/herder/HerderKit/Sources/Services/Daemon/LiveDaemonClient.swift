@@ -15,6 +15,13 @@ import Synchronization
 /// lives, which is what keeps the daemon from exiting idle while the app runs.
 /// Nothing is sent over it yet.
 public final class LiveDaemonClient: DaemonClient {
+    public enum DaemonRequestError: Error, Equatable {
+        /// Nothing answered, or what answered would not shake hands.
+        case unreachable
+        /// The daemon took the request and then closed or timed out.
+        case noReply
+    }
+
     /// Starts `executable` with `arguments`, detached, and returns its pid.
     public typealias Launch = @Sendable (_ executable: URL, _ arguments: [String]) throws -> pid_t
 
@@ -109,6 +116,37 @@ public final class LiveDaemonClient: DaemonClient {
         return .unavailable(reason: "herderd was started but did not answer.")
     }
 
+    /// One connection per request: the handshake, the request, the reply, and
+    /// the connection closed. Requests then run side by side without anything
+    /// in the app tying a reply to a request, which the daemon's workers would
+    /// otherwise answer out of order.
+    @concurrent
+    public func request(_ payload: Data) async throws -> Data {
+        let path = socketURL.path(percentEncoded: false)
+        guard Self.fits(path) else { throw DaemonRequestError.unreachable }
+
+        var descriptor = Self.open(path, receiveTimeout: Self.requestTimeout)
+        if descriptor == nil {
+            guard case .connected = await connect() else { throw DaemonRequestError.unreachable }
+            descriptor = Self.open(path, receiveTimeout: Self.requestTimeout)
+        }
+        guard let descriptor else { throw DaemonRequestError.unreachable }
+        defer { close(descriptor) }
+
+        guard Self.writeAll(descriptor, DaemonWire.hello(client: client)),
+              let welcome = Self.readFrame(descriptor),
+              case .connected = DaemonWire.status(fromReply: welcome)
+        else { throw DaemonRequestError.unreachable }
+
+        guard Self.writeAll(descriptor, DaemonWire.frame(payload)), let reply = Self.readFrame(descriptor) else {
+            throw DaemonRequestError.noReply
+        }
+        return reply
+    }
+
+    /// Long enough for git to walk a large repository.
+    private static let requestTimeout = 120
+
     // MARK: - Socket
 
     private static func fits(_ path: String) -> Bool {
@@ -118,7 +156,7 @@ public final class LiveDaemonClient: DaemonClient {
     /// `nil` when nothing is listening, so the caller can start the daemon.
     /// Once something is, every outcome is a status.
     private func handshake(path: String) -> DaemonStatus? {
-        guard let descriptor = Self.open(path) else { return nil }
+        guard let descriptor = Self.open(path, receiveTimeout: 2) else { return nil }
         var keep = false
         defer { if !keep { close(descriptor) } }
 
@@ -143,14 +181,15 @@ public final class LiveDaemonClient: DaemonClient {
         return status
     }
 
-    private static func open(_ path: String) -> Int32? {
+    private static func open(_ path: String, receiveTimeout: Int) -> Int32? {
         let descriptor = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard descriptor >= 0 else { return nil }
 
-        var timeout = timeval(tv_sec: 2, tv_usec: 0)
+        var timeout = timeval(tv_sec: receiveTimeout, tv_usec: 0)
+        var sendTimeout = timeval(tv_sec: 2, tv_usec: 0)
         var on: Int32 = 1
         setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-        setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &sendTimeout, socklen_t(MemoryLayout<timeval>.size))
         setsockopt(descriptor, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
 
         var address = sockaddr_un()
@@ -181,6 +220,13 @@ public final class LiveDaemonClient: DaemonClient {
             }
             return true
         }
+    }
+
+    private static func readFrame(_ descriptor: Int32) -> Data? {
+        guard let header = readExactly(descriptor, DaemonWire.headerSize),
+              let length = DaemonWire.payloadLength(header: header)
+        else { return nil }
+        return readExactly(descriptor, length)
     }
 
     private static func readExactly(_ descriptor: Int32, _ count: Int) -> Data? {

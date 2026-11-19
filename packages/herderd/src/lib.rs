@@ -6,6 +6,7 @@
 //! socket.
 
 pub mod frame;
+pub mod git;
 pub mod idle;
 pub mod protocol;
 pub mod session;
