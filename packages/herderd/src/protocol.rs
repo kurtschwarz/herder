@@ -355,7 +355,7 @@ pub struct GitError {
 /// holds the token, and `message` never quotes it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
-pub enum GitHubConnection {
+pub enum GitHubCheck {
     /// The daemon holds no token.
     NotConnected,
     /// The token works, and belongs to `login`.
@@ -400,7 +400,7 @@ pub enum DaemonMessage {
     /// The outcome of a GitHub message, with the same `id`. Carries what the
     /// daemon found out, never the token.
     #[serde(rename = "github_response")]
-    GitHubResponse { id: u64, connection: GitHubConnection },
+    GitHubResponse { id: u64, check: GitHubCheck },
 }
 
 /// The highest version both sides speak, if there is one.
@@ -464,11 +464,11 @@ mod tests {
     fn a_github_response_names_the_state_and_no_token() {
         let reply = DaemonMessage::GitHubResponse {
             id: 4,
-            connection: GitHubConnection::Ok { login: "kurt".into() },
+            check: GitHubCheck::Ok { login: "kurt".into() },
         };
         assert_eq!(
             serde_json::to_string(&reply).unwrap(),
-            r#"{"type":"github_response","id":4,"connection":{"state":"ok","login":"kurt"}}"#
+            r#"{"type":"github_response","id":4,"check":{"state":"ok","login":"kurt"}}"#
         );
     }
 

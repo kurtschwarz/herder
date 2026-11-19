@@ -26,7 +26,7 @@ final class GitHubDaemon: Sendable {
             default:
                 connection = #"{"state":"not_connected"}"#
             }
-            return Data(#"{"type":"github_response","id":\#(id),"connection":\#(connection)}"#.utf8)
+            return Data(#"{"type":"github_response","id":\#(id),"check":\#(connection)}"#.utf8)
         }
     }
 
@@ -381,6 +381,18 @@ func seconds(_ duration: Duration) -> Double {
 
         #expect(model.state == .notConnected)
         #expect(model.lastError == nil)
+    }
+
+    @Test func aSignInCancelledAsItsAnswerArrivesIsNotUsed() async {
+        let model = model
+        auth.script(polls: [.success(.signedIn(tokens("fresh")))])
+        auth.onPoll { MainActor.assumeIsolated { model.cancelSignIn() } }
+
+        await model.signIn()
+
+        #expect(model.state == .notConnected)
+        #expect(vault.tokens == nil)
+        #expect(daemon.tokensHandedOver.isEmpty)
     }
 
     // MARK: - Signing out

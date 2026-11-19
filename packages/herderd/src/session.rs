@@ -4,8 +4,8 @@ use crate::frame::{read_frame, write_frame};
 use crate::git;
 use crate::github::GitHub;
 use crate::protocol::{
-    ClientMessage, DaemonMessage, GitHubConnection, GitOp, HostId, MAX_PROTOCOL, MIN_PROTOCOL,
-    Secret, negotiate,
+    ClientMessage, DaemonMessage, GitHubCheck, GitOp, HostId, MAX_PROTOCOL, MIN_PROTOCOL,
+    negotiate,
 };
 use std::io::{self, Read, Write};
 use std::sync::{Mutex, mpsc};
@@ -23,9 +23,9 @@ const OWNED_SESSIONS: u32 = 0;
 /// One request, waiting for a worker.
 enum Job {
     Git(u64, GitOp),
-    SetToken(u64, Secret),
-    ClearToken(u64),
     CheckGitHub(u64),
+    /// The token is already forgotten; this is only the answer.
+    ClearedGitHub(u64),
 }
 
 /// Serves one client until it hangs up. Takes a reader and a writer rather than
@@ -63,7 +63,11 @@ pub fn serve_with<R: Read, W: Write + Send>(
         }
         // Not a hello: the first message is always one, so this is not a
         // client of ours. Close without answering.
-        Ok(_) | Err(_) => {
+        Ok(ClientMessage::GitRequest { .. }
+        | ClientMessage::SetGitHubToken { .. }
+        | ClientMessage::ClearGitHubToken { .. }
+        | ClientMessage::CheckGitHub { .. })
+        | Err(_) => {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "expected hello"));
         }
     };
@@ -115,8 +119,17 @@ fn serve_requests<R: Read, W: Write + Send>(
                 // this daemon knows.
                 let job = match serde_json::from_slice(&frame) {
                     Ok(ClientMessage::GitRequest { id, op }) => Job::Git(id, op),
-                    Ok(ClientMessage::SetGitHubToken { id, token }) => Job::SetToken(id, token),
-                    Ok(ClientMessage::ClearGitHubToken { id }) => Job::ClearToken(id),
+                    // Stored and forgotten here, in the order they arrive, and
+                    // not on a worker: a set followed by a clear must end with
+                    // nothing held, and workers run in any order.
+                    Ok(ClientMessage::SetGitHubToken { id, token }) => {
+                        github.set_token(token);
+                        Job::CheckGitHub(id)
+                    }
+                    Ok(ClientMessage::ClearGitHubToken { id }) => {
+                        github.clear_token();
+                        Job::ClearedGitHub(id)
+                    }
                     Ok(ClientMessage::CheckGitHub { id }) => Job::CheckGitHub(id),
                     Ok(ClientMessage::Hello { .. }) | Err(_) => continue,
                 };
@@ -135,17 +148,10 @@ fn respond(job: Job, github: &GitHub) -> DaemonMessage {
             Ok(result) => DaemonMessage::GitResponse { id, result: Some(result), error: None },
             Err(error) => DaemonMessage::GitResponse { id, result: None, error: Some(error) },
         },
-        // Stored first and then checked, so a token the app has just refreshed
-        // is held even when GitHub cannot be reached to confirm it.
-        Job::SetToken(id, token) => {
-            github.set_token(token);
-            DaemonMessage::GitHubResponse { id, connection: github.check() }
+        Job::ClearedGitHub(id) => {
+            DaemonMessage::GitHubResponse { id, check: GitHubCheck::NotConnected }
         }
-        Job::ClearToken(id) => {
-            github.clear_token();
-            DaemonMessage::GitHubResponse { id, connection: GitHubConnection::NotConnected }
-        }
-        Job::CheckGitHub(id) => DaemonMessage::GitHubResponse { id, connection: github.check() },
+        Job::CheckGitHub(id) => DaemonMessage::GitHubResponse { id, check: github.check() },
     }
 }
 

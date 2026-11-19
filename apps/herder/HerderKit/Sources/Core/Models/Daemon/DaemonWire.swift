@@ -107,17 +107,17 @@ public enum DaemonWire {
         guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
               object["type"] as? String == "github_response",
               object["id"] as? Int == id,
-              let connection = object["connection"] as? [String: Any]
+              let check = object["check"] as? [String: Any]
         else { return .error("Unrecognised reply from herderd.") }
 
-        switch connection["state"] as? String {
+        switch check["state"] as? String {
         case "not_connected": return .notConnected
         case "unauthorized": return .unauthorized
         case "ok":
-            guard let login = connection["login"] as? String else { break }
+            guard let login = check["login"] as? String else { break }
             return .ok(login: login)
         case "error":
-            return .error(connection["message"] as? String ?? "GitHub could not be asked.")
+            return .error(check["message"] as? String ?? "GitHub could not be asked.")
         default: break
         }
         return .error("Unrecognised reply from herderd.")

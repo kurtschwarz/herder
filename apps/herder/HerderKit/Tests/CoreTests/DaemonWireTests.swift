@@ -110,10 +110,10 @@ import Testing
     }
 
     @Test(arguments: [
-        (#"{"type":"github_response","id":4,"connection":{"state":"ok","login":"kurt"}}"#, GitHubCheck.ok(login: "kurt")),
-        (#"{"type":"github_response","id":4,"connection":{"state":"unauthorized"}}"#, .unauthorized),
-        (#"{"type":"github_response","id":4,"connection":{"state":"not_connected"}}"#, .notConnected),
-        (#"{"type":"github_response","id":4,"connection":{"state":"error","message":"GitHub answered 502"}}"#, .error("GitHub answered 502")),
+        (#"{"type":"github_response","id":4,"check":{"state":"ok","login":"kurt"}}"#, GitHubCheck.ok(login: "kurt")),
+        (#"{"type":"github_response","id":4,"check":{"state":"unauthorized"}}"#, .unauthorized),
+        (#"{"type":"github_response","id":4,"check":{"state":"not_connected"}}"#, .notConnected),
+        (#"{"type":"github_response","id":4,"check":{"state":"error","message":"GitHub answered 502"}}"#, .error("GitHub answered 502")),
     ])
     func aGitHubResponseSaysWhatTheCheckFound(reply: String, expected: GitHubCheck) {
         #expect(DaemonWire.gitHubCheck(fromReply: json(reply), id: 4) == expected)
@@ -121,9 +121,9 @@ import Testing
 
     @Test(arguments: [
         "not json",
-        #"{"type":"github_response","id":9,"connection":{"state":"ok","login":"kurt"}}"#,
-        #"{"type":"github_response","id":4,"connection":{"state":"ok"}}"#,
-        #"{"type":"github_response","id":4,"connection":{"state":"mystery"}}"#,
+        #"{"type":"github_response","id":9,"check":{"state":"ok","login":"kurt"}}"#,
+        #"{"type":"github_response","id":4,"check":{"state":"ok"}}"#,
+        #"{"type":"github_response","id":4,"check":{"state":"mystery"}}"#,
         #"{"type":"git_response","id":4,"result":{}}"#,
     ])
     func anythingElseIsAnErrorNotAGuess(reply: String) {

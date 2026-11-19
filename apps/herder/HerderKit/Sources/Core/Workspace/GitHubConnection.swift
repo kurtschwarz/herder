@@ -24,6 +24,10 @@ public final class GitHubConnection {
     /// reach GitHub.
     public static let retryDelay: Duration = .seconds(60)
 
+    private static var leewaySeconds: TimeInterval { TimeInterval(refreshLeeway.components.seconds) }
+
+    private static let codeExpired = "The code expired before it was used."
+
     /// How much longer to wait between polls each time GitHub says `slow_down`.
     private static let slowDownStep: Duration = .seconds(5)
 
@@ -110,8 +114,7 @@ public final class GitHubConnection {
         do {
             code = try await auth.requestDeviceCode()
         } catch {
-            lastError = Self.describe(error)
-            state = previous == .checking ? .notConnected : previous
+            abandonSignIn(because: Self.describe(error), returningTo: previous)
             return
         }
         state = .signingIn(code)
@@ -127,12 +130,14 @@ public final class GitHubConnection {
                 case .slowDown:
                     interval += Self.slowDownStep
                 case .signedIn(let signedIn):
+                    // Signed out, or cancelled, while the answer was on its way.
+                    if Task.isCancelled { return abandonSignIn(because: nil, returningTo: previous) }
                     await finishSignIn(signedIn)
                     return
                 case .denied:
                     return abandonSignIn(because: "Sign-in was refused on GitHub.", returningTo: previous)
                 case .expired:
-                    return abandonSignIn(because: "The code expired before it was used.", returningTo: previous)
+                    return abandonSignIn(because: Self.codeExpired, returningTo: previous)
                 }
             } catch is CancellationError {
                 break
@@ -143,7 +148,7 @@ public final class GitHubConnection {
         if Task.isCancelled {
             abandonSignIn(because: nil, returningTo: previous)
         } else {
-            abandonSignIn(because: "The code expired before it was used.", returningTo: previous)
+            abandonSignIn(because: Self.codeExpired, returningTo: previous)
         }
     }
 
@@ -212,8 +217,7 @@ public final class GitHubConnection {
     }
 
     private func isDue(_ tokens: GitHubTokens) -> Bool {
-        let leeway = Double(Self.refreshLeeway.components.seconds)
-        return tokens.accessExpiresAt.addingTimeInterval(-leeway) <= now()
+        return tokens.accessExpiresAt.addingTimeInterval(-Self.leewaySeconds) <= now()
     }
 
     /// Replaces the tokens and hands herderd the new access token. `false`
@@ -224,6 +228,9 @@ public final class GitHubConnection {
         guard let current = tokens else { return false }
         do {
             let renewed = try await auth.refresh(using: current.refreshToken)
+            // Signed out while GitHub was answering: the new tokens are not
+            // wanted, and saving them would undo the sign-out.
+            guard tokens?.refreshToken == current.refreshToken else { return false }
             // GitHub honours a refresh token once. Saved before anything else
             // can fail, so a crash after this does not strand the next launch.
             try vault.save(renewed)
@@ -268,8 +275,7 @@ public final class GitHubConnection {
     /// expiring.
     private func delayUntilDue() -> Duration {
         guard let tokens else { return .zero }
-        let leeway = Double(Self.refreshLeeway.components.seconds)
-        let seconds = tokens.accessExpiresAt.addingTimeInterval(-leeway).timeIntervalSince(now())
+        let seconds = tokens.accessExpiresAt.addingTimeInterval(-Self.leewaySeconds).timeIntervalSince(now())
         return .seconds(max(0, seconds))
     }
 
@@ -292,6 +298,12 @@ public final class GitHubConnection {
             check = DaemonWire.gitHubCheck(fromReply: reply, id: id)
         } catch {
             check = .error("herderd could not be reached.")
+        }
+
+        // Signed out while herderd was answering: it must not keep the token.
+        guard tokens != nil else {
+            await forgetInDaemon()
+            return
         }
 
         switch check {

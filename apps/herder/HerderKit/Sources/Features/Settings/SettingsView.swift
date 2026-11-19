@@ -18,7 +18,7 @@ public struct SettingsView: View {
 
     public init(
         agents: AgentCatalog, version: AppVersion, updater: (any UpdaterClient)?, daemon: DaemonConnection?,
-        github: GitHubConnection? = nil
+        github: GitHubConnection?
     ) {
         self.agents = agents
         self.version = version

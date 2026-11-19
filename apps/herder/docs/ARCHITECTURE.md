@@ -96,7 +96,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   ├── Vendor/                  # gitignored: HerderSyntaxFFI.xcframework (`just syntax`), GhosttyVt.xcframework (`just ghostty`)
 │   │   │   ├── Sources/
 │   │   │   │   ├── Core/
-│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Daemon/, Editor/, Files/, Git/, Processes/, Terminal/
+│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Daemon/, Editor/, Files/, Git/, GitHub/, Processes/, Terminal/
 │   │   │   │   │   ├── Services/        # service protocols
 │   │   │   │   │   ├── Workspace/       # WorkspaceRegistry, Workspace, snapshots, UI state
 │   │   │   │   │   ├── Repositories/    # RepositoryStore, RepositoryAccess
@@ -105,6 +105,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   │   ├── FileSystem/
 │   │   │   │   │   ├── Git/
 │   │   │   │   │   ├── Daemon/          # finds or starts herderd and does its handshake
+│   │   │   │   │   ├── GitHub/          # device flow over URLSession, and the Keychain item for the tokens
 │   │   │   │   │   ├── Process/         # PTY spawning
 │   │   │   │   │   ├── Agents/
 │   │   │   │   │   ├── Highlighting/    # wraps the syntax-highlighter bindings

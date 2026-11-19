@@ -4,7 +4,7 @@
 use herderd::frame::{read_frame, write_frame};
 use herderd::github::GitHub;
 use herderd::protocol::{
-    ClientMessage, DaemonMessage, GitHubConnection, MAX_PROTOCOL, MIN_PROTOCOL, Secret,
+    ClientMessage, DaemonMessage, GitHubCheck, MAX_PROTOCOL, MIN_PROTOCOL, Secret,
 };
 use herderd::session::serve_with;
 use std::io::{Cursor, Read, Write};
@@ -72,7 +72,7 @@ fn a_working_token_reports_its_login() {
     let server = stub(200, r#"{"data":{"viewer":{"login":"kurt"}}}"#);
     let github = connected(&server.endpoint);
 
-    assert_eq!(github.check(), GitHubConnection::Ok { login: "kurt".into() });
+    assert_eq!(github.check(), GitHubCheck::Ok { login: "kurt".into() });
 
     let request = server.requests.recv().unwrap();
     assert!(request.starts_with("POST /graphql"));
@@ -87,14 +87,14 @@ fn a_working_token_reports_its_login() {
 #[test]
 fn a_401_is_unauthorized() {
     let server = stub(401, r#"{"message":"Bad credentials"}"#);
-    assert_eq!(connected(&server.endpoint).check(), GitHubConnection::Unauthorized);
+    assert_eq!(connected(&server.endpoint).check(), GitHubCheck::Unauthorized);
 }
 
 #[test]
 fn a_server_error_is_an_error_naming_the_status() {
     let server = stub(502, "");
     match connected(&server.endpoint).check() {
-        GitHubConnection::Error { message } => assert!(message.contains("502"), "{message}"),
+        GitHubCheck::Error { message } => assert!(message.contains("502"), "{message}"),
         other => panic!("unexpected: {other:?}"),
     }
 }
@@ -104,7 +104,7 @@ fn a_graphql_error_is_an_error_with_its_message() {
     let server = stub(200, r#"{"errors":[{"message":"Something broke"}]}"#);
     assert_eq!(
         connected(&server.endpoint).check(),
-        GitHubConnection::Error { message: "Something broke".into() }
+        GitHubCheck::Error { message: "Something broke".into() }
     );
 }
 
@@ -115,7 +115,7 @@ fn nothing_listening_is_an_error() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         format!("http://{}/graphql", listener.local_addr().unwrap())
     };
-    assert!(matches!(connected(&endpoint).check(), GitHubConnection::Error { .. }));
+    assert!(matches!(connected(&endpoint).check(), GitHubCheck::Error { .. }));
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn an_error_never_quotes_the_token() {
         ),
     );
     match connected(&server.endpoint).check() {
-        GitHubConnection::Error { message } => {
+        GitHubCheck::Error { message } => {
             assert!(!message.contains(TOKEN), "{message}");
             assert!(message.contains("<redacted>"));
         }
@@ -140,7 +140,7 @@ fn without_a_token_it_is_not_connected_and_asks_nobody() {
     let server = stub(200, "{}");
     let github = GitHub::new(&server.endpoint);
 
-    assert_eq!(github.check(), GitHubConnection::NotConnected);
+    assert_eq!(github.check(), GitHubCheck::NotConnected);
     assert!(server.requests.try_recv().is_err());
 }
 
@@ -150,7 +150,7 @@ fn clearing_forgets_the_token() {
     let github = connected(&server.endpoint);
     github.clear_token();
 
-    assert_eq!(github.check(), GitHubConnection::NotConnected);
+    assert_eq!(github.check(), GitHubCheck::NotConnected);
 }
 
 fn exchange(github: &GitHub, messages: &[ClientMessage]) -> (Vec<DaemonMessage>, Vec<u8>) {
@@ -188,7 +188,7 @@ fn setting_a_token_answers_with_what_the_check_found_and_never_the_token() {
         replies[1],
         DaemonMessage::GitHubResponse {
             id: 3,
-            connection: GitHubConnection::Ok { login: "kurt".into() }
+            check: GitHubCheck::Ok { login: "kurt".into() }
         }
     );
     assert!(!String::from_utf8_lossy(&raw).contains(TOKEN));
@@ -206,7 +206,7 @@ fn the_token_outlives_the_connection_that_set_it() {
         replies[1],
         DaemonMessage::GitHubResponse {
             id: 2,
-            connection: GitHubConnection::Ok { login: "kurt".into() }
+            check: GitHubCheck::Ok { login: "kurt".into() }
         }
     );
 }
@@ -220,7 +220,31 @@ fn clearing_over_the_wire_leaves_nothing_to_check() {
     let (checked, _) = exchange(&github, &[ClientMessage::CheckGitHub { id: 2 }]);
 
     let not_connected =
-        |id| DaemonMessage::GitHubResponse { id, connection: GitHubConnection::NotConnected };
+        |id| DaemonMessage::GitHubResponse { id, check: GitHubCheck::NotConnected };
     assert_eq!(cleared[1], not_connected(1));
     assert_eq!(checked[1], not_connected(2));
+}
+
+#[test]
+fn a_set_followed_by_a_clear_on_one_connection_leaves_nothing_held() {
+    let server = stub(200, r#"{"data":{"viewer":{"login":"kurt"}}}"#);
+    let github = GitHub::new(&server.endpoint);
+
+    // Workers answer in any order, so the order the token is stored and
+    // forgotten in must not depend on them.
+    for round in 0..20 {
+        exchange(
+            &github,
+            &[
+                ClientMessage::SetGitHubToken { id: 1, token: Secret::new(TOKEN) },
+                ClientMessage::ClearGitHubToken { id: 2 },
+            ],
+        );
+        let (replies, _) = exchange(&github, &[ClientMessage::CheckGitHub { id: 3 }]);
+        assert_eq!(
+            replies[1],
+            DaemonMessage::GitHubResponse { id: 3, check: GitHubCheck::NotConnected },
+            "round {round}"
+        );
+    }
 }

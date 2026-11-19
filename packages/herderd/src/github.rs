@@ -8,7 +8,7 @@
 //! the caller runs it on a worker, and it takes the GraphQL endpoint as a
 //! parameter so a test can point it at a stub.
 
-use crate::protocol::{GitHubConnection, Secret};
+use crate::protocol::{GitHubCheck, Secret};
 use serde::Deserialize;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -57,9 +57,9 @@ impl GitHub {
     }
 
     /// Runs a `viewer` query with the token held and says what came of it.
-    pub fn check(&self) -> GitHubConnection {
+    pub fn check(&self) -> GitHubCheck {
         let Some(token) = self.token.lock().ok().and_then(|held| held.clone()) else {
-            return GitHubConnection::NotConnected;
+            return GitHubCheck::NotConnected;
         };
 
         let response = self
@@ -76,13 +76,13 @@ impl GitHub {
         };
 
         match response.status().as_u16() {
-            401 => return GitHubConnection::Unauthorized,
+            401 => return GitHubCheck::Unauthorized,
             200 => {}
             status => return failure(&token, format!("GitHub answered {status}")),
         }
         match response.body_mut().read_json::<Reply>() {
             Ok(Reply { data: Some(Data { viewer: Viewer { login } }), .. }) => {
-                GitHubConnection::Ok { login }
+                GitHubCheck::Ok { login }
             }
             Ok(Reply { errors, .. }) => {
                 let first = errors.into_iter().flatten().next().map(|error| error.message);
@@ -93,8 +93,8 @@ impl GitHub {
     }
 }
 
-fn failure(token: &Secret, message: String) -> GitHubConnection {
-    GitHubConnection::Error { message: message.replace(token.expose(), "<redacted>") }
+fn failure(token: &Secret, message: String) -> GitHubCheck {
+    GitHubCheck::Error { message: message.replace(token.expose(), "<redacted>") }
 }
 
 #[derive(Deserialize)]
