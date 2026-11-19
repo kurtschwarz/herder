@@ -110,6 +110,16 @@ pub enum GitOp {
         file: String,
         revision: String,
     },
+    /// Adds a working tree at `worktree` on a new branch cut from `base`. When
+    /// `exclude` names a folder directly inside the repository, it is added to
+    /// `.git/info/exclude` first so the new tree does not show as untracked.
+    AddWorktree {
+        path: String,
+        worktree: String,
+        new_branch: String,
+        base: String,
+        exclude: Option<String>,
+    },
 }
 
 /// What a working tree has checked out.
@@ -283,6 +293,9 @@ pub enum GitResult {
     /// `null` when the file is not in that revision, or is not UTF-8.
     Contents {
         text: Option<String>,
+    },
+    AddedWorktree {
+        worktree: String,
     },
 }
 

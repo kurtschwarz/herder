@@ -364,3 +364,46 @@ fn nothing_here_answers_outside_a_working_tree() {
     assert_eq!(merge_base(&plain, "HEAD"), None);
     assert!(changed_files(&plain, "HEAD").is_empty());
 }
+
+#[test]
+fn origin_head_comes_first_and_one_that_does_not_exist_is_skipped() {
+    let fixture = Fixture::new();
+    let origin = fixture.directory("origin");
+    fixture.git(&["init", "--initial-branch=trunk"], &origin);
+    fixture.commit_something_as_tester(&origin);
+    let clone = fixture.root().join("clone");
+    fixture.git(&["clone", s(&origin).as_str(), s(&clone).as_str()], &fixture.root());
+    fixture.git(&["checkout", "-b", "feature"], &clone);
+
+    assert_eq!(upstream(&clone), Some("origin/trunk".into()));
+
+    // `origin/HEAD` still names it, but it no longer exists.
+    fixture.git(&["update-ref", "-d", "refs/remotes/origin/trunk"], &clone);
+    assert_eq!(upstream(&clone), None);
+    fixture.git(&["branch", "main"], &clone);
+    assert_eq!(upstream(&clone), Some("main".into()));
+}
+
+#[test]
+fn refs_are_sorted_newest_tip_first() {
+    let fixture = Fixture::new();
+    let repo = fixture.repository("dated");
+    fixture.git(&["checkout", "-b", "old"], &repo);
+    write(repo.join("README.md"), "old");
+    fixture.git_at(&["commit", "-am", "old"], &repo, "2001-01-01T00:00:00Z");
+    fixture.git(&["checkout", "main"], &repo);
+
+    let names: Vec<_> = refs(&repo).into_iter().map(|r| r.name).collect();
+
+    assert_eq!(names, ["main", "old"]);
+}
+
+#[test]
+fn a_subject_that_holds_separators_is_kept_whole() {
+    let fixture = Fixture::new();
+    let repo = fixture.repository("subject");
+    write(repo.join("README.md"), "y");
+    fixture.git(&["commit", "-am", "fix: a\tb | c"], &repo);
+
+    assert_eq!(recent_commits(&repo, 1)[0].subject, "fix: a\tb | c");
+}

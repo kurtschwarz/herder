@@ -3,7 +3,7 @@ import Foundation
 @testable import Services
 import Testing
 
-/// The diff and history scenarios of `LiveGitClientTests` (`changeSummary`,
+/// The diff and history scenarios of the old `LiveGitClient` tests (`changeSummary`,
 /// `mergeBase`, `upstream`, `shortstat`, `changedFiles`, `refs`, `recentCommits`,
 /// `commit`, `contents`), against a live `herderd`. `packages/herderd/tests/history.rs`
 /// runs the same scenarios against the daemon alone.

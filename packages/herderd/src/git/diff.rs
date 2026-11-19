@@ -137,6 +137,46 @@ mod tests {
     }
 
     #[test]
+    fn shortstat_reads_a_singular_count_and_a_missing_one() {
+        assert_eq!(
+            parse_shortstat(" 1 file changed, 1 insertion(+), 1 deletion(-)\n"),
+            ChangeSummary { insertions: 1, deletions: 1 }
+        );
+        assert_eq!(
+            parse_shortstat(" 1 file changed, 4 insertions(+)\n"),
+            ChangeSummary { insertions: 4, deletions: 0 }
+        );
+    }
+
+    fn file(path: &str, status: FileChange, insertions: u64, deletions: u64) -> ChangedFile {
+        ChangedFile { path: path.into(), previous_path: None, status, insertions, deletions }
+    }
+
+    #[test]
+    fn changed_files_join_status_and_counts_and_sort_by_path() {
+        let names = "M\0b/z.swift\0A\0a.txt\0D\0gone.txt\0";
+        let counts = "3\t1\tb/z.swift\x005\t0\ta.txt\x000\t7\tgone.txt\0";
+
+        assert_eq!(
+            parse_changed_files(names, counts),
+            vec![
+                file("a.txt", FileChange::Added, 5, 0),
+                file("b/z.swift", FileChange::Modified, 3, 1),
+                file("gone.txt", FileChange::Deleted, 0, 7),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_binary_file_counts_no_lines_and_no_output_is_no_files() {
+        assert_eq!(
+            parse_changed_files("M\0logo.png\0", "-\t-\tlogo.png\0"),
+            vec![file("logo.png", FileChange::Modified, 0, 0)]
+        );
+        assert!(parse_changed_files("", "").is_empty());
+    }
+
+    #[test]
     fn changed_files_join_status_and_counts_and_follow_renames() {
         let names = "M\0a.txt\0R100\0old.txt\0new.txt\0A\0b.bin\0";
         let counts = "1\t2\ta.txt\0-\t-\tb.bin\x003\t4\t\0old.txt\0new.txt\0";

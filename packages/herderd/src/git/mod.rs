@@ -12,6 +12,7 @@ mod kind;
 mod layout;
 mod natural;
 mod status;
+mod worktree_add;
 
 use crate::protocol::{GitError, GitOp, GitResult};
 
@@ -50,6 +51,10 @@ pub fn handle(op: &GitOp) -> Result<GitResult, GitError> {
         }
         GitOp::Commit { path, revision } => {
             Ok(GitResult::Commit { commit: history::commit(path, revision) })
+        }
+        GitOp::AddWorktree { path, worktree, new_branch, base, exclude } => {
+            worktree_add::add(path, worktree, new_branch, base, exclude.as_deref())
+                .map(|worktree| GitResult::AddedWorktree { worktree })
         }
         GitOp::Contents { path, file, revision } => {
             Ok(GitResult::Contents { text: history::contents(path, file, revision) })

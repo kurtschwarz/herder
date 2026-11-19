@@ -4,21 +4,16 @@ import Synchronization
 
 /// `GitClient` that asks herderd, bound to the one host it runs on. See ADR 0002.
 ///
-/// Everything but `addWorktree` goes to the daemon. That one is still answered
-/// by `local`, a `LiveGitClient`, until it is ported; then `local` and
-/// `LiveGitClient` are deleted and the daemon being unreachable is the only way
-/// a call fails.
+/// Every call goes to the daemon, and there is no fallback to running git here:
+/// when the daemon is unreachable after the connect-or-spawn retry, a call
+/// throws `GitClientError.commandFailed("herderd is not running")`.
 public struct DaemonGitClient: GitClient {
     private let daemon: any DaemonClient
-    private let local: LiveGitClient
     private let nextID = Counter()
 
-    public init(daemon: any DaemonClient, local: LiveGitClient = LiveGitClient()) {
+    public init(daemon: any DaemonClient) {
         self.daemon = daemon
-        self.local = local
     }
-
-    // MARK: - Moved
 
     public func repositoryKind(at url: URL) async throws -> GitRepositoryKind {
         let result = try await ask("repository_kind", ["path": url.path(percentEncoded: false)])
@@ -115,10 +110,19 @@ public struct DaemonGitClient: GitClient {
         return commit
     }
 
-    // MARK: - Still local
-
     public func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {
-        try await local.addWorktree(in: repository, at: path, newBranch: newBranch, from: base)
+        // Before resolving: `path` was built from `repository` as the caller
+        // had it, so that is the pair that compares.
+        var arguments: [String: Any] = [
+            "path": repository.resolvingSymlinksInPath().path(percentEncoded: false),
+            "worktree": path.path(percentEncoded: false),
+            "new_branch": newBranch,
+            "base": base,
+        ]
+        if let excluded = GitWorktreeLocation.topLevelFolder(of: path, inRepository: repository) {
+            arguments["exclude"] = excluded
+        }
+        _ = try await ask("add_worktree", arguments)
     }
 
     // MARK: - The daemon

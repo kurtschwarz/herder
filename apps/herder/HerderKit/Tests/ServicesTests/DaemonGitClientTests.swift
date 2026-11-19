@@ -4,7 +4,7 @@ import Foundation
 @testable import Services
 import Testing
 
-/// The scenarios of `LiveGitClientTests`, against a live `herderd`. The layout
+/// The scenarios the app's old `LiveGitClient` tests held, against a live `herderd`. The layout
 /// and status ones are here and the diff and history ones in
 /// `DaemonGitClientHistoryTests.swift`; `packages/herderd/tests/` runs the same
 /// scenarios against the daemon alone. Skipped, like the daemon client tests,
@@ -430,6 +430,125 @@ import Testing
         try write("x", to: plain.appending(path: "a.log"))
 
         #expect(try await client.status(in: plain).entries.isEmpty)
+    }
+
+    // MARK: - addWorktree
+
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func addingAWorktreeCreatesItOnANewBranch() async throws {
+        defer { stop() }
+        let repository = try fixture.makeRepository("repo")
+        let path = GitWorktreeLocation.path(
+            forBranch: "agent/add-minimap", inRepository: repository, kind: .mainWorkingTree
+        )!
+
+        try await client.addWorktree(in: repository, at: path, newBranch: "agent/add-minimap", from: "main")
+
+        let trees = try await client.worktrees(at: repository)
+        #expect(trees.map(\.checkout) == [.branch("main"), .branch("agent/add-minimap")])
+        #expect(trees.last?.path == path.resolvingSymlinksInPath())
+        #expect(path.pathComponents.suffix(2) == ["agent", "add-minimap"])
+    }
+
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func aNestedWorktreeExcludesTheFolderItSitsIn() async throws {
+        defer { stop() }
+        let repository = try fixture.makeRepository("repo")
+        let path = GitWorktreeLocation.path(
+            forBranch: "agent/add-minimap", inRepository: repository, kind: .mainWorkingTree
+        )!
+
+        try await client.addWorktree(in: repository, at: path, newBranch: "agent/add-minimap", from: "main")
+
+        #expect(try fixture.git("status", "--porcelain", in: repository).isEmpty)
+        let exclude = try String(contentsOf: repository.appending(path: ".git/info/exclude"), encoding: .utf8)
+        // The folder git made for the branch family, not the worktree itself.
+        #expect(exclude.split(separator: "\n").contains("/agent/"))
+    }
+
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func theWorktreeFolderStaysOutOfGitStatus() async throws {
+        defer { stop() }
+        let repository = try fixture.makeRepository("repo")
+        for branch in ["feature", "other"] {
+            let path = GitWorktreeLocation.path(forBranch: branch, inRepository: repository, kind: .mainWorkingTree)!
+            try await client.addWorktree(in: repository, at: path, newBranch: branch, from: "main")
+        }
+
+        #expect(try fixture.git("status", "--porcelain", in: repository).isEmpty)
+        let exclude = try String(contentsOf: repository.appending(path: ".git/info/exclude"), encoding: .utf8)
+        #expect(exclude.split(separator: "\n").filter { $0 == "/feature/" || $0 == "/other/" }.count == 2)
+    }
+
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func addingToABareRepositoryPutsTheWorktreeBesideTheRest() async throws {
+        defer { stop() }
+        let bare = try fixture.makeDirectory("origin.git")
+        try fixture.git("init", "--bare", "--initial-branch=main", in: bare)
+        try fixture.seed(bare, as: "origin")
+
+        let path = GitWorktreeLocation.path(forBranch: "feature", inRepository: bare, kind: .bare)!
+        try await client.addWorktree(in: bare, at: path, newBranch: "feature", from: "main")
+
+        let trees = try await client.worktrees(at: bare)
+        #expect(trees.map(\.checkout) == [.branch("feature")])
+        #expect(path.deletingLastPathComponent().standardizedFileURL == bare.standardizedFileURL)
+    }
+
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func addingToAProjectWhoseDotGitIsBareCreatesASiblingAndLeavesTheExcludeFileAlone() async throws {
+        defer { stop() }
+        let project = try fixture.makeDirectory("project")
+        let dotGit = project.appending(path: ".git")
+        try FileManager.default.createDirectory(at: dotGit, withIntermediateDirectories: true)
+        try fixture.git("init", "--bare", "--initial-branch=main", in: dotGit)
+        try fixture.seed(dotGit, as: "project")
+        try fixture.git("worktree", "add", "main", "main", in: project)
+        let path = GitWorktreeLocation.path(forBranch: "feature", inRepository: project, kind: .bare)!
+
+        try await client.addWorktree(in: project, at: path, newBranch: "feature", from: "main")
+
+        let trees = try await client.worktrees(at: project)
+        #expect(trees.map(\.checkout) == [.branch("feature"), .branch("main")])
+        #expect(path.deletingLastPathComponent().standardizedFileURL == project.standardizedFileURL)
+        let exclude = try? String(contentsOf: project.appending(path: ".git/info/exclude"), encoding: .utf8)
+        #expect(exclude?.contains("/feature/") != true)
+    }
+
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func addingToADotBareLayoutCreatesAFolderBesideTheOthers() async throws {
+        defer { stop() }
+        let project = try fixture.makeDirectory("project")
+        let bare = project.appending(path: ".bare")
+        try FileManager.default.createDirectory(at: bare, withIntermediateDirectories: true)
+        try fixture.git("init", "--bare", "--initial-branch=main", in: bare)
+        try Data("gitdir: ./.bare\n".utf8).write(to: project.appending(path: ".git"))
+        try fixture.seed(bare, as: "project")
+        try fixture.git("worktree", "add", "main", "main", in: project)
+        let path = GitWorktreeLocation.path(forBranch: "feature", inRepository: project, kind: .bare)!
+
+        try await client.addWorktree(in: project, at: path, newBranch: "feature", from: "main")
+
+        let trees = try await client.worktrees(at: project)
+        #expect(trees.map(\.checkout) == [.branch("feature"), .branch("main")])
+        #expect(path.deletingLastPathComponent().standardizedFileURL == project.standardizedFileURL)
+    }
+
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func gitsRefusalComesBackAsTheError() async throws {
+        defer { stop() }
+        let repository = try fixture.makeRepository("repo")
+        let path = GitWorktreeLocation.path(forBranch: "main", inRepository: repository, kind: .mainWorkingTree)!
+
+        let error = await #expect(throws: GitClientError.self) {
+            try await client.addWorktree(in: repository, at: path, newBranch: "main", from: "main")
+        }
+
+        guard case .commandFailed(let message)? = error else {
+            Issue.record("expected commandFailed")
+            return
+        }
+        #expect(message.contains("already exists"))
     }
 
     @Test func anUnreachableDaemonIsAnError() async {

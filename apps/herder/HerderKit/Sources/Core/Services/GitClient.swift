@@ -14,8 +14,7 @@ public protocol GitClient: Sendable {
 
     /// Adds a working tree at `path` on a new branch cut from `base`.
     ///
-    /// Changes the repository, unlike everything else here, so it runs `git`
-    /// itself rather than reproducing what `git worktree add` writes.
+    /// Changes the repository, unlike everything else here.
     func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws
 
     /// Where the working tree at `url` keeps its `index` and its `HEAD`.
@@ -46,7 +45,7 @@ public protocol GitClient: Sendable {
     func status(in worktree: URL) async throws -> GitWorktreeStatus
 
     /// Lines inserted and deleted in the working tree at `worktree` since it
-    /// forked from the repository's default branch (see ``GitDefaultBranch``):
+    /// forked from the repository's default branch (`origin/HEAD`, else `main`, else `master`):
     /// committed and uncommitted changes to tracked files alike, which is `git
     /// diff --shortstat` against the merge-base. Untracked files are not
     /// counted. `nil` for a folder that is not a working tree, or when there is
@@ -66,7 +65,7 @@ public protocol GitClient: Sendable {
     func mergeBase(of ref: String, in worktree: URL) async throws -> String?
 
     /// What the branch checked out in `worktree` tracks, such as `origin/main`,
-    /// or the repository's default branch (see ``GitDefaultBranch``) when it
+    /// or the repository's default branch (`origin/HEAD`, else `main`, else `master`) when it
     /// tracks nothing. `nil` when there is neither.
     func upstream(in worktree: URL) async throws -> String?
 

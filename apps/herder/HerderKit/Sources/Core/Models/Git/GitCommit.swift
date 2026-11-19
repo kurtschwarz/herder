@@ -14,13 +14,4 @@ public struct GitCommit: Equatable, Sendable {
 
     /// The first seven characters, which is what a person reads and types.
     public var shortSHA: String { String(sha.prefix(7)) }
-
-    /// Reads `git log --format=%H%x00%ct%x00%s`, one commit per line.
-    public static func parse(_ output: String) -> [GitCommit] {
-        output.split(separator: "\n").compactMap { line in
-            let parts = line.split(separator: "\0", maxSplits: 2, omittingEmptySubsequences: false)
-            guard parts.count == 3, let seconds = TimeInterval(parts[1]) else { return nil }
-            return GitCommit(sha: String(parts[0]), subject: String(parts[2]), date: Date(timeIntervalSince1970: seconds))
-        }
-    }
 }

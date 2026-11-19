@@ -47,6 +47,21 @@ impl Fixture {
         String::from_utf8_lossy(&output.stdout).into_owned()
     }
 
+    /// Runs git with the committer date fixed, for tests that need commits at
+    /// known times.
+    pub fn git_at(&self, args: &[&str], in_dir: &Path, date: &str) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(in_dir)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .env("GIT_COMMITTER_DATE", date)
+            .env("GIT_AUTHOR_DATE", date)
+            .output()
+            .expect("git runs");
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    }
+
     fn identify(&self, repo: &Path) {
         self.git(&["config", "user.email", "test@example.com"], repo);
         self.git(&["config", "user.name", "Test"], repo);
