@@ -56,12 +56,60 @@ pub enum ClientMessage {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum GitOp {
-    RepositoryKind { path: String },
-    Worktrees { path: String },
-    Branches { path: String },
-    GitDirectory { path: String },
-    Checkout { path: String },
-    Status { path: String },
+    RepositoryKind {
+        path: String,
+    },
+    Worktrees {
+        path: String,
+    },
+    Branches {
+        path: String,
+    },
+    GitDirectory {
+        path: String,
+    },
+    Checkout {
+        path: String,
+    },
+    Status {
+        path: String,
+    },
+    ChangeSummary {
+        path: String,
+    },
+    MergeBase {
+        path: String,
+        #[serde(rename = "ref")]
+        reference: String,
+    },
+    Upstream {
+        path: String,
+    },
+    Shortstat {
+        path: String,
+        since: String,
+    },
+    ChangedFiles {
+        path: String,
+        since: String,
+    },
+    Refs {
+        path: String,
+    },
+    RecentCommits {
+        path: String,
+        limit: usize,
+    },
+    Commit {
+        path: String,
+        revision: String,
+    },
+    /// `file` is a path on the host, which must lie inside the working tree.
+    Contents {
+        path: String,
+        file: String,
+        revision: String,
+    },
 }
 
 /// What a working tree has checked out.
@@ -105,6 +153,60 @@ pub enum PathStatus {
 pub struct StatusEntry {
     pub path: String,
     pub status: PathStatus,
+}
+
+/// Lines inserted and deleted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChangeSummary {
+    pub insertions: u64,
+    pub deletions: u64,
+}
+
+/// How a tracked file differs from a revision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileChange {
+    Modified,
+    Added,
+    Deleted,
+    Renamed,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChangedFile {
+    /// Relative to the working tree, with `/` separators.
+    pub path: String,
+    /// Where a renamed file was.
+    pub previous_path: Option<String>,
+    pub status: FileChange,
+    pub insertions: u64,
+    pub deletions: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RefKind {
+    Branch,
+    RemoteBranch,
+    Tag,
+}
+
+/// A branch or tag, with when its tip was committed.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Ref {
+    /// The short name: `main`, `origin/main`, `v1.2`.
+    pub name: String,
+    pub kind: RefKind,
+    /// Seconds since the Unix epoch.
+    pub date: f64,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Commit {
+    pub sha: String,
+    pub subject: String,
+    /// Seconds since the Unix epoch.
+    pub date: f64,
 }
 
 /// One working tree of a repository, in the order the sidebar shows them.
@@ -154,6 +256,33 @@ pub enum GitResult {
     Status {
         root: String,
         entries: Vec<StatusEntry>,
+    },
+    /// `null` for a folder that is not a working tree, or when git cannot say.
+    Summary {
+        summary: Option<ChangeSummary>,
+    },
+    /// `null` when the ref names nothing, or shares no history with `HEAD`.
+    MergeBase {
+        sha: Option<String>,
+    },
+    Upstream {
+        upstream: Option<String>,
+    },
+    ChangedFiles {
+        files: Vec<ChangedFile>,
+    },
+    Refs {
+        refs: Vec<Ref>,
+    },
+    Commits {
+        commits: Vec<Commit>,
+    },
+    Commit {
+        commit: Option<Commit>,
+    },
+    /// `null` when the file is not in that revision, or is not UTF-8.
+    Contents {
+        text: Option<String>,
     },
 }
 

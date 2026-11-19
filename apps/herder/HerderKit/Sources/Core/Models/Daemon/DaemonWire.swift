@@ -68,7 +68,7 @@ public enum DaemonWire {
 
     /// The payload of a `git_request`: `op` and its arguments in one flat
     /// object beside the `id`. Paths are strings on the daemon's host.
-    public static func gitRequest(id: Int, op: String, arguments: [String: String] = [:]) -> Data {
+    public static func gitRequest(id: Int, op: String, arguments: [String: Any] = [:]) -> Data {
         var message: [String: Any] = ["type": "git_request", "id": id, "op": op]
         for (key, value) in arguments { message[key] = value }
         return (try? JSONSerialization.data(withJSONObject: message, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
@@ -144,6 +144,107 @@ public enum DaemonWire {
         case "type_changed": .typeChanged
         default: nil
         }
+    }
+
+    /// What `summary` holds. `.some(nil)` is the daemon saying there is none.
+    public static func changeSummary(fromResult result: [String: Any]) -> GitChangeSummary?? {
+        nullable(result, "summary") { value in
+            guard let record = value as? [String: Any],
+                  let insertions = record["insertions"] as? Int,
+                  let deletions = record["deletions"] as? Int
+            else { return nil }
+            return GitChangeSummary(insertions: insertions, deletions: deletions)
+        }
+    }
+
+    public static func mergeBase(fromResult result: [String: Any]) -> String?? {
+        nullable(result, "sha") { $0 as? String }
+    }
+
+    public static func upstream(fromResult result: [String: Any]) -> String?? {
+        nullable(result, "upstream") { $0 as? String }
+    }
+
+    public static func contents(fromResult result: [String: Any]) -> String?? {
+        nullable(result, "text") { $0 as? String }
+    }
+
+    public static func commit(fromResult result: [String: Any]) -> GitCommit?? {
+        nullable(result, "commit") { commit(fromRecord: $0) }
+    }
+
+    public static func commits(fromResult result: [String: Any]) -> [GitCommit]? {
+        guard let records = result["commits"] as? [Any] else { return nil }
+        let commits = records.compactMap { commit(fromRecord: $0) }
+        return commits.count == records.count ? commits : nil
+    }
+
+    public static func refs(fromResult result: [String: Any]) -> [GitRef]? {
+        guard let records = result["refs"] as? [[String: Any]] else { return nil }
+        var refs: [GitRef] = []
+        for record in records {
+            guard let name = record["name"] as? String,
+                  let date = record["date"] as? Double,
+                  let kind = (record["kind"] as? String).flatMap(refKind)
+            else { return nil }
+            refs.append(GitRef(name: name, kind: kind, date: Date(timeIntervalSince1970: date)))
+        }
+        return refs
+    }
+
+    public static func changedFiles(fromResult result: [String: Any]) -> [GitChangedFile]? {
+        guard let records = result["files"] as? [[String: Any]] else { return nil }
+        var files: [GitChangedFile] = []
+        for record in records {
+            guard let path = record["path"] as? String,
+                  let status = (record["status"] as? String).flatMap(fileStatus),
+                  let insertions = record["insertions"] as? Int,
+                  let deletions = record["deletions"] as? Int
+            else { return nil }
+            files.append(GitChangedFile(
+                path: path,
+                previousPath: record["previous_path"] as? String,
+                status: status,
+                insertions: insertions,
+                deletions: deletions
+            ))
+        }
+        return files
+    }
+
+    private static func commit(fromRecord record: Any) -> GitCommit? {
+        guard let record = record as? [String: Any],
+              let sha = record["sha"] as? String,
+              let subject = record["subject"] as? String,
+              let date = record["date"] as? Double
+        else { return nil }
+        return GitCommit(sha: sha, subject: subject, date: Date(timeIntervalSince1970: date))
+    }
+
+    private static func refKind(_ name: String) -> GitRef.Kind? {
+        switch name {
+        case "branch": .branch
+        case "remote_branch": .remoteBranch
+        case "tag": .tag
+        default: nil
+        }
+    }
+
+    private static func fileStatus(_ name: String) -> GitChangedFile.Status? {
+        switch name {
+        case "modified": .modified
+        case "added": .added
+        case "deleted": .deleted
+        case "renamed": .renamed
+        default: nil
+        }
+    }
+
+    /// `.some(nil)` for a `null`, `nil` for a key that is missing or unreadable.
+    private static func nullable<T>(_ result: [String: Any], _ key: String, _ read: (Any) -> T?) -> T?? {
+        guard let value = result[key] else { return .none }
+        if value is NSNull { return .some(nil) }
+        return read(value).map { .some($0) }
     }
 
     /// What a `worktrees` result lists, in the daemon's order.

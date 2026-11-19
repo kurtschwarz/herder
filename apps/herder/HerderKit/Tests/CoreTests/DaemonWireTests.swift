@@ -180,4 +180,41 @@ import Testing
         #expect(DaemonWire.status(fromResult: bad, root: root) == nil)
         #expect(DaemonWire.status(fromResult: [:], root: root) == nil)
     }
+
+    @Test func nullableAnswersKeepNullApartFromAMissingOne() {
+        #expect(DaemonWire.mergeBase(fromResult: ["sha": "abc"]) == .some("abc"))
+        #expect(DaemonWire.mergeBase(fromResult: ["sha": NSNull()]) == .some(nil))
+        #expect(DaemonWire.mergeBase(fromResult: [:]) == nil)
+        #expect(DaemonWire.upstream(fromResult: ["upstream": NSNull()]) == .some(nil))
+        #expect(DaemonWire.contents(fromResult: ["text": "x"]) == .some("x"))
+        #expect(DaemonWire.changeSummary(fromResult: ["summary": NSNull()]) == .some(nil))
+        #expect(DaemonWire.changeSummary(fromResult: ["summary": ["insertions": 2, "deletions": 1]])
+            == .some(GitChangeSummary(insertions: 2, deletions: 1)))
+        #expect(DaemonWire.changeSummary(fromResult: ["summary": ["insertions": 2]]) == nil)
+    }
+
+    @Test func commitsRefsAndChangedFilesReadBack() throws {
+        let commit = ["sha": "abc", "subject": "first", "date": 10.0] as [String: Any]
+        #expect(DaemonWire.commit(fromResult: ["commit": commit]) == .some(GitCommit(
+            sha: "abc", subject: "first", date: Date(timeIntervalSince1970: 10)
+        )))
+        #expect(DaemonWire.commit(fromResult: ["commit": NSNull()]) == .some(nil))
+        #expect(DaemonWire.commits(fromResult: ["commits": [commit, commit]])?.count == 2)
+        #expect(DaemonWire.commits(fromResult: ["commits": [commit, ["sha": "x"]]]) == nil)
+
+        let refs = try #require(DaemonWire.refs(fromResult: ["refs": [
+            ["name": "main", "kind": "branch", "date": 5.0],
+            ["name": "origin/main", "kind": "remote_branch", "date": 4.0],
+            ["name": "v1", "kind": "tag", "date": 3.0],
+        ]]))
+        #expect(refs.map(\.kind) == [.branch, .remoteBranch, .tag])
+
+        let files = try #require(DaemonWire.changedFiles(fromResult: ["files": [
+            ["path": "b", "previous_path": "a", "status": "renamed", "insertions": 1, "deletions": 2],
+            ["path": "c", "status": "added", "insertions": 0, "deletions": 0],
+        ]]))
+        #expect(files.map(\.previousPath) == ["a", nil])
+        #expect(files.map(\.status) == [.renamed, .added])
+        #expect(DaemonWire.changedFiles(fromResult: ["files": [["path": "c", "status": "mystery"]]]) == nil)
+    }
 }

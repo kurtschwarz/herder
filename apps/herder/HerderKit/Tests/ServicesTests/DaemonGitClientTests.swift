@@ -4,12 +4,15 @@ import Foundation
 @testable import Services
 import Testing
 
-/// The layout scenarios of `LiveGitClientTests` (`repositoryKind`, `worktrees`,
-/// `branches`, `gitDirectory`, `checkout`, `status`),
-/// against a live `herderd`. `packages/herderd/tests/repository_kind.rs` runs
-/// the same scenarios against the daemon alone. Skipped, like the daemon client
-/// tests, when `just test` has not built the binary.
-@Suite(.timeLimit(.minutes(1))) struct DaemonGitClientTests {
+/// The scenarios of `LiveGitClientTests`, against a live `herderd`. The layout
+/// and status ones are here and the diff and history ones in
+/// `DaemonGitClientHistoryTests.swift`; `packages/herderd/tests/` runs the same
+/// scenarios against the daemon alone. Skipped, like the daemon client tests,
+/// when `just test` has not built the binary.
+///
+/// Serialized because every test starts its own daemon, and dozens starting at
+/// once starve each other on a busy machine.
+@Suite(.serialized, .timeLimit(.minutes(5))) struct DaemonGitClientTests {
     let fixture: GitFixture
     let socket = URL(filePath: "/tmp/herderd-git-\(UUID().uuidString.prefix(8)).sock")
     let daemon: LiveDaemonClient

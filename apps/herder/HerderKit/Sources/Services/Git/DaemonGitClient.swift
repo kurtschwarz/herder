@@ -4,11 +4,10 @@ import Synchronization
 
 /// `GitClient` that asks herderd, bound to the one host it runs on. See ADR 0002.
 ///
-/// Only the layout operations (`repositoryKind`, `worktrees`, `branches`,
-/// `gitDirectory`, `checkout`) and `status` go to the daemon so far. The rest are still
-/// answered by `local`, a `LiveGitClient`, until each is ported; when the last
-/// one is, `local` and `LiveGitClient` are deleted and the daemon being
-/// unreachable is the only way a call fails.
+/// Everything but `addWorktree` goes to the daemon. That one is still answered
+/// by `local`, a `LiveGitClient`, until it is ported; then `local` and
+/// `LiveGitClient` are deleted and the daemon being unreachable is the only way
+/// a call fails.
 public struct DaemonGitClient: GitClient {
     private let daemon: any DaemonClient
     private let local: LiveGitClient
@@ -60,53 +59,73 @@ public struct DaemonGitClient: GitClient {
         return status
     }
 
+    public func changeSummary(in worktree: URL) async throws -> GitChangeSummary? {
+        let result = try await ask("change_summary", ["path": PathKey(worktree).path])
+        guard let summary = DaemonWire.changeSummary(fromResult: result) else { throw Self.unrecognised }
+        return summary
+    }
+
+    public func contents(of file: URL, atRevision revision: String, in worktree: URL) async throws -> String? {
+        let result = try await ask("contents", [
+            "path": PathKey(worktree).path, "file": PathKey(file).path, "revision": revision,
+        ])
+        guard let text = DaemonWire.contents(fromResult: result) else { throw Self.unrecognised }
+        return text
+    }
+
+    public func mergeBase(of ref: String, in worktree: URL) async throws -> String? {
+        let result = try await ask("merge_base", ["path": PathKey(worktree).path, "ref": ref])
+        guard let sha = DaemonWire.mergeBase(fromResult: result) else { throw Self.unrecognised }
+        return sha
+    }
+
+    public func upstream(in worktree: URL) async throws -> String? {
+        let result = try await ask("upstream", ["path": PathKey(worktree).path])
+        guard let upstream = DaemonWire.upstream(fromResult: result) else { throw Self.unrecognised }
+        return upstream
+    }
+
+    public func shortstat(since sha: String, in worktree: URL) async throws -> GitChangeSummary? {
+        let result = try await ask("shortstat", ["path": PathKey(worktree).path, "since": sha])
+        guard let summary = DaemonWire.changeSummary(fromResult: result) else { throw Self.unrecognised }
+        return summary
+    }
+
+    public func changedFiles(since sha: String, in worktree: URL) async throws -> [GitChangedFile] {
+        let result = try await ask("changed_files", ["path": PathKey(worktree).path, "since": sha])
+        guard let files = DaemonWire.changedFiles(fromResult: result) else { throw Self.unrecognised }
+        return files
+    }
+
+    public func refs(in worktree: URL) async throws -> [GitRef] {
+        let result = try await ask("refs", ["path": PathKey(worktree).path])
+        guard let refs = DaemonWire.refs(fromResult: result) else { throw Self.unrecognised }
+        return refs
+    }
+
+    public func recentCommits(limit: Int, in worktree: URL) async throws -> [GitCommit] {
+        let result = try await ask("recent_commits", ["path": PathKey(worktree).path, "limit": max(limit, 0)])
+        guard let commits = DaemonWire.commits(fromResult: result) else { throw Self.unrecognised }
+        return commits
+    }
+
+    public func commit(matching revision: String, in worktree: URL) async throws -> GitCommit? {
+        let result = try await ask("commit", ["path": PathKey(worktree).path, "revision": revision])
+        guard let commit = DaemonWire.commit(fromResult: result) else { throw Self.unrecognised }
+        return commit
+    }
+
     // MARK: - Still local
 
     public func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {
         try await local.addWorktree(in: repository, at: path, newBranch: newBranch, from: base)
     }
 
-    public func changeSummary(in worktree: URL) async throws -> GitChangeSummary? {
-        try await local.changeSummary(in: worktree)
-    }
-
-    public func contents(of file: URL, atRevision revision: String, in worktree: URL) async throws -> String? {
-        try await local.contents(of: file, atRevision: revision, in: worktree)
-    }
-
-    public func mergeBase(of ref: String, in worktree: URL) async throws -> String? {
-        try await local.mergeBase(of: ref, in: worktree)
-    }
-
-    public func upstream(in worktree: URL) async throws -> String? {
-        try await local.upstream(in: worktree)
-    }
-
-    public func shortstat(since sha: String, in worktree: URL) async throws -> GitChangeSummary? {
-        try await local.shortstat(since: sha, in: worktree)
-    }
-
-    public func changedFiles(since sha: String, in worktree: URL) async throws -> [GitChangedFile] {
-        try await local.changedFiles(since: sha, in: worktree)
-    }
-
-    public func refs(in worktree: URL) async throws -> [GitRef] {
-        try await local.refs(in: worktree)
-    }
-
-    public func recentCommits(limit: Int, in worktree: URL) async throws -> [GitCommit] {
-        try await local.recentCommits(limit: limit, in: worktree)
-    }
-
-    public func commit(matching revision: String, in worktree: URL) async throws -> GitCommit? {
-        try await local.commit(matching: revision, in: worktree)
-    }
-
     // MARK: - The daemon
 
     private static let unrecognised = GitClientError.commandFailed("Unrecognised reply from herderd.")
 
-    private func ask(_ op: String, _ arguments: [String: String]) async throws -> [String: Any] {
+    private func ask(_ op: String, _ arguments: [String: Any]) async throws -> [String: Any] {
         let id = nextID.next()
         let reply: Data
         do {

@@ -27,6 +27,14 @@ pub fn open(path: &str) -> Option<Opened> {
     (kind != RepositoryKind::NotARepository).then_some(Opened { repo, kind })
 }
 
+/// The repository of a folder that is a working tree: a main one or a linked
+/// one. `None` for a bare repository, or for anything that is not a root.
+pub fn working_tree(path: &str) -> Option<gix::Repository> {
+    let Opened { repo, kind } = open(path)?;
+    matches!(kind, RepositoryKind::MainWorkingTree | RepositoryKind::LinkedWorktree { .. })
+        .then_some(repo)
+}
+
 fn classify(repo: &gix::Repository, root: &Path) -> RepositoryKind {
     let git_dir = canonical(repo.git_dir());
 

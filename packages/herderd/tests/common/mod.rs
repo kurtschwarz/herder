@@ -59,6 +59,13 @@ impl Fixture {
         self.git(&["commit", "-m", "first"], repo);
     }
 
+    /// Identifies the committer and commits a file, in a repository made with
+    /// `git init` directly.
+    pub fn commit_something_as_tester(&self, repo: &Path) {
+        self.identify(repo);
+        self.commit_something(repo);
+    }
+
     /// A repository with one commit on `main`.
     pub fn repository(&self, name: &str) -> PathBuf {
         let path = self.directory(name);
