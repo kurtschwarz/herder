@@ -1,5 +1,6 @@
 //! The `addWorktree` scenarios of the app's old `LiveGitClient` tests, run
-//! against the daemon.
+//! against the daemon, which adds worktrees with `gix`. The real `git` checks
+//! what it wrote.
 
 mod common;
 
@@ -129,7 +130,7 @@ fn adding_to_a_dot_bare_layout_creates_a_folder_beside_the_others() {
 }
 
 #[test]
-fn gits_refusal_comes_back_as_the_error() {
+fn a_branch_that_already_exists_is_refused() {
     let fixture = Fixture::new();
     let repo = fixture.repository("repo");
 
@@ -140,7 +141,7 @@ fn gits_refusal_comes_back_as_the_error() {
 }
 
 #[test]
-fn a_branch_that_reads_as_an_option_is_refused_before_git_runs() {
+fn a_branch_that_reads_as_an_option_is_refused() {
     let fixture = Fixture::new();
     let repo = fixture.repository("repo");
 
@@ -148,4 +149,68 @@ fn a_branch_that_reads_as_an_option_is_refused_before_git_runs() {
 
     assert_eq!(error.code, GitErrorCode::InvalidRequest);
     assert!(!repo.join("x").exists());
+}
+
+#[test]
+fn git_sees_a_clean_worktree_on_the_new_branch_at_the_base_commit() {
+    let fixture = Fixture::new();
+    let repo = fixture.repository("repo");
+    write_commit(&fixture, &repo, "second");
+    let base = fixture.git(&["rev-parse", "HEAD~1"], &repo);
+    let path = fixture.root().join("feature");
+
+    add(&repo, &path, "feature", "HEAD~1", None).unwrap();
+
+    assert_eq!(fixture.git(&["rev-parse", "HEAD"], &path), base);
+    assert_eq!(fixture.git(&["branch", "--show-current"], &path).trim(), "feature");
+    assert!(fixture.git(&["status", "--porcelain"], &path).is_empty());
+    assert!(fixture.git(&["worktree", "list"], &repo).contains("[feature]"));
+    // Both refs were logged, as `git worktree add -b` logs them.
+    assert!(!fixture.git(&["reflog", "show", "feature"], &repo).is_empty());
+    assert!(!fixture.git(&["reflog", "show", "HEAD"], &path).is_empty());
+}
+
+#[test]
+fn a_base_that_names_nothing_is_refused_and_makes_no_branch() {
+    let fixture = Fixture::new();
+    let repo = fixture.repository("repo");
+
+    let error = add(&repo, &repo.join("x"), "x", "nope", None).unwrap_err();
+
+    assert_eq!(error.code, GitErrorCode::Failed);
+    assert!(fixture.git(&["branch", "--list", "x"], &repo).is_empty());
+    assert!(!repo.join("x").exists());
+}
+
+#[test]
+fn a_destination_that_is_not_empty_is_refused_and_makes_no_branch() {
+    let fixture = Fixture::new();
+    let repo = fixture.repository("repo");
+    let path = fixture.directory("occupied");
+    fs::write(path.join("keep.txt"), "x").unwrap();
+
+    let error = add(&repo, &path, "occupied", "main", None).unwrap_err();
+
+    assert_eq!(error.code, GitErrorCode::Failed);
+    assert!(error.message.contains("already exists"), "{}", error.message);
+    assert!(fixture.git(&["branch", "--list", "occupied"], &repo).is_empty());
+    assert!(path.join("keep.txt").exists());
+}
+
+#[test]
+fn a_path_registered_to_another_worktree_is_refused_and_its_branch_removed() {
+    let fixture = Fixture::new();
+    let repo = fixture.repository("repo");
+    let path = fixture.root().join("gone");
+    add(&repo, &path, "first", "main", None).unwrap();
+    // Deleted on disk but still registered until pruned.
+    fs::remove_dir_all(&path).unwrap();
+
+    assert!(add(&repo, &path, "second", "main", None).is_err());
+    assert!(fixture.git(&["branch", "--list", "second"], &repo).is_empty());
+}
+
+fn write_commit(fixture: &Fixture, repo: &Path, message: &str) {
+    fs::write(repo.join("README.md"), message).unwrap();
+    fixture.git(&["commit", "-qam", message], repo);
 }

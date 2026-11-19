@@ -24,15 +24,14 @@ It was built as five slices, each carrying its share of the ported scenarios: th
 
 The `git` CLI fallbacks, all in `git/cli.rs` with the reason beside each:
 
-- `addWorktree`: `gix` cannot create a linked worktree.
 - `shortstat`, and `changeSummary` which ends in it: `gix` has no combined staged-plus-unstaged diff of the working tree against a commit.
 - `changedFiles`: the same, and `gix`'s rename pairing can differ from `git diff -M`.
 
-Everything else, including `status`, is `gix`. Two small differences from the old behaviour are deliberate: an annotated tag is dated by the commit it points at, where `git for-each-ref` left it undated, and branch and file order uses a natural compare in Rust in place of `localizedStandardCompare`.
+Everything else, including `status` and `addWorktree`, is `gix`. `addWorktree` started as a fallback too; `gix` can add a linked worktree, so it moved. It differs from `git worktree add` in two ways: it runs no hooks, so a `post-checkout` hook does not fire, and its refusals are worded by the daemon, not by git. Two small differences from the old behaviour are deliberate: an annotated tag is dated by the commit it points at, where `git for-each-ref` left it undated, and branch and file order uses a natural compare in Rust in place of `localizedStandardCompare`.
 
 ## Consequences
 
-- `gix` is a dependency of a bundled, signed binary, built with `default-features = false` and only the `sha1`, `status` and `revision` features. The universal release binary is about 10.7 MB.
+- `gix` is a dependency of a bundled, signed binary, built with `default-features = false` and only the `sha1`, `status`, `revision` and `worktree-mutation` features. The universal release binary is about 11.7 MB; `worktree-mutation` added about 1 MB.
 - The `git` CLI is still needed on the daemon's host for the fallbacks above.
 - Git operations now fail when the daemon does. The daemon is already something the app must reach for sessions, so this adds no new way to be broken, only one more thing that notices.
 - `status` stays a request per call with no cache. A watcher-driven burst makes a burst of requests; the pool bounds the work, not the number of requests.

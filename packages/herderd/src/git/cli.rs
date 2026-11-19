@@ -8,7 +8,6 @@
 //! | --- | --- |
 //! | `shortstat` (and `change_summary`, which ends in it) | `gix` has no combined staged-plus-unstaged diff of the working tree against a commit. |
 //! | `changed_files` | The same, and `gix`'s rename pairing can differ from `git diff -M`, which the app has always shown. |
-//! | `add_worktree` | `gix` cannot create a linked worktree, and what `git worktree add` writes is not worth reproducing. |
 
 use crate::protocol::{GitError, GitErrorCode};
 use std::path::Path;
@@ -31,30 +30,4 @@ pub fn run(dir: &Path, args: &[&str]) -> Result<Option<Vec<u8>>, GitError> {
             message: format!("could not run git: {error}"),
         })?;
     Ok(output.status.success().then_some(output.stdout))
-}
-
-/// Runs `git -C dir args...` for its effect. A refusal comes back as the error,
-/// carrying what git said.
-pub fn run_checked(dir: &Path, args: &[&str]) -> Result<(), GitError> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(args)
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|error| GitError {
-            code: GitErrorCode::Failed,
-            message: format!("could not run git: {error}"),
-        })?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let said = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let message = if said.is_empty() {
-        format!("git exited with {}", output.status.code().unwrap_or(-1))
-    } else {
-        said
-    };
-    Err(GitError { code: GitErrorCode::Failed, message })
 }
