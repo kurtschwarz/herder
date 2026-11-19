@@ -157,7 +157,7 @@ public final class AppEnvironment {
         self.init(
             files: LiveFileClient(),
             bookmarks: LiveBookmarkClient(),
-            git: LiveGitClient(),
+            git: DaemonGitClient(daemon: daemon),
             folderPicker: LiveFolderPickerClient(),
             watcher: LiveFileWatcherClient(),
             clock: LiveClockClient(),

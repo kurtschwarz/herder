@@ -285,8 +285,8 @@ boundary script fails a build over `static let shared`.
 The app is not sandboxed. It creates git worktrees and will launch agents and
 shells in the user's folders, and a child process in a sandbox cannot reach the
 folders the app was granted. That rules out the Mac App Store; the entitlements
-file is empty on purpose. Reads of a repository still go straight to disk rather
-than through `git` (see `LiveGitClient`), and repositories still keep a bookmark
+file is empty on purpose. Git runs in herderd, not in the app (see
+`apps/herder/docs/adr/0002-git-in-herderd.md`), and repositories still keep a bookmark
 of their folder, which costs nothing and would be needed again if the sandbox came
 back.
 
