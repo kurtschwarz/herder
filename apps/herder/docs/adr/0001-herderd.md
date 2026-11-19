@@ -43,7 +43,7 @@ A Sparkle update replaces the app and leaves the running daemon alone, because r
 - The app sends the range of versions it speaks and the daemon picks the highest in common. The app uses features the chosen version has and none it lacks.
 - Protocol changes are **additive**: new messages and fields. An existing message never changes meaning. `MIN_PROTOCOL` rises only when an old peer can no longer be served at all.
 - The bundled binary is never swapped under a running daemon. A newer bundled daemon starts only when none is running.
-- If there is no version in common, the app does not kill the daemon. Settings ▸ General shows both ranges. Offering to restart it is a later change and will only be offered when the daemon holds no sessions.
+- If there is no version in common, the app does not kill the daemon, with one exception: a daemon older than every version the app speaks that owns no sessions is ended and replaced with the bundled one. See [0002](0002-git-in-herderd.md). Otherwise Settings ▸ General shows both ranges.
 
 ## Consequences
 

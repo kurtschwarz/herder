@@ -72,6 +72,30 @@ import Testing
         }
     }
 
+    // MARK: - Replacing an old daemon
+
+    @Test(arguments: [
+        #"{"type":"incompatible","min_protocol":1,"max_protocol":1,"daemon_version":"0.1.0"}"#,
+        #"{"type":"incompatible","min_protocol":1,"max_protocol":1,"daemon_version":"0.1.0","sessions":0}"#,
+    ])
+    func anOlderDaemonWithNoSessionsMayBeReplaced(reply: String) {
+        #expect(DaemonWire.mayReplace(afterReply: json(reply)))
+    }
+
+    @Test(arguments: [
+        // It owns sessions.
+        #"{"type":"incompatible","min_protocol":1,"max_protocol":1,"daemon_version":"0.1.0","sessions":2}"#,
+        // Newer than the app, so a newer app may be using it.
+        #"{"type":"incompatible","min_protocol":9,"max_protocol":9,"daemon_version":"9.0.0","sessions":0}"#,
+        // Reports its sessions as something that is not a count.
+        #"{"type":"incompatible","min_protocol":0,"max_protocol":0,"daemon_version":"0.0.1","sessions":"none"}"#,
+        #"{"type":"welcome","protocol":2,"daemon_version":"0.1.0","host":"local"}"#,
+        "not json",
+    ])
+    func anyOtherDaemonIsLeftAlone(reply: String) {
+        #expect(!DaemonWire.mayReplace(afterReply: json(reply)))
+    }
+
     // MARK: - Git
 
     @Test func aGitRequestIsOneFlatObject() {

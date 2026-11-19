@@ -13,6 +13,11 @@ use std::thread;
 /// requests cannot start a thread, and a repository walk, apiece.
 const GIT_WORKERS: usize = 4;
 
+/// What `incompatible` reports as the sessions this daemon owns. None exist
+/// yet. When they do, this must become the live count: an app ends a daemon
+/// that reports 0.
+const OWNED_SESSIONS: u32 = 0;
+
 /// Serves one client until it hangs up. Takes a reader and a writer rather than
 /// a socket so the same code runs over a Unix socket, a child's stdio or a
 /// test's buffers.
@@ -33,6 +38,7 @@ pub fn serve<R: Read, W: Write + Send>(mut input: R, mut output: W) -> io::Resul
                     min_protocol: MIN_PROTOCOL,
                     max_protocol: MAX_PROTOCOL,
                     daemon_version: env!("CARGO_PKG_VERSION").to_string(),
+                    sessions: OWNED_SESSIONS,
                 },
             }
         }
@@ -145,6 +151,7 @@ mod tests {
             DaemonMessage::Incompatible {
                 min_protocol: MIN_PROTOCOL,
                 max_protocol: MAX_PROTOCOL,
+                sessions: 0,
                 ..
             }
         ));

@@ -64,6 +64,25 @@ public enum DaemonWire {
         return .unavailable(reason: "Unrecognised reply from herderd.")
     }
 
+    /// Whether an `incompatible` reply comes from a daemon the app may end and
+    /// replace with the one it bundles: one older than every version the app
+    /// speaks, that owns no sessions. A newer daemon is left alone, because a
+    /// newer app may be holding it, and so is any daemon with sessions,
+    /// because ending it would end them. A daemon that does not report its
+    /// sessions speaks only protocol 1, which had none.
+    public static func mayReplace(afterReply payload: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              object["type"] as? String == "incompatible",
+              let high = object["max_protocol"] as? Int,
+              high < supported.lowerBound
+        else { return false }
+        switch object["sessions"] {
+        case let sessions as Int: return sessions == 0
+        case nil: return high <= 1
+        default: return false
+        }
+    }
+
     // MARK: - Git
 
     /// The payload of a `git_request`: `op` and its arguments in one flat

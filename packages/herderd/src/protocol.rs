@@ -326,7 +326,16 @@ pub enum DaemonMessage {
     },
     /// No version in common. The connection closes after this, and the
     /// ranges are what the app shows the user.
-    Incompatible { min_protocol: u32, max_protocol: u32, daemon_version: String },
+    Incompatible {
+        min_protocol: u32,
+        max_protocol: u32,
+        daemon_version: String,
+        /// How many sessions this daemon owns. An app newer than the daemon
+        /// ends and replaces it only when this is 0, since ending it ends them.
+        /// Added in protocol 2; a daemon that leaves it out speaks only
+        /// protocol 1, which had no sessions.
+        sessions: u32,
+    },
     /// The outcome of a [`ClientMessage::GitRequest`]: exactly one of `result`
     /// and `error`.
     GitResponse {
