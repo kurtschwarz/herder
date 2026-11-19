@@ -41,9 +41,15 @@ pub fn add(
     // leave out: the branch and the new `HEAD` get reflog entries, and those
     // name whoever made them.
     let mut repo = gix::open(repo.git_dir()).map_err(|error| failed(error.to_string()))?;
-    let (name, email) = fallback_identity();
-    repo.committer_or_set_fallback(name.as_str(), email.as_str())
-        .map_err(|error| failed(error.to_string()))?;
+    if repo.committer().is_none_or(|committer| committer.is_err()) {
+        // No identity configured. It goes in as config rather than on this
+        // handle: adding a worktree opens the new one afresh, and that handle
+        // would not carry it, so the new `HEAD`'s reflog could not be written.
+        let (name, email) = fallback_identity();
+        let options = gix::open::Options::isolated()
+            .config_overrides([format!("user.name={name}"), format!("user.email={email}")]);
+        repo = gix::open_opts(repo.git_dir(), options).map_err(|error| failed(error.to_string()))?;
+    }
 
     let name = format!("refs/heads/{new_branch}");
     if repo.try_find_reference(name.as_str()).ok().flatten().is_some() {
