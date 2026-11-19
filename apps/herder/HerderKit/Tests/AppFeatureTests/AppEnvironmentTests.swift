@@ -30,6 +30,24 @@ import Testing
         )
     }
 
+    @Test func theGitHubConnectionNeedsADaemonAnAuthClientAndAVault() {
+        func environment(daemon: Bool, auth: Bool, vault: Bool) -> AppEnvironment {
+            AppEnvironment(
+                files: files, bookmarks: bookmarks, git: git, folderPicker: StubFolderPickerClient(),
+                watcher: StubFileWatcherClient(), clock: VirtualClockClient(), persistence: persistence,
+                daemon: daemon ? StubDaemonClient() : nil,
+                githubAuth: auth ? StubGitHubAuthClient() : nil,
+                githubVault: vault ? InMemoryGitHubTokenVault() : nil
+            )
+        }
+
+        #expect(environment(daemon: true, auth: true, vault: true).github != nil)
+        #expect(environment(daemon: false, auth: true, vault: true).github == nil)
+        #expect(environment(daemon: true, auth: false, vault: true).github == nil)
+        #expect(environment(daemon: true, auth: true, vault: false).github == nil)
+        #expect(self.environment.github == nil)
+    }
+
     /// The same files on disk under a second app: what a relaunch is.
     private func relaunched() -> AppEnvironment {
         AppEnvironment(

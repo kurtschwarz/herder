@@ -13,6 +13,10 @@ import Observation
 @MainActor
 @Observable
 public final class GitHubConnection {
+    /// The Info.plist key the GitHub App's client ID is under. Empty in a build
+    /// made without one.
+    public static let clientIDKey = "HerderGitHubClientID"
+
     /// How long before an access token expires it is replaced.
     public static let refreshLeeway: Duration = .seconds(5 * 60)
 

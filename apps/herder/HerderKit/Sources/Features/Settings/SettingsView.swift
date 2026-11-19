@@ -14,14 +14,17 @@ public struct SettingsView: View {
     private let version: AppVersion
     private let updater: (any UpdaterClient)?
     private let daemon: DaemonConnection?
+    private let github: GitHubConnection?
 
     public init(
-        agents: AgentCatalog, version: AppVersion, updater: (any UpdaterClient)?, daemon: DaemonConnection?
+        agents: AgentCatalog, version: AppVersion, updater: (any UpdaterClient)?, daemon: DaemonConnection?,
+        github: GitHubConnection? = nil
     ) {
         self.agents = agents
         self.version = version
         self.updater = updater
         self.daemon = daemon
+        self.github = github
     }
 
     public var body: some View {
@@ -41,7 +44,7 @@ public struct SettingsView: View {
     @ViewBuilder
     private var detail: some View {
         switch selection {
-        case .general: GeneralSettings(version: version, updater: updater, daemon: daemon)
+        case .general: GeneralSettings(version: version, updater: updater, daemon: daemon, github: github)
         case .agents: AgentsSettings(catalog: agents)
         }
     }
@@ -53,7 +56,11 @@ public struct SettingsView: View {
         agents: AgentCatalog(state: InMemoryStateStore()),
         version: AppVersion(version: "0.1.0", build: "1", commit: "e87cd6e"),
         updater: StubUpdaterClient(),
-        daemon: DaemonConnection(client: StubDaemonClient())
+        daemon: DaemonConnection(client: StubDaemonClient()),
+        github: GitHubConnection(
+            auth: StubGitHubAuthClient(), vault: InMemoryGitHubTokenVault(), daemon: StubDaemonClient(),
+            clock: VirtualClockClient()
+        )
     )
     .frame(width: Theme.Size.settingsWindow.width, height: Theme.Size.settingsWindow.height)
     .background { WindowGlass() }
