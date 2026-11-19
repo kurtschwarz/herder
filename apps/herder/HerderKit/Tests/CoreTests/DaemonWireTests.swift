@@ -29,15 +29,15 @@ import Testing
 
         #expect(body.count == length)
         #expect(String(decoding: body, as: UTF8.self)
-            == #"{"client":"Herder 1.0","max_protocol":2,"min_protocol":2,"type":"hello"}"#)
+            == #"{"client":"Herder 1.0","max_protocol":3,"min_protocol":3,"type":"hello"}"#)
     }
 
     @Test func aWelcomeIsConnected() {
         let status = DaemonWire.status(fromReply: json(
-            #"{"type":"welcome","protocol":2,"daemon_version":"0.1.0","host":"local"}"#
+            #"{"type":"welcome","protocol":3,"daemon_version":"0.1.0","host":"local"}"#
         ))
 
-        #expect(status == .connected(DaemonInfo(daemonVersion: "0.1.0", protocolVersion: 2, host: "local")))
+        #expect(status == .connected(DaemonInfo(daemonVersion: "0.1.0", protocolVersion: 3, host: "local")))
     }
 
     @Test func anIncompatibleReplyKeepsBothRangesToShow() {
@@ -77,6 +77,8 @@ import Testing
     @Test(arguments: [
         #"{"type":"incompatible","min_protocol":1,"max_protocol":1,"daemon_version":"0.1.0"}"#,
         #"{"type":"incompatible","min_protocol":1,"max_protocol":1,"daemon_version":"0.1.0","sessions":0}"#,
+        // Protocol 2, the daemon the app that shipped git left running.
+        #"{"type":"incompatible","min_protocol":2,"max_protocol":2,"daemon_version":"0.1.0","sessions":0}"#,
     ])
     func anOlderDaemonWithNoSessionsMayBeReplaced(reply: String) {
         #expect(DaemonWire.mayReplace(afterReply: json(reply)))
@@ -94,6 +96,41 @@ import Testing
     ])
     func anyOtherDaemonIsLeftAlone(reply: String) {
         #expect(!DaemonWire.mayReplace(afterReply: json(reply)))
+    }
+
+    // MARK: - GitHub
+
+    @Test func theTokenMessagesAreFlatJSON() {
+        #expect(String(decoding: DaemonWire.setGitHubToken(id: 4, token: "ghu_x"), as: UTF8.self)
+            == #"{"id":4,"token":"ghu_x","type":"set_github_token"}"#)
+        #expect(String(decoding: DaemonWire.clearGitHubToken(id: 5), as: UTF8.self)
+            == #"{"id":5,"type":"clear_github_token"}"#)
+        #expect(String(decoding: DaemonWire.checkGitHub(id: 6), as: UTF8.self)
+            == #"{"id":6,"type":"check_github"}"#)
+    }
+
+    @Test(arguments: [
+        (#"{"type":"github_response","id":4,"connection":{"state":"ok","login":"kurt"}}"#, GitHubCheck.ok(login: "kurt")),
+        (#"{"type":"github_response","id":4,"connection":{"state":"unauthorized"}}"#, .unauthorized),
+        (#"{"type":"github_response","id":4,"connection":{"state":"not_connected"}}"#, .notConnected),
+        (#"{"type":"github_response","id":4,"connection":{"state":"error","message":"GitHub answered 502"}}"#, .error("GitHub answered 502")),
+    ])
+    func aGitHubResponseSaysWhatTheCheckFound(reply: String, expected: GitHubCheck) {
+        #expect(DaemonWire.gitHubCheck(fromReply: json(reply), id: 4) == expected)
+    }
+
+    @Test(arguments: [
+        "not json",
+        #"{"type":"github_response","id":9,"connection":{"state":"ok","login":"kurt"}}"#,
+        #"{"type":"github_response","id":4,"connection":{"state":"ok"}}"#,
+        #"{"type":"github_response","id":4,"connection":{"state":"mystery"}}"#,
+        #"{"type":"git_response","id":4,"result":{}}"#,
+    ])
+    func anythingElseIsAnErrorNotAGuess(reply: String) {
+        guard case .error = DaemonWire.gitHubCheck(fromReply: json(reply), id: 4) else {
+            Issue.record("expected an error for \(reply)")
+            return
+        }
     }
 
     // MARK: - Git

@@ -80,6 +80,21 @@ import Testing
         #expect(second.launchedPIDs.first != oldPID)
     }
 
+    /// The Swift half of the GitHub messages against the real daemon. Clearing
+    /// needs no network, so what comes back is the daemon's own answer.
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func theDaemonAnswersAGitHubMessage() async throws {
+        let client = LiveDaemonClient(socket: socket, executable: Self.binary, client: "test")
+        defer {
+            client.launchedPIDs.forEach { kill($0, SIGKILL) }
+            try? FileManager.default.removeItem(at: socket)
+        }
+
+        let reply = try await client.request(DaemonWire.clearGitHubToken(id: 3))
+
+        #expect(DaemonWire.gitHubCheck(fromReply: reply, id: 3) == .notConnected)
+    }
+
     @Test func nothingListeningAndNothingToStartIsUnavailable() async {
         let client = LiveDaemonClient(socket: socket, executable: nil, client: "test")
 
