@@ -43,8 +43,11 @@ struct Remembered {
 /// A repository the app asked about, resolved from its `origin`.
 struct Target {
     path: String,
-    /// `owner/name`.
+    /// `owner/name`, as `origin` spells it.
     repository: String,
+    /// What names the repository wherever it is remembered: GitHub does not
+    /// tell `Owner/Repo` from `owner/repo`, so neither does this.
+    key: String,
     branches: Vec<String>,
 }
 
@@ -55,6 +58,14 @@ enum Outcome {
     Failed(String),
 }
 
+/// A repository to ask about, with every branch any folder of it wants.
+struct Watched<'a> {
+    key: &'a str,
+    name: &'a str,
+    branches: Vec<&'a str>,
+}
+
+#[derive(Clone)]
 enum Answered {
     Found { default_branch: Option<String>, branches: HashMap<String, Option<PullRequest>> },
     NotAccessible,
@@ -75,11 +86,9 @@ impl GitHub {
                         branches.push(branch.clone());
                     }
                 }
-                Some(Target {
-                    path: repo.path.clone(),
-                    repository: format!("{owner}/{name}"),
-                    branches,
-                })
+                let repository = format!("{owner}/{name}");
+                let key = repository.to_ascii_lowercase();
+                Some(Target { path: repo.path.clone(), repository, key, branches })
             })
             .collect();
         if targets.is_empty() {
@@ -98,35 +107,36 @@ impl GitHub {
         };
         let mut statuses: HashMap<&str, PullRequestRepoStatus> = HashMap::new();
         match outcome {
-            Outcome::Answered(mut answers) => {
+            Outcome::Answered(answers) => {
                 state.failures = 0;
                 for target in &targets {
-                    let status = match answers.remove(&target.repository) {
+                    // Cloned, not taken: two folders can be one repository.
+                    let status = match answers.get(&target.key).cloned() {
                         Some(Answered::Found { default_branch, branches }) => {
                             let remembered =
-                                state.repositories.entry(target.repository.clone()).or_default();
+                                state.repositories.entry(target.key.clone()).or_default();
                             remembered.default_branch = default_branch;
                             remembered.branches.extend(branches);
                             PullRequestRepoStatus::Ok
                         }
                         Some(Answered::NotAccessible) | None => {
-                            state.repositories.remove(&target.repository);
+                            state.repositories.remove(&target.key);
                             PullRequestRepoStatus::NotAccessible
                         }
                     };
-                    statuses.insert(&target.repository, status);
+                    statuses.insert(&target.key, status);
                 }
             }
             Outcome::Unauthorized => {
                 for target in &targets {
-                    statuses.insert(&target.repository, PullRequestRepoStatus::Unauthorized);
+                    statuses.insert(&target.key, PullRequestRepoStatus::Unauthorized);
                 }
             }
             Outcome::Failed(message) => {
                 state.failures = state.failures.saturating_add(1);
                 for target in &targets {
                     let status = PullRequestRepoStatus::Error { message: message.clone() };
-                    statuses.insert(&target.repository, status);
+                    statuses.insert(&target.key, status);
                 }
             }
         }
@@ -134,7 +144,7 @@ impl GitHub {
         let answers = targets
             .iter()
             .map(|target| {
-                let remembered = state.repositories.get(&target.repository);
+                let remembered = state.repositories.get(&target.key);
                 let branches = target
                     .branches
                     .iter()
@@ -149,7 +159,7 @@ impl GitHub {
                 RepoPullRequests {
                     path: target.path.clone(),
                     repository: target.repository.clone(),
-                    status: statuses[target.repository.as_str()].clone(),
+                    status: statuses[target.key.as_str()].clone(),
                     default_branch: remembered.and_then(|known| known.default_branch.clone()),
                     branches,
                 }
@@ -166,18 +176,19 @@ impl GitHub {
 
     fn ask(&self, token: &Secret, targets: &[Target]) -> Outcome {
         // One entry per repository however many folders name it.
-        let mut repositories: Vec<(&str, Vec<&str>)> = Vec::new();
+        let mut repositories: Vec<Watched> = Vec::new();
         for target in targets {
-            let index = match repositories.iter().position(|(name, _)| *name == target.repository) {
+            let index = match repositories.iter().position(|watched| watched.key == target.key) {
                 Some(index) => index,
                 None => {
-                    repositories.push((&target.repository, Vec::new()));
+                    let (key, name) = (&target.key, &target.repository);
+                    repositories.push(Watched { key, name, branches: Vec::new() });
                     repositories.len() - 1
                 }
             };
             for branch in &target.branches {
-                if !repositories[index].1.contains(&branch.as_str()) {
-                    repositories[index].1.push(branch);
+                if !repositories[index].branches.contains(&branch.as_str()) {
+                    repositories[index].branches.push(branch);
                 }
             }
         }
@@ -217,7 +228,7 @@ impl GitHub {
         let answers = repositories
             .iter()
             .enumerate()
-            .map(|(index, (name, branches))| {
+            .map(|(index, Watched { key, name, branches })| {
                 // A repository the signed-in user cannot see comes back null,
                 // beside a NOT_FOUND error, in a response that is otherwise fine.
                 let answered = match data.remove(&format!("r{index}")).flatten() {
@@ -238,18 +249,18 @@ impl GitHub {
                     },
                     None => Answered::NotAccessible,
                 };
-                (name.to_string(), answered)
+                (key.to_string(), answered)
             })
-            .map(|(name, answered)| match answered {
+            .map(|(key, answered)| match answered {
                 // The default branch is never looked up for: its pull requests
                 // are the ones into other branches' names, not its own work.
                 Answered::Found { default_branch: Some(default), mut branches } => {
                     if let Some(entry) = branches.get_mut(&default) {
                         *entry = None;
                     }
-                    (name, Answered::Found { default_branch: Some(default), branches })
+                    (key, Answered::Found { default_branch: Some(default), branches })
                 }
-                other => (name, other),
+                other => (key, other),
             })
             .collect();
         Outcome::Answered(answers)
@@ -265,16 +276,20 @@ fn interval(failures: u32) -> u64 {
 /// A failure, with the token scrubbed out of what it says: this text reaches
 /// the app's screen.
 fn failed(token: &Secret, message: String) -> Outcome {
+    // Replacing nothing would put the marker between every character.
+    if token.expose().is_empty() {
+        return Outcome::Failed(message);
+    }
     Outcome::Failed(message.replace(token.expose(), "<redacted>"))
 }
 
 /// The query and its variables. Names and branches are variables, never part
 /// of the query text, so a branch called anything cannot change what is asked.
-fn build(repositories: &[(&str, Vec<&str>)]) -> (String, Value) {
+fn build(repositories: &[Watched]) -> (String, Value) {
     let mut declarations = Vec::new();
     let mut selections = Vec::new();
     let mut variables = Map::new();
-    for (index, (repository, branches)) in repositories.iter().enumerate() {
+    for (index, Watched { name: repository, branches, .. }) in repositories.iter().enumerate() {
         let (owner, name) = repository.split_once('/').unwrap_or((repository, ""));
         declarations.push(format!("$o{index}: String!, $n{index}: String!"));
         variables.insert(format!("o{index}"), json!(owner));
@@ -390,7 +405,8 @@ mod tests {
 
     #[test]
     fn names_and_branches_are_variables() {
-        let (query, variables) = build(&[("o/r", vec!["fix\"}) { evil"])]);
+        let (query, variables) =
+            build(&[Watched { key: "o/r", name: "o/r", branches: vec!["fix\"}) { evil"] }]);
         assert!(!query.contains("evil"));
         assert_eq!(variables["h0_0"], "fix\"}) { evil");
         assert_eq!(variables["o0"], "o");

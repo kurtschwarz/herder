@@ -53,5 +53,6 @@ Tracking issue: #112. A session's branch is looked up on GitHub, and the pull re
 
 - **Nothing is checked while the app is closed.** The first poll after launch catches up.
 - **Renaming a branch breaks the link.** `session.branch` is saved once, when the session starts, and never updated, so the old name is what is asked about. A branch that is reused for a new pull request after the first was merged is not looked at again either, since its session stopped being watched.
+- **A reopened pull request is not noticed.** Once a branch's pull request is merged or closed it is no longer asked about, so a pull request reopened later, or a new one from the same branch, stays as it was. The ticket asked for both this and an in-place update on reopen; the stop wins because it is what keeps the poll cheap. Asking about closed (but not merged) branches for a while is the fix if it matters.
 - **A poll that finds nothing to watch is looked at again after five seconds**, locally. The first poll after a session starts can be a minute away.
 - Nothing notifies the user and nothing happens automatically on a merge. Recording the merge (`mergedAt`, state) leaves room for both.

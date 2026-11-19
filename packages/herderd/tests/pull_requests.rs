@@ -376,3 +376,28 @@ fn a_query_over_the_wire_is_answered_with_the_same_id() {
         other => panic!("unexpected: {other:?}"),
     }
 }
+
+#[test]
+fn two_folders_of_one_repository_are_one_repository() {
+    let fixture = Fixture::new();
+    // The same repository, spelled differently, cloned twice.
+    let first = fixture.repository_with_origin("first", "git@github.com:o/r.git");
+    let second = fixture.repository_with_origin("second", "https://github.com/O/R");
+    let body = reply("main", &[&[node(7, "OPEN", "o/r")], &[]]);
+    let server = stub(vec![(200, body)]);
+    let asked = vec![
+        PullRequestRepo { path: first.to_str().unwrap().into(), branches: vec!["a".into()] },
+        PullRequestRepo { path: second.to_str().unwrap().into(), branches: vec!["b".into()] },
+    ];
+
+    let (repos, _) = connected(&server.endpoint).pull_requests(&asked);
+
+    assert_eq!(repos.len(), 2);
+    for found in &repos {
+        assert_eq!(found.status, PullRequestRepoStatus::Ok, "{found:?}");
+    }
+    assert_eq!(repos[0].branches[0].pull_request.as_ref().unwrap().number, 7);
+    assert_eq!(repos[1].branches[0].pull_request, None);
+    server.requests.recv().unwrap();
+    assert!(server.requests.try_recv().is_err());
+}
