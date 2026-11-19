@@ -7,6 +7,7 @@
 
 pub mod frame;
 pub mod git;
+pub mod github;
 pub mod idle;
 pub mod protocol;
 pub mod session;
