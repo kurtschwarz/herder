@@ -5,7 +5,7 @@ use crate::git;
 use crate::github::GitHub;
 use crate::protocol::{
     ClientMessage, DaemonMessage, GitHubCheck, GitOp, HostId, MAX_PROTOCOL, MIN_PROTOCOL,
-    negotiate,
+    PullRequestRepo, negotiate,
 };
 use std::io::{self, Read, Write};
 use std::sync::{Mutex, mpsc};
@@ -24,6 +24,7 @@ const OWNED_SESSIONS: u32 = 0;
 enum Job {
     Git(u64, GitOp),
     CheckGitHub(u64),
+    PullRequests(u64, Vec<PullRequestRepo>),
     /// The token is already forgotten; this is only the answer.
     ClearedGitHub(u64),
 }
@@ -63,10 +64,13 @@ pub fn serve_with<R: Read, W: Write + Send>(
         }
         // Not a hello: the first message is always one, so this is not a
         // client of ours. Close without answering.
-        Ok(ClientMessage::GitRequest { .. }
-        | ClientMessage::SetGitHubToken { .. }
-        | ClientMessage::ClearGitHubToken { .. }
-        | ClientMessage::CheckGitHub { .. })
+        Ok(
+            ClientMessage::GitRequest { .. }
+            | ClientMessage::SetGitHubToken { .. }
+            | ClientMessage::ClearGitHubToken { .. }
+            | ClientMessage::CheckGitHub { .. }
+            | ClientMessage::PullRequestQuery { .. },
+        )
         | Err(_) => {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "expected hello"));
         }
@@ -131,6 +135,9 @@ fn serve_requests<R: Read, W: Write + Send>(
                         Job::ClearedGitHub(id)
                     }
                     Ok(ClientMessage::CheckGitHub { id }) => Job::CheckGitHub(id),
+                    Ok(ClientMessage::PullRequestQuery { id, repos }) => {
+                        Job::PullRequests(id, repos)
+                    }
                     Ok(ClientMessage::Hello { .. }) | Err(_) => continue,
                 };
                 let _ = jobs.send(job);
@@ -152,6 +159,10 @@ fn respond(job: Job, github: &GitHub) -> DaemonMessage {
             DaemonMessage::GitHubResponse { id, check: GitHubCheck::NotConnected }
         }
         Job::CheckGitHub(id) => DaemonMessage::GitHubResponse { id, check: github.check() },
+        Job::PullRequests(id, repos) => {
+            let (repos, next_poll_seconds) = github.pull_requests(&repos);
+            DaemonMessage::PullRequestResponse { id, repos, next_poll_seconds }
+        }
     }
 }
 

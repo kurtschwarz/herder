@@ -6,7 +6,7 @@ import Foundation
 public enum DaemonWire {
     /// The versions this build of the app speaks. Raise `supported.upperBound`
     /// when the app starts using a message the daemon gained in that version.
-    public static let supported = 3...3
+    public static let supported = 4...4
 
     /// A frame is a big-endian `UInt32` length and then that many bytes.
     public static let headerSize = 4
@@ -121,6 +121,96 @@ public enum DaemonWire {
         default: break
         }
         return .error("Unrecognised reply from herderd.")
+    }
+
+    // MARK: - Pull requests
+
+    /// Asks for the newest pull request of each branch in `repos`, which
+    /// ``pullRequests(fromReply:id:)`` reads the answer to.
+    public static func pullRequestQuery(id: Int, repos: [PullRequestQuery]) -> Data {
+        message([
+            "type": "pull_request_query",
+            "id": id,
+            "repos": repos.map { ["path": $0.path, "branches": $0.branches] as [String: Any] },
+        ])
+    }
+
+    /// What a `pull_request_response` to request `id` says. `nil` for anything
+    /// else, including the answer to another request, which is not one to guess
+    /// from.
+    public static func pullRequests(fromReply payload: Data, id: Int) -> PullRequestReply? {
+        guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              object["type"] as? String == "pull_request_response",
+              object["id"] as? Int == id,
+              let records = object["repos"] as? [[String: Any]],
+              let seconds = object["next_poll_seconds"] as? Int
+        else { return nil }
+
+        var repositories: [PullRequestReply.Repository] = []
+        for record in records {
+            guard let path = record["path"] as? String,
+                  let name = record["repository"] as? String,
+                  let status = record["status"] as? [String: Any],
+                  let parsed = pullRequestStatus(fromRecord: status),
+                  let branches = record["branches"] as? [[String: Any]]
+            else { return nil }
+
+            var found: [String: LinkedPullRequest?] = [:]
+            for entry in branches {
+                guard let branch = entry["branch"] as? String else { return nil }
+                switch entry["pull_request"] {
+                case nil, is NSNull:
+                    found[branch] = .some(nil)
+                case let record as [String: Any]:
+                    guard let pullRequest = linkedPullRequest(fromRecord: record) else { return nil }
+                    found[branch] = .some(pullRequest)
+                default:
+                    return nil
+                }
+            }
+            repositories.append(PullRequestReply.Repository(
+                path: path,
+                name: name,
+                status: parsed,
+                defaultBranch: record["default_branch"] as? String,
+                branches: found
+            ))
+        }
+        return PullRequestReply(repositories: repositories, nextPoll: .seconds(max(1, seconds)))
+    }
+
+    private static func pullRequestStatus(fromRecord record: [String: Any]) -> PullRequestReply.Status? {
+        switch record["state"] as? String {
+        case "ok": .ok
+        case "not_accessible": .notAccessible
+        case "unauthorized": .unauthorized
+        case "error": .error(record["message"] as? String ?? "GitHub could not be asked.")
+        default: nil
+        }
+    }
+
+    private static func linkedPullRequest(fromRecord record: [String: Any]) -> LinkedPullRequest? {
+        guard let number = record["number"] as? Int,
+              let url = (record["url"] as? String).flatMap(URL.init(string:)),
+              let title = record["title"] as? String,
+              let state = record["state"] as? String,
+              let updated = (record["updated_at"] as? String).flatMap(timestamp)
+        else { return nil }
+        return LinkedPullRequest(
+            number: number,
+            url: url,
+            title: title,
+            // A state this build does not know reads as `unknown`.
+            state: LinkedPullRequest.State(rawValue: state) ?? .unknown,
+            isDraft: record["is_draft"] as? Bool ?? false,
+            mergedAt: (record["merged_at"] as? String).flatMap(timestamp),
+            updatedAt: updated
+        )
+    }
+
+    /// GitHub's timestamps: ISO 8601 to the second, in UTC.
+    private static func timestamp(_ text: String) -> Date? {
+        try? Date(text, strategy: .iso8601)
     }
 
     private static func message(_ fields: [String: Any]) -> Data {

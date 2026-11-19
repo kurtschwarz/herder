@@ -164,14 +164,19 @@ private struct AgentSessionRow: View {
                     .foregroundStyle(isUrgent ? Theme.Palette.warning : Theme.Palette.secondaryText)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                HStack(spacing: Theme.Spacing.tight) {
-                    PhIcon(Ph.gitBranch, size: 10)
-                    Text(branch)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                HStack(spacing: Theme.Spacing.normal) {
+                    HStack(spacing: Theme.Spacing.tight) {
+                        PhIcon(Ph.gitBranch, size: 10)
+                        Text(branch)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
+                    if let pullRequest = session.pullRequest {
+                        PullRequestBadge(pullRequest)
+                    }
                 }
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.Palette.tertiaryText)
             }
         }
         .padding(.horizontal, Theme.Spacing.normal + 2)

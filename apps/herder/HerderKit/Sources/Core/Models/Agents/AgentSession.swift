@@ -109,6 +109,11 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
     public var endedAt: Date?
     public var endReason: EndReason?
 
+    /// The most recent pull request GitHub has for ``branch`` in its repository,
+    /// once one has been found. Found by branch, so it is the same for every
+    /// session of that branch.
+    public var pullRequest: LinkedPullRequest?
+
     /// `nil` in the app-wide record, and set on the copy a window lists while
     /// it has the tab open.
     public var live: Live?
@@ -131,6 +136,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
         lastSeenAt: Date? = nil,
         endedAt: Date? = nil,
         endReason: EndReason? = nil,
+        pullRequest: LinkedPullRequest? = nil,
         live: Live? = nil
     ) {
         self.id = id
@@ -145,6 +151,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
         self.lastSeenAt = lastSeenAt ?? startedAt
         self.endedAt = endedAt
         self.endReason = endReason
+        self.pullRequest = pullRequest
         self.live = live
     }
 
@@ -153,7 +160,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
     /// among them.
     private enum CodingKeys: String, CodingKey {
         case id, agentID, agentName, sessionID, worktree, branch, title, name
-        case startedAt, lastSeenAt, endedAt, endReason
+        case startedAt, lastSeenAt, endedAt, endReason, pullRequest
     }
 
     public init(from decoder: any Decoder) throws {
@@ -171,6 +178,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
         endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt)
         endReason = try container.decodeIfPresent(EndReason.self, forKey: .endReason)
         if endedAt != nil, endReason == nil { endReason = .unknown }
+        pullRequest = try container.decodeIfPresent(LinkedPullRequest.self, forKey: .pullRequest)
         live = nil
     }
 

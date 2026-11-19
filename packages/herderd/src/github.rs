@@ -4,9 +4,14 @@
 //! memory and never writes it anywhere. Nothing here returns the token or puts
 //! it in an error: a message that could quote it is built from fixed words.
 //!
+//! It also asks which pull requests a set of branches have: see
+//! [`pull_requests`].
+//!
 //! This is the only module that makes a network request. It is blocking, so
 //! the caller runs it on a worker, and it takes the GraphQL endpoint as a
 //! parameter so a test can point it at a stub.
+
+mod pull_requests;
 
 use crate::protocol::{GitHubCheck, Secret};
 use serde::Deserialize;
@@ -23,6 +28,7 @@ pub struct GitHub {
     endpoint: String,
     token: Mutex<Option<Secret>>,
     agent: ureq::Agent,
+    pull_requests: Mutex<pull_requests::State>,
 }
 
 impl GitHub {
@@ -34,7 +40,12 @@ impl GitHub {
             .user_agent("herderd")
             .build()
             .new_agent();
-        GitHub { endpoint: endpoint.into(), token: Mutex::new(None), agent }
+        GitHub {
+            endpoint: endpoint.into(),
+            token: Mutex::new(None),
+            agent,
+            pull_requests: Mutex::default(),
+        }
     }
 
     /// The one the running daemon uses: every connection shares it, because the

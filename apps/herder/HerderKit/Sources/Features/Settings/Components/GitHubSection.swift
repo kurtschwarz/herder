@@ -6,6 +6,7 @@ import SwiftUI
 /// connected, or needing to be reconnected.
 struct GitHubSection: View {
     let github: GitHubConnection
+    let pullRequests: LinkedPullRequests?
 
     var body: some View {
         SettingsSection("GitHub") {
@@ -55,6 +56,10 @@ struct GitHubSection: View {
                 button("Reconnect GitHub", style: .primary) { await github.signIn() }
             }
 
+            if let pullRequests {
+                pullRequestStatus(pullRequests)
+            }
+
             if let error = github.lastError {
                 Text(error)
                     .font(.callout)
@@ -62,6 +67,27 @@ struct GitHubSection: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, Theme.Spacing.tight)
             }
+        }
+    }
+
+    /// What polling for pull requests found out. Errors are shown here and
+    /// nowhere in the session UI.
+    @ViewBuilder
+    private func pullRequestStatus(_ pullRequests: LinkedPullRequests) -> some View {
+        if let error = pullRequests.lastError {
+            row("Pull requests", error)
+        }
+        ForEach(pullRequests.inaccessible) { repository in
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.loose) {
+                Text(repository.name)
+                    .foregroundStyle(Theme.Palette.text)
+                Text("not accessible")
+                    .foregroundStyle(Theme.Palette.secondaryText)
+                Spacer(minLength: 0)
+                Link("Install app", destination: GitHubApp.installURL)
+                    .foregroundStyle(Theme.Palette.accent)
+            }
+            .padding(.vertical, Theme.Spacing.tight)
         }
     }
 

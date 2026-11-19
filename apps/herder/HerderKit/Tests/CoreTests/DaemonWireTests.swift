@@ -29,15 +29,15 @@ import Testing
 
         #expect(body.count == length)
         #expect(String(decoding: body, as: UTF8.self)
-            == #"{"client":"Herder 1.0","max_protocol":3,"min_protocol":3,"type":"hello"}"#)
+            == #"{"client":"Herder 1.0","max_protocol":4,"min_protocol":4,"type":"hello"}"#)
     }
 
     @Test func aWelcomeIsConnected() {
         let status = DaemonWire.status(fromReply: json(
-            #"{"type":"welcome","protocol":3,"daemon_version":"0.1.0","host":"local"}"#
+            #"{"type":"welcome","protocol":4,"daemon_version":"0.1.0","host":"local"}"#
         ))
 
-        #expect(status == .connected(DaemonInfo(daemonVersion: "0.1.0", protocolVersion: 3, host: "local")))
+        #expect(status == .connected(DaemonInfo(daemonVersion: "0.1.0", protocolVersion: 4, host: "local")))
     }
 
     @Test func anIncompatibleReplyKeepsBothRangesToShow() {
@@ -277,5 +277,79 @@ import Testing
         #expect(files.map(\.previousPath) == ["a", nil])
         #expect(files.map(\.status) == [.renamed, .added])
         #expect(DaemonWire.changedFiles(fromResult: ["files": [["path": "c", "status": "mystery"]]]) == nil)
+    }
+    // MARK: Pull requests
+
+    @Test func aPullRequestQueryIsOneFlatObjectOfRepositoriesAndBranches() throws {
+        let payload = DaemonWire.pullRequestQuery(
+            id: 4, repos: [PullRequestQuery(path: "/code/api", branches: ["feature", "fix/x"])]
+        )
+
+        #expect(String(decoding: payload, as: UTF8.self)
+            == #"{"id":4,"repos":[{"branches":["feature","fix/x"],"path":"/code/api"}],"type":"pull_request_query"}"#)
+    }
+
+    @Test func readsAPullRequestResponse() throws {
+        let reply = try #require(DaemonWire.pullRequests(fromReply: json("""
+        {"type":"pull_request_response","id":4,"next_poll_seconds":240,"repos":[{
+          "path":"/code/api","repository":"o/r","status":{"state":"ok"},"default_branch":"main",
+          "branches":[
+            {"branch":"feature","pull_request":{"number":7,"url":"https://github.com/o/r/pull/7",
+              "title":"Add it","state":"merged","is_draft":false,
+              "merged_at":"2026-01-03T00:00:00Z","updated_at":"2026-01-02T03:04:05Z"}},
+            {"branch":"lonely","pull_request":null}
+          ]
+        },{
+          "path":"/code/web","repository":"o/w","status":{"state":"not_accessible"},"branches":[]
+        }]}
+        """), id: 4))
+
+        #expect(reply.nextPoll == .seconds(240))
+        let api = try #require(reply.repositories.first)
+        #expect(api.path == "/code/api")
+        #expect(api.name == "o/r")
+        #expect(api.status == .ok)
+        #expect(api.defaultBranch == "main")
+        let found = try #require(api.branches["feature"] ?? nil)
+        #expect(found.number == 7)
+        #expect(found.state == .merged)
+        #expect(found.title == "Add it")
+        #expect(found.updatedAt == Date(timeIntervalSince1970: 1_767_323_045))
+        #expect(found.mergedAt == Date(timeIntervalSince1970: 1_767_398_400))
+        #expect(api.branches["lonely"] == .some(nil))
+        #expect(reply.repositories.last?.status == .notAccessible)
+        #expect(reply.repositories.last?.defaultBranch == nil)
+    }
+
+    @Test func readsEveryRepositoryStatus() throws {
+        func status(_ record: String) throws -> PullRequestReply.Status? {
+            DaemonWire.pullRequests(fromReply: json("""
+            {"type":"pull_request_response","id":1,"next_poll_seconds":60,"repos":[{
+              "path":"/p","repository":"o/r","status":\(record),"branches":[]}]}
+            """), id: 1)?.repositories.first?.status
+        }
+
+        #expect(try status(#"{"state":"unauthorized"}"#) == .unauthorized)
+        #expect(try status(#"{"state":"error","message":"GitHub answered 502"}"#) == .error("GitHub answered 502"))
+        #expect(try status(#"{"state":"something-newer"}"#) == nil)
+    }
+
+    @Test func aPullRequestStateThisBuildDoesNotKnowIsUnknown() throws {
+        let reply = try #require(DaemonWire.pullRequests(fromReply: json("""
+        {"type":"pull_request_response","id":1,"next_poll_seconds":60,"repos":[{
+          "path":"/p","repository":"o/r","status":{"state":"ok"},"branches":[{"branch":"b","pull_request":{
+          "number":1,"url":"https://github.com/o/r/pull/1","title":"t","state":"queued",
+          "is_draft":false,"merged_at":null,"updated_at":"2026-01-02T03:04:05Z"}}]}]}
+        """), id: 1))
+
+        #expect(try #require(reply.repositories.first?.branches["b"] ?? nil).state == .unknown)
+    }
+
+    @Test func theAnswerToAnotherRequestIsNotAnAnswer() {
+        let reply = json(#"{"type":"pull_request_response","id":5,"next_poll_seconds":60,"repos":[]}"#)
+
+        #expect(DaemonWire.pullRequests(fromReply: reply, id: 4) == nil)
+        #expect(DaemonWire.pullRequests(fromReply: reply, id: 5) != nil)
+        #expect(DaemonWire.pullRequests(fromReply: json(#"{"type":"git_response","id":5}"#), id: 5) == nil)
     }
 }
