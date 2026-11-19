@@ -43,3 +43,9 @@ _Avoid_: popover (it is not an `NSPopover`), inline chat.
 **Code ref**:
 A pointer at whole lines of a file, in the form an agent reads: `@path#L10-12`, with the path relative to the worktree, else absolute, and quoted if it has a space. For a buffer with unsaved edits, whose line numbers the disk would not match, it is `path:10-12 (unsaved)` followed by the lines in a fenced block.
 _Avoid_: mention, link, snippet.
+
+## GitHub
+
+**GitHub connection**:
+The app's one signed-in GitHub account, made from Settings with the Herder GitHub App's device flow. The app keeps its tokens in one Keychain item and refreshes them; herderd is handed the current access token, holds it in memory only, and confirms it works by asking GitHub who it belongs to. It is what linked pull requests read through. Not a git remote or a credential for `git` itself.
+_Avoid_: GitHub login, GitHub account (the account is who it is connected as), OAuth.

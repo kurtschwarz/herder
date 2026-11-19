@@ -30,6 +30,10 @@ settings:
     # xcodebuild command line by `just build` and scripts/package.sh;
     # empty from Xcode itself.
     HERDER_GIT_COMMIT: ""
+    # The Herder GitHub App's client ID, which device flow needs and which is
+    # public. Empty in a build without one; see
+    # docs/adr/0003-github-app-registration.md. Signing in says so when it is empty.
+    HERDER_GITHUB_CLIENT_ID: "Iv23liC5Sh9kgjVsUYY7"
     ALWAYS_SEARCH_USER_PATHS: "NO"
     CLANG_ENABLE_OBJC_WEAK: "YES"
     ENABLE_USER_SCRIPT_SANDBOXING: "YES"

@@ -20,6 +20,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>HerderGitCommit</key>
 	<string>$(HERDER_GIT_COMMIT)</string>
+	<key>HerderGitHubClientID</key>
+	<string>$(HERDER_GITHUB_CLIENT_ID)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>

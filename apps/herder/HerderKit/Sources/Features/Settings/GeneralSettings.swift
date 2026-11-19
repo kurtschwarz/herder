@@ -7,6 +7,7 @@ struct GeneralSettings: View {
     let version: AppVersion
     let updater: (any UpdaterClient)?
     let daemon: DaemonConnection?
+    let github: GitHubConnection?
 
     /// A copy of the updater's setting, which it does not publish changes to.
     /// Read when the pane appears and written back on every change.
@@ -19,6 +20,10 @@ struct GeneralSettings: View {
                 if let commit = version.commit {
                     row("Commit", commit)
                 }
+            }
+
+            if let github {
+                GitHubSection(github: github)
             }
 
             if let daemon {

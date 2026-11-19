@@ -20,7 +20,8 @@ public struct SettingsWindow: View {
             agents: environment.agents,
             version: AppVersion(info: Bundle.main.infoDictionary ?? [:]),
             updater: environment.updater,
-            daemon: environment.daemon
+            daemon: environment.daemon,
+            github: environment.github
         )
             .background { WindowGlass() }
             // No close callbacks: nothing in here can be lost by closing it.

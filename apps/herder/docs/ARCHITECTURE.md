@@ -49,6 +49,7 @@ AppFeature            composition root: windows, menus, builds real services
 - **Who owns what.** The daemon owns processes and (as it arrives) their screen state. The app owns everything the user sees and every file it touches. Persisted state names sessions by id and host; the daemon does not read the app's state.
 - **The protocol.** Length-prefixed frames of JSON over any byte stream, a version handshake first, additive changes only. `Core/Models/Daemon/DaemonWire` is the Swift half of `packages/herderd/src/protocol.rs`, and changing one means changing the other.
 - **The seam.** Core holds `DaemonClient` and `DaemonConnection` (what Settings observes). `Services/Daemon/LiveDaemonClient` finds or starts the daemon and does the handshake. Features see only `DaemonConnection`. `AppEnvironment` is the only place that names the live client, and passes `nil` unless a test asks, so nothing under test starts a real daemon.
+- **GitHub.** The app signs in and owns the tokens (`GitHubConnection` in Core, `Services/GitHub/` for the device flow and the Keychain item) and hands herderd the access token with `set_github_token`. See `docs/adr/0003-github-pull-requests.md`.
 - **The binary.** `just daemon` builds it, `just build`, `just test` and `just package` depend on it, and a copy-files phase puts it at `Contents/MacOS/herderd`.
 
 ### Dependency rules
@@ -95,7 +96,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   ├── Vendor/                  # gitignored: HerderSyntaxFFI.xcframework (`just syntax`), GhosttyVt.xcframework (`just ghostty`)
 │   │   │   ├── Sources/
 │   │   │   │   ├── Core/
-│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Daemon/, Editor/, Files/, Git/, Processes/, Terminal/
+│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Daemon/, Editor/, Files/, Git/, GitHub/, Processes/, Terminal/
 │   │   │   │   │   ├── Services/        # service protocols
 │   │   │   │   │   ├── Workspace/       # WorkspaceRegistry, Workspace, snapshots, UI state
 │   │   │   │   │   ├── Repositories/    # RepositoryStore, RepositoryAccess
@@ -104,6 +105,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   │   ├── FileSystem/
 │   │   │   │   │   ├── Git/
 │   │   │   │   │   ├── Daemon/          # finds or starts herderd and does its handshake
+│   │   │   │   │   ├── GitHub/          # device flow over URLSession, and the Keychain item for the tokens
 │   │   │   │   │   ├── Process/         # PTY spawning
 │   │   │   │   │   ├── Agents/
 │   │   │   │   │   ├── Highlighting/    # wraps the syntax-highlighter bindings

@@ -59,6 +59,11 @@ public final class AppEnvironment {
     /// preview is given.
     public let daemon: DaemonConnection?
 
+    /// The app's GitHub sign-in, for Settings to show and drive. `nil` when
+    /// there is no daemon to hand the token to, or no Keychain to keep it in,
+    /// which is what a test or a preview is given.
+    public let github: GitHubConnection?
+
     /// Where windows' snapshots are kept, and which exist.
     let windows: WindowStore
 
@@ -154,6 +159,9 @@ public final class AppEnvironment {
             client: "Herder \(AppVersion(info: Bundle.main.infoDictionary ?? [:]).version)"
         )
 
+        // Empty in a build that has no GitHub App: signing in then says so.
+        let gitHubClientID = Bundle.main.infoDictionary?[GitHubConnection.clientIDKey] as? String ?? ""
+
         self.init(
             files: LiveFileClient(),
             bookmarks: LiveBookmarkClient(),
@@ -165,7 +173,9 @@ public final class AppEnvironment {
             leftovers: LiveLeftoverAgentClient(),
             opencode: opencode,
             updater: updater,
-            daemon: daemon
+            daemon: daemon,
+            githubAuth: LiveGitHubAuthClient(clientID: gitHubClientID),
+            githubVault: KeychainGitHubTokenVault()
         )
     }
 
@@ -181,7 +191,9 @@ public final class AppEnvironment {
     /// developer's own opencode config. `bundle` is where the app is running
     /// from, which decides whether `opencode` is asked at all. `updater` is
     /// `nil` so that nothing checks GitHub from a test. `daemon` is `nil`
-    /// unless asked for, so a test never starts a real herderd.
+    /// unless asked for, so a test never starts a real herderd. `githubAuth`
+    /// and `githubVault` are `nil` for the same reason, and for the Keychain:
+    /// the GitHub connection exists only when it has both and a daemon.
     public init(
         files: any FileClient,
         bookmarks: any BookmarkClient,
@@ -199,6 +211,8 @@ public final class AppEnvironment {
         opencode: (any OpencodeIntegrationClient)? = nil,
         updater: (any UpdaterClient)? = nil,
         daemon: (any DaemonClient)? = nil,
+        githubAuth: (any GitHubAuthClient)? = nil,
+        githubVault: (any GitHubTokenVault)? = nil,
         bundle: URL = Bundle.main.bundleURL
     ) {
         self.persistence = persistence
@@ -213,6 +227,11 @@ public final class AppEnvironment {
         self.sessions = AgentSessions(state: persistence.state, clock: clock)
         self.processes = RunningProcesses()
         self.daemon = daemon.map { DaemonConnection(client: $0) }
+        if let daemon, let githubAuth, let githubVault {
+            self.github = GitHubConnection(auth: githubAuth, vault: githubVault, daemon: daemon, clock: clock)
+        } else {
+            self.github = nil
+        }
         self.worktrees = WorkspaceRegistry(
             files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
         )
@@ -365,6 +384,9 @@ public final class AppEnvironment {
         await agents.load()
         await repositories.load()
         await daemon?.connect()
+        // Unawaited: it may refresh a token over the network, and no window
+        // should wait for that.
+        if let github { Task { await github.start() } }
     }
 
     /// Hands back every folder the sandbox is holding open and stops watching

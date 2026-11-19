@@ -2,8 +2,10 @@
 
 use crate::frame::{read_frame, write_frame};
 use crate::git;
+use crate::github::GitHub;
 use crate::protocol::{
-    ClientMessage, DaemonMessage, GitOp, HostId, MAX_PROTOCOL, MIN_PROTOCOL, negotiate,
+    ClientMessage, DaemonMessage, GitHubCheck, GitOp, HostId, MAX_PROTOCOL, MIN_PROTOCOL,
+    negotiate,
 };
 use std::io::{self, Read, Write};
 use std::sync::{Mutex, mpsc};
@@ -18,10 +20,27 @@ const GIT_WORKERS: usize = 4;
 /// that reports 0.
 const OWNED_SESSIONS: u32 = 0;
 
+/// One request, waiting for a worker.
+enum Job {
+    Git(u64, GitOp),
+    CheckGitHub(u64),
+    /// The token is already forgotten; this is only the answer.
+    ClearedGitHub(u64),
+}
+
 /// Serves one client until it hangs up. Takes a reader and a writer rather than
 /// a socket so the same code runs over a Unix socket, a child's stdio or a
 /// test's buffers.
-pub fn serve<R: Read, W: Write + Send>(mut input: R, mut output: W) -> io::Result<()> {
+pub fn serve<R: Read, W: Write + Send>(input: R, output: W) -> io::Result<()> {
+    serve_with(input, output, GitHub::shared())
+}
+
+/// [`serve`] with the GitHub state to use, so a test has one of its own.
+pub fn serve_with<R: Read, W: Write + Send>(
+    mut input: R,
+    mut output: W,
+    github: &GitHub,
+) -> io::Result<()> {
     let Some(first) = read_frame(&mut input)? else {
         return Ok(());
     };
@@ -44,7 +63,11 @@ pub fn serve<R: Read, W: Write + Send>(mut input: R, mut output: W) -> io::Resul
         }
         // Not a hello: the first message is always one, so this is not a
         // client of ours. Close without answering.
-        Ok(ClientMessage::GitRequest { .. }) | Err(_) => {
+        Ok(ClientMessage::GitRequest { .. }
+        | ClientMessage::SetGitHubToken { .. }
+        | ClientMessage::ClearGitHubToken { .. }
+        | ClientMessage::CheckGitHub { .. })
+        | Err(_) => {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "expected hello"));
         }
     };
@@ -56,15 +79,19 @@ pub fn serve<R: Read, W: Write + Send>(mut input: R, mut output: W) -> io::Resul
         return Ok(());
     }
 
-    serve_requests(input, output)
+    serve_requests(input, output, github)
 }
 
 /// Reads requests until the client leaves, answering git requests on a small
 /// pool of workers. Responses may arrive in any order; `id` ties each to its
 /// request.
-fn serve_requests<R: Read, W: Write + Send>(mut input: R, output: W) -> io::Result<()> {
+fn serve_requests<R: Read, W: Write + Send>(
+    mut input: R,
+    output: W,
+    github: &GitHub,
+) -> io::Result<()> {
     let output = Mutex::new(output);
-    let (jobs, queue) = mpsc::channel::<(u64, GitOp)>();
+    let (jobs, queue) = mpsc::channel::<Job>();
     let queue = Mutex::new(queue);
 
     thread::scope(|scope| {
@@ -73,8 +100,8 @@ fn serve_requests<R: Read, W: Write + Send>(mut input: R, output: W) -> io::Resu
                 loop {
                     // The lock is released before the work starts.
                     let next = queue.lock().ok().and_then(|queue| queue.recv().ok());
-                    let Some((id, op)) = next else { return };
-                    let reply = respond(id, &op);
+                    let Some(job) = next else { return };
+                    let reply = respond(job, github);
                     let Ok(bytes) = serde_json::to_vec(&reply) else {
                         continue;
                     };
@@ -90,9 +117,23 @@ fn serve_requests<R: Read, W: Write + Send>(mut input: R, output: W) -> io::Resu
             while let Some(frame) = read_frame(&mut input)? {
                 // Anything else is ignored: a newer client may say more than
                 // this daemon knows.
-                if let Ok(ClientMessage::GitRequest { id, op }) = serde_json::from_slice(&frame) {
-                    let _ = jobs.send((id, op));
-                }
+                let job = match serde_json::from_slice(&frame) {
+                    Ok(ClientMessage::GitRequest { id, op }) => Job::Git(id, op),
+                    // Stored and forgotten here, in the order they arrive, and
+                    // not on a worker: a set followed by a clear must end with
+                    // nothing held, and workers run in any order.
+                    Ok(ClientMessage::SetGitHubToken { id, token }) => {
+                        github.set_token(token);
+                        Job::CheckGitHub(id)
+                    }
+                    Ok(ClientMessage::ClearGitHubToken { id }) => {
+                        github.clear_token();
+                        Job::ClearedGitHub(id)
+                    }
+                    Ok(ClientMessage::CheckGitHub { id }) => Job::CheckGitHub(id),
+                    Ok(ClientMessage::Hello { .. }) | Err(_) => continue,
+                };
+                let _ = jobs.send(job);
             }
             Ok(())
         })();
@@ -101,10 +142,16 @@ fn serve_requests<R: Read, W: Write + Send>(mut input: R, output: W) -> io::Resu
     })
 }
 
-fn respond(id: u64, op: &GitOp) -> DaemonMessage {
-    match git::handle(op) {
-        Ok(result) => DaemonMessage::GitResponse { id, result: Some(result), error: None },
-        Err(error) => DaemonMessage::GitResponse { id, result: None, error: Some(error) },
+fn respond(job: Job, github: &GitHub) -> DaemonMessage {
+    match job {
+        Job::Git(id, op) => match git::handle(&op) {
+            Ok(result) => DaemonMessage::GitResponse { id, result: Some(result), error: None },
+            Err(error) => DaemonMessage::GitResponse { id, result: None, error: Some(error) },
+        },
+        Job::ClearedGitHub(id) => {
+            DaemonMessage::GitHubResponse { id, check: GitHubCheck::NotConnected }
+        }
+        Job::CheckGitHub(id) => DaemonMessage::GitHubResponse { id, check: github.check() },
     }
 }
 

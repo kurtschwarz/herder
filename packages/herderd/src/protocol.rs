@@ -14,8 +14,32 @@ use serde::{Deserialize, Serialize};
 /// because nothing used the daemon before it, so there is no older app to keep
 /// serving.
 pub const MIN_PROTOCOL: u32 = 2;
-/// The newest protocol version this build speaks.
-pub const MAX_PROTOCOL: u32 = 2;
+/// The newest protocol version this build speaks. 3 added the GitHub token.
+/// Nothing in 3 changes a message of 2, so an app that speaks 2 is still served.
+pub const MAX_PROTOCOL: u32 = 3;
+
+/// A credential. Its `Debug` never shows the value, so a message that carries
+/// one can be logged, printed in a panic or put in an error without leaking it.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Secret(String);
+
+impl Secret {
+    pub fn new(value: impl Into<String>) -> Self {
+        Secret(value.into())
+    }
+
+    /// The credential itself. Only the code that sends it to GitHub calls this.
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Secret(<redacted>)")
+    }
+}
 
 /// Which machine a record belongs to. Every session and worktree the protocol
 /// names carries one, so a second host later is not a migration of the keys
@@ -49,6 +73,19 @@ pub enum ClientMessage {
         #[serde(flatten)]
         op: GitOp,
     },
+    /// Hands the daemon the GitHub access token to use from now on, replacing
+    /// any it holds. It is kept in memory only. The answer is a
+    /// [`DaemonMessage::GitHubResponse`] saying whether it works. Added in
+    /// protocol 3.
+    #[serde(rename = "set_github_token")]
+    SetGitHubToken { id: u64, token: Secret },
+    /// Makes the daemon forget its GitHub token. Added in protocol 3.
+    #[serde(rename = "clear_github_token")]
+    ClearGitHubToken { id: u64 },
+    /// Asks whether the token the daemon holds works, without changing it.
+    /// Added in protocol 3.
+    #[serde(rename = "check_github")]
+    CheckGitHub { id: u64 },
 }
 
 /// A git operation and its arguments. Paths are strings on the daemon's host,
@@ -314,6 +351,21 @@ pub struct GitError {
     pub message: String,
 }
 
+/// What a `viewer` query made with the daemon's GitHub token came to. Never
+/// holds the token, and `message` never quotes it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum GitHubCheck {
+    /// The daemon holds no token.
+    NotConnected,
+    /// The token works, and belongs to `login`.
+    Ok { login: String },
+    /// GitHub refused the token: it is expired or revoked.
+    Unauthorized,
+    /// GitHub could not be asked, or its answer was not one the daemon knows.
+    Error { message: String },
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DaemonMessage {
@@ -345,6 +397,10 @@ pub enum DaemonMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<GitError>,
     },
+    /// The outcome of a GitHub message, with the same `id`. Carries what the
+    /// daemon found out, never the token.
+    #[serde(rename = "github_response")]
+    GitHubResponse { id: u64, check: GitHubCheck },
 }
 
 /// The highest version both sides speak, if there is one.
@@ -376,6 +432,44 @@ mod tests {
         let hello = ClientMessage::Hello { min_protocol: 1, max_protocol: 2, client: "t".into() };
         let json = serde_json::to_string(&hello).unwrap();
         assert_eq!(json, r#"{"type":"hello","min_protocol":1,"max_protocol":2,"client":"t"}"#);
+    }
+
+    #[test]
+    fn an_app_that_speaks_only_2_is_still_served() {
+        assert_eq!(negotiate(2, 2), Some(2));
+    }
+
+    #[test]
+    fn a_token_is_never_shown_by_debug() {
+        let message = ClientMessage::SetGitHubToken { id: 1, token: Secret::new("ghu_hunter2") };
+        assert!(!format!("{message:?}").contains("hunter2"));
+        assert!(!format!("{:?}", Secret::new("hunter2")).contains("hunter2"));
+    }
+
+    #[test]
+    fn the_token_messages_are_tagged_json() {
+        let set = ClientMessage::SetGitHubToken { id: 4, token: Secret::new("t") };
+        let json = serde_json::to_string(&set).unwrap();
+        assert_eq!(json, r#"{"type":"set_github_token","id":4,"token":"t"}"#);
+        assert_eq!(serde_json::from_str::<ClientMessage>(&json).unwrap(), set);
+
+        let clear = ClientMessage::ClearGitHubToken { id: 5 };
+        assert_eq!(
+            serde_json::to_string(&clear).unwrap(),
+            r#"{"type":"clear_github_token","id":5}"#
+        );
+    }
+
+    #[test]
+    fn a_github_response_names_the_state_and_no_token() {
+        let reply = DaemonMessage::GitHubResponse {
+            id: 4,
+            check: GitHubCheck::Ok { login: "kurt".into() },
+        };
+        assert_eq!(
+            serde_json::to_string(&reply).unwrap(),
+            r#"{"type":"github_response","id":4,"check":{"state":"ok","login":"kurt"}}"#
+        );
     }
 
     #[test]

@@ -6,7 +6,7 @@ import Foundation
 public enum DaemonWire {
     /// The versions this build of the app speaks. Raise `supported.upperBound`
     /// when the app starts using a message the daemon gained in that version.
-    public static let supported = 2...2
+    public static let supported = 3...3
 
     /// A frame is a big-endian `UInt32` length and then that many bytes.
     public static let headerSize = 4
@@ -81,6 +81,50 @@ public enum DaemonWire {
         case nil: return high <= 1
         default: return false
         }
+    }
+
+    // MARK: - GitHub
+
+    /// Hands the daemon the access token to use. It answers with
+    /// ``gitHubCheck(fromReply:id:)``, after asking GitHub whether it works.
+    public static func setGitHubToken(id: Int, token: String) -> Data {
+        message(["type": "set_github_token", "id": id, "token": token])
+    }
+
+    /// Makes the daemon forget its token.
+    public static func clearGitHubToken(id: Int) -> Data {
+        message(["type": "clear_github_token", "id": id])
+    }
+
+    /// Asks whether the token the daemon holds works.
+    public static func checkGitHub(id: Int) -> Data {
+        message(["type": "check_github", "id": id])
+    }
+
+    /// What a `github_response` to request `id` says. Anything else, including
+    /// the answer to another request, is an error rather than a guess.
+    public static func gitHubCheck(fromReply payload: Data, id: Int) -> GitHubCheck {
+        guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              object["type"] as? String == "github_response",
+              object["id"] as? Int == id,
+              let check = object["check"] as? [String: Any]
+        else { return .error("Unrecognised reply from herderd.") }
+
+        switch check["state"] as? String {
+        case "not_connected": return .notConnected
+        case "unauthorized": return .unauthorized
+        case "ok":
+            guard let login = check["login"] as? String else { break }
+            return .ok(login: login)
+        case "error":
+            return .error(check["message"] as? String ?? "GitHub could not be asked.")
+        default: break
+        }
+        return .error("Unrecognised reply from herderd.")
+    }
+
+    private static func message(_ fields: [String: Any]) -> Data {
+        (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
     }
 
     // MARK: - Git
