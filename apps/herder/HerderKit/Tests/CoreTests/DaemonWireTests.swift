@@ -118,4 +118,39 @@ import Testing
         #expect(DaemonWire.repositoryKind(fromResult: ["kind": "linked_worktree"]) == nil)
         #expect(DaemonWire.repositoryKind(fromResult: ["kind": "mystery"]) == nil)
     }
+
+    @Test func worktreesReadBackWithTheirCheckoutAndActivity() throws {
+        let worktrees = try #require(DaemonWire.worktrees(fromResult: [
+            "worktrees": [
+                ["host": "local", "path": "/r", "checkout": ["type": "branch", "name": "main"],
+                 "is_main_working_tree": true, "last_activity": 100.0],
+                ["host": "local", "path": "/r-d", "checkout": ["type": "detached", "sha": "abc1234"],
+                 "is_main_working_tree": false],
+            ],
+        ]))
+
+        #expect(worktrees.map(\.checkout) == [.branch("main"), .detached(sha: "abc1234")])
+        #expect(worktrees.map(\.isMainWorkingTree) == [true, false])
+        #expect(worktrees[0].lastActivity == Date(timeIntervalSince1970: 100))
+        #expect(worktrees[1].lastActivity == nil)
+    }
+
+    @Test func aWorktreeRecordMissingAFieldIsNotAnAnswer() {
+        #expect(DaemonWire.worktrees(fromResult: ["worktrees": [["path": "/r"]]]) == nil)
+        #expect(DaemonWire.worktrees(fromResult: [:]) == nil)
+    }
+
+    @Test func gitDirectoryAndCheckoutKeepNullApartFromAMissingAnswer() {
+        #expect(DaemonWire.gitDirectory(fromResult: ["path": NSNull()]) == .some(nil))
+        #expect(DaemonWire.gitDirectory(fromResult: [:]) == nil)
+        #expect(DaemonWire.checkout(fromResult: ["checkout": NSNull()]) == .some(nil))
+        #expect(DaemonWire.checkout(fromResult: ["checkout": ["type": "branch", "name": "main"]]) == .some(.branch("main")))
+        #expect(DaemonWire.checkout(fromResult: [:]) == nil)
+        #expect(DaemonWire.checkout(fromResult: ["checkout": ["type": "mystery"]]) == nil)
+    }
+
+    @Test func branchesReadBack() {
+        #expect(DaemonWire.branches(fromResult: ["branches": ["a", "b"]]) == ["a", "b"])
+        #expect(DaemonWire.branches(fromResult: [:]) == nil)
+    }
 }

@@ -5,17 +5,29 @@ use gix::repository::Kind;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// A folder that is a repository root, opened.
+pub struct Opened {
+    pub repo: gix::Repository,
+    pub kind: RepositoryKind,
+}
+
 /// Only the distinctions the add-a-workspace flow acts on. A subdirectory of a
 /// repository, or the `.git` directory of a working tree, is not a repository
 /// root: a workspace maps to a repository, not to a folder inside one.
 pub fn repository_kind(path: &str) -> RepositoryKind {
-    let Ok(root) = fs::canonicalize(path) else {
-        return RepositoryKind::NotARepository;
-    };
+    open(path).map_or(RepositoryKind::NotARepository, |opened| opened.kind)
+}
+
+/// `None` for anything that is not a repository root.
+pub fn open(path: &str) -> Option<Opened> {
+    let root = fs::canonicalize(path).ok()?;
     // `open`, not `discover`: it must not walk upwards out of a subdirectory.
-    let Ok(repo) = gix::open_opts(&root, gix::open::Options::isolated()) else {
-        return RepositoryKind::NotARepository;
-    };
+    let repo = gix::open_opts(&root, gix::open::Options::isolated()).ok()?;
+    let kind = classify(&repo, &root);
+    (kind != RepositoryKind::NotARepository).then_some(Opened { repo, kind })
+}
+
+fn classify(repo: &gix::Repository, root: &Path) -> RepositoryKind {
     let git_dir = canonical(repo.git_dir());
 
     // First: a worktree of a bare repository reads `core.bare` from the shared
@@ -76,10 +88,10 @@ fn names(dot_git: &Path, relative_to: &Path) -> Option<PathBuf> {
     fs::canonicalize(resolved).ok()
 }
 
-fn canonical(path: &Path) -> PathBuf {
+pub fn canonical(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-fn path_string(path: &Path) -> String {
+pub fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }

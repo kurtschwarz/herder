@@ -7,6 +7,8 @@
 
 pub mod cli;
 mod kind;
+mod layout;
+mod natural;
 
 use crate::protocol::{GitError, GitOp, GitResult};
 
@@ -16,5 +18,15 @@ pub fn handle(op: &GitOp) -> Result<GitResult, GitError> {
         GitOp::RepositoryKind { path } => {
             Ok(GitResult::RepositoryKind(kind::repository_kind(path)))
         }
+        GitOp::Worktrees { path } => {
+            layout::worktrees(path).map(|worktrees| GitResult::Worktrees { worktrees })
+        }
+        GitOp::Branches { path } => {
+            layout::branches(path).map(|branches| GitResult::Branches { branches })
+        }
+        GitOp::GitDirectory { path } => {
+            Ok(GitResult::GitDirectory { path: layout::git_directory(path) })
+        }
+        GitOp::Checkout { path } => Ok(GitResult::Checkout { checkout: layout::checkout(path) }),
     }
 }

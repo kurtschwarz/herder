@@ -99,12 +99,61 @@ public enum DaemonWire {
         case "bare": .bare
         case "not_a_repository": .notARepository
         case "linked_worktree":
-            // Resolved the way every other URL the app keeps is, so the two
-            // spell a folder the same way when they are compared.
-            (result["main_repository"] as? String).map {
-                .linkedWorktree(mainRepository: URL(filePath: $0, directoryHint: .isDirectory).resolvingSymlinksInPath())
-            }
+            (result["main_repository"] as? String).map { .linkedWorktree(mainRepository: folder($0)) }
         default: nil
         }
+    }
+
+    /// What a `worktrees` result lists, in the daemon's order.
+    public static func worktrees(fromResult result: [String: Any]) -> [GitWorktree]? {
+        guard let records = result["worktrees"] as? [[String: Any]] else { return nil }
+        var worktrees: [GitWorktree] = []
+        for record in records {
+            guard let path = record["path"] as? String,
+                  let checkout = checkout(fromRecord: record["checkout"]),
+                  let isMain = record["is_main_working_tree"] as? Bool
+            else { return nil }
+            worktrees.append(GitWorktree(
+                path: folder(path),
+                checkout: checkout,
+                isMainWorkingTree: isMain,
+                lastActivity: (record["last_activity"] as? Double).map(Date.init(timeIntervalSince1970:))
+            ))
+        }
+        return worktrees
+    }
+
+    public static func branches(fromResult result: [String: Any]) -> [String]? {
+        result["branches"] as? [String]
+    }
+
+    /// The folder a `git_directory` result names. `.some(nil)` is the daemon
+    /// saying there is none; `nil` is a reply that is not an answer.
+    public static func gitDirectory(fromResult result: [String: Any]) -> URL?? {
+        guard result.keys.contains("path") else { return .none }
+        guard let path = result["path"] as? String else { return .some(nil) }
+        // No trailing slash, as the app built it when it appended `.git` itself.
+        return .some(URL(filePath: path, directoryHint: .notDirectory).resolvingSymlinksInPath())
+    }
+
+    public static func checkout(fromResult result: [String: Any]) -> GitWorktree.Checkout?? {
+        guard result.keys.contains("checkout") else { return .none }
+        guard let record = result["checkout"], !(record is NSNull) else { return .some(nil) }
+        return checkout(fromRecord: record).map { .some($0) }
+    }
+
+    private static func checkout(fromRecord record: Any?) -> GitWorktree.Checkout? {
+        guard let record = record as? [String: Any] else { return nil }
+        switch record["type"] as? String {
+        case "branch": return (record["name"] as? String).map { .branch($0) }
+        case "detached": return (record["sha"] as? String).map { .detached(sha: $0) }
+        default: return nil
+        }
+    }
+
+    /// A path from the daemon as a URL, resolved the way every other URL the
+    /// app keeps is, so the two spell a folder the same way when compared.
+    private static func folder(_ path: String) -> URL {
+        URL(filePath: path, directoryHint: .isDirectory).resolvingSymlinksInPath()
     }
 }

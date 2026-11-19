@@ -4,10 +4,11 @@ import Synchronization
 
 /// `GitClient` that asks herderd, bound to the one host it runs on. See ADR 0002.
 ///
-/// Only `repositoryKind` goes to the daemon so far. The rest are still answered
-/// by `local`, a `LiveGitClient`, until each is ported; when the last one is,
-/// `local` and `LiveGitClient` are deleted and the daemon being unreachable is
-/// the only way a call fails.
+/// Only the layout operations (`repositoryKind`, `worktrees`, `branches`,
+/// `gitDirectory`, `checkout`) go to the daemon so far. The rest are still
+/// answered by `local`, a `LiveGitClient`, until each is ported; when the last
+/// one is, `local` and `LiveGitClient` are deleted and the daemon being
+/// unreachable is the only way a call fails.
 public struct DaemonGitClient: GitClient {
     private let daemon: any DaemonClient
     private let local: LiveGitClient
@@ -23,31 +24,39 @@ public struct DaemonGitClient: GitClient {
     public func repositoryKind(at url: URL) async throws -> GitRepositoryKind {
         let result = try await ask("repository_kind", ["path": url.path(percentEncoded: false)])
         guard let kind = DaemonWire.repositoryKind(fromResult: result) else {
-            throw GitClientError.commandFailed("Unrecognised reply from herderd.")
+            throw Self.unrecognised
         }
         return kind
     }
 
-    // MARK: - Still local
-
     public func worktrees(at url: URL) async throws -> [GitWorktree] {
-        try await local.worktrees(at: url)
+        let result = try await ask("worktrees", ["path": url.path(percentEncoded: false)])
+        guard let worktrees = DaemonWire.worktrees(fromResult: result) else { throw Self.unrecognised }
+        return worktrees
     }
 
     public func branches(at url: URL) async throws -> [String] {
-        try await local.branches(at: url)
-    }
-
-    public func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {
-        try await local.addWorktree(in: repository, at: path, newBranch: newBranch, from: base)
+        let result = try await ask("branches", ["path": url.path(percentEncoded: false)])
+        guard let branches = DaemonWire.branches(fromResult: result) else { throw Self.unrecognised }
+        return branches
     }
 
     public func gitDirectory(of url: URL) async throws -> URL? {
-        try await local.gitDirectory(of: url)
+        let result = try await ask("git_directory", ["path": url.path(percentEncoded: false)])
+        guard let directory = DaemonWire.gitDirectory(fromResult: result) else { throw Self.unrecognised }
+        return directory
     }
 
     public func checkout(of url: URL) async throws -> GitWorktree.Checkout? {
-        try await local.checkout(of: url)
+        let result = try await ask("checkout", ["path": url.path(percentEncoded: false)])
+        guard let checkout = DaemonWire.checkout(fromResult: result) else { throw Self.unrecognised }
+        return checkout
+    }
+
+    // MARK: - Still local
+
+    public func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {
+        try await local.addWorktree(in: repository, at: path, newBranch: newBranch, from: base)
     }
 
     public func status(in worktree: URL) async throws -> GitWorktreeStatus {
@@ -91,6 +100,8 @@ public struct DaemonGitClient: GitClient {
     }
 
     // MARK: - The daemon
+
+    private static let unrecognised = GitClientError.commandFailed("Unrecognised reply from herderd.")
 
     private func ask(_ op: String, _ arguments: [String: String]) async throws -> [String: Any] {
         let id = nextID.next()

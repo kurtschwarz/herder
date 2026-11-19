@@ -57,6 +57,35 @@ pub enum ClientMessage {
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum GitOp {
     RepositoryKind { path: String },
+    Worktrees { path: String },
+    Branches { path: String },
+    GitDirectory { path: String },
+    Checkout { path: String },
+}
+
+/// What a working tree has checked out.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Checkout {
+    Branch {
+        name: String,
+    },
+    /// `sha` is the first seven characters of the commit.
+    Detached {
+        sha: String,
+    },
+}
+
+/// One working tree of a repository, in the order the sidebar shows them.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Worktree {
+    pub host: HostId,
+    pub path: String,
+    pub checkout: Checkout,
+    pub is_main_working_tree: bool,
+    /// Seconds since the Unix epoch, from the reflog.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub last_activity: Option<f64>,
 }
 
 /// What a folder is, as far as git is concerned.
@@ -70,10 +99,25 @@ pub enum RepositoryKind {
 }
 
 /// The answer to a [`GitOp`], shaped per operation.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GitResult {
     RepositoryKind(RepositoryKind),
+    Worktrees {
+        worktrees: Vec<Worktree>,
+    },
+    Branches {
+        branches: Vec<String>,
+    },
+    /// `null` for a folder that is not a working tree.
+    GitDirectory {
+        path: Option<String>,
+    },
+    /// `null` for a folder that is not a working tree, or whose `HEAD` cannot
+    /// be read.
+    Checkout {
+        checkout: Option<Checkout>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,7 +135,7 @@ pub struct GitError {
     pub message: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DaemonMessage {
     /// The daemon spoke first-contact and the two sides share a version.
