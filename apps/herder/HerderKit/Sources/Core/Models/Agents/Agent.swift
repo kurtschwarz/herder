@@ -30,6 +30,11 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// would without.
     public var promptArgument: String?
 
+    /// Whether the agent only fills its input with the first prompt, and the
+    /// message has to be sent with Return once it shows. `nil` and `false` for
+    /// an agent that sends it itself.
+    public var promptNeedsReturn: Bool?
+
     /// The command line that picks a session up again after its terminal was
     /// closed, or `nil` for an agent that cannot: it starts afresh instead.
     /// May name the session with ``sessionToken``.
@@ -59,6 +64,7 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
         command: String,
         planCommand: String? = nil,
         promptArgument: String? = nil,
+        promptNeedsReturn: Bool? = nil,
         resumeCommand: String? = nil,
         sessionLookup: String? = nil,
         environment: [String: String]? = nil
@@ -68,6 +74,7 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
         self.command = command
         self.planCommand = planCommand
         self.promptArgument = promptArgument
+        self.promptNeedsReturn = promptNeedsReturn
         self.resumeCommand = resumeCommand
         self.sessionLookup = sessionLookup
         self.environment = environment
@@ -163,6 +170,8 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
             name: "opencode",
             command: "opencode",
             promptArgument: "--prompt \(promptToken)",
+            // 2.0.16 puts the text in the input and waits.
+            promptNeedsReturn: true,
             resumeCommand: "opencode -s \(sessionToken)",
             sessionLookup: "opencode session list --format json -n 20",
             environment: ["OPENCODE_CLI_CONFIG_CONTENT": #"{"theme":{"name":"herder"}}"#]

@@ -503,9 +503,9 @@ public final class AgentPanelModel {
         let resuming = tab.hasStarted && !tab.isMissingSessionID
         // Only a session's first start is given its first message: a restart
         // would say it twice.
+        let firstPrompt = tab.hasStarted ? nil : tab.firstPrompt
         let line = tab.agent.commandLine(
-            session: tab.sessionName, resuming: resuming, mode: tab.mode,
-            prompt: tab.hasStarted ? nil : tab.firstPrompt
+            session: tab.sessionName, resuming: resuming, mode: tab.mode, prompt: firstPrompt
         )
         var spec = ShellLaunch.command(
             "exec \(line)",
@@ -517,7 +517,31 @@ public final class AgentPanelModel {
         await tab.attach(using: pty, spec: spec)
         enter(tab, in: workspace)
         recordStart(of: tab, in: workspace)
+        if let firstPrompt, tab.agent.promptNeedsReturn == true {
+            Task { await sendReturn(once: firstPrompt, shows: tab) }
+        }
     }
+
+    /// Presses Return in an agent that only filled its input with the first
+    /// prompt, once the prompt shows on screen: sooner, the keystroke would
+    /// reach the terminal UI before it is reading. Gives up after a while
+    /// rather than press Return into something that never came up.
+    private func sendReturn(once prompt: String, shows tab: AgentTab) async {
+        let line = prompt.split(whereSeparator: \.isNewline).first.map(String.init) ?? prompt
+        // The start of the line, short enough not to be split by a wrap.
+        let marker = String(line.trimmingCharacters(in: .whitespaces).prefix(12))
+        for _ in 0..<Self.promptWaitPolls {
+            do { try await clock.sleep(for: Self.promptWaitInterval) } catch { return }
+            guard tab.phase == .running else { return }
+            if let screen = tab.screen, screen.visibleText.contains(marker) {
+                screen.send(text: "\r")
+                return
+            }
+        }
+    }
+
+    private static let promptWaitInterval: Duration = .milliseconds(100)
+    private static let promptWaitPolls = 150
 
     /// Lists the tab for the Task Manager, with its process once it has one.
     /// A restored tab is listed paused, as the sidebar lists it, and one that
