@@ -158,29 +158,25 @@ private struct NewOrderInput: View {
     let canPlan: Bool
     let plan: () -> Void
 
-    @FocusState private var isTyping: Bool
-
     var body: some View {
-        TextField("What should we build next?", text: $order.text, axis: .vertical)
-            .textFieldStyle(.plain)
-            .font(.system(size: 13))
-            .foregroundStyle(Theme.Palette.text)
-            .lineLimit(1...4)
-            .focused($isTyping)
-            .disabled(order.isWorking)
-            .padding(.horizontal, Theme.Spacing.normal)
-            .padding(.vertical, Theme.Spacing.normal - 1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fieldSurface()
-            .onKeyPress(phases: .down) { press in
-                guard press.key == .return else { return .ignored }
-                if press.modifiers.contains(.shift) {
-                    order.text += "\n"
-                } else if canPlan {
-                    plan()
-                }
-                return .handled
+        PromptTextView(
+            text: $order.text,
+            isEditable: !order.isWorking,
+            focusRequest: order.focusRequest,
+            submit: { if canPlan { plan() } }
+        )
+        .overlay(alignment: .topLeading) {
+            if order.text.isEmpty {
+                Text("What should we build next?")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
+                    .allowsHitTesting(false)
             }
-            .onChange(of: order.focusRequest) { isTyping = true }
+        }
+        .padding(.horizontal, Theme.Spacing.normal)
+        .padding(.vertical, Theme.Spacing.normal - 1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fieldSurface()
+        .opacity(order.isWorking ? 0.6 : 1)
     }
 }
