@@ -6,7 +6,7 @@ import Testing
 /// Against real processes, because what is worth testing is the terminal
 /// plumbing itself: the controlling terminal, the window size, the exit status,
 /// and what the kernel says is in the foreground. A fake would only test itself.
-@Suite(.timeLimit(.minutes(1))) struct LivePTYClientTests {
+@Suite(.serialized, .timeLimit(.minutes(1))) struct LivePTYClientTests {
     let client = LivePTYClient()
     let directory = URL.temporaryDirectory.appending(path: "LivePTYClientTests", directoryHint: .isDirectory)
 

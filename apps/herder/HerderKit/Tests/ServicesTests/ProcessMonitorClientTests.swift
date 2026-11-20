@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 /// Against real processes: this one, and children started for the purpose.
-@Suite(.timeLimit(.minutes(1))) struct LiveProcessMonitorClientTests {
+@Suite(.serialized, .timeLimit(.minutes(1))) struct LiveProcessMonitorClientTests {
     /// Starts `/bin/sh` running `script` and returns it once it is up.
     func start(_ script: String) throws -> Process {
         let process = Process()

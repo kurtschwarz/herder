@@ -5,7 +5,7 @@ import Testing
 
 /// Against real processes, orphaned the way a crash orphans an agent: by
 /// their parent exiting.
-@Suite(.timeLimit(.minutes(1))) struct LiveLeftoverAgentClientTests {
+@Suite(.serialized, .timeLimit(.minutes(1))) struct LiveLeftoverAgentClientTests {
     let directory = URL.temporaryDirectory.appending(
         path: "LeftoverAgentClientTests-\(UUID().uuidString)", directoryHint: .isDirectory
     )
