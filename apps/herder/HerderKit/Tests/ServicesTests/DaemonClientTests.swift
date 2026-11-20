@@ -6,7 +6,7 @@ import Testing
 
 /// Against the real `herderd` binary, which `just test` builds first. A run
 /// without it (a bare `swift test`) skips these rather than failing.
-@Suite(.timeLimit(.minutes(1))) struct LiveDaemonClientTests {
+@Suite(.serialized, .timeLimit(.minutes(1))) struct LiveDaemonClientTests {
     static let binary = URL(filePath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

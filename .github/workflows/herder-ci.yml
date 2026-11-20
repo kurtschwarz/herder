@@ -144,6 +144,8 @@ jobs:
         if: matrix.task == 'test'
         run: just in apps/herder check
 
+      # Twelve xctest workers on a 3-vCPU runner starve the tests that spawn
+      # processes or poll against a deadline, so cap them in CI only.
       - name: Run just ${{ matrix.task }}
         timeout-minutes: ${{ matrix.timeout }}
         run: >-
@@ -151,7 +153,7 @@ jobs:
           -clonedSourcePackagesDirPath '${{ runner.temp }}/SourcePackages'
           COMPILATION_CACHE_ENABLE_CACHING=YES
           COMPILATION_CACHE_CAS_PATH='${{ runner.temp }}/CompilationCache'
-          ${{ matrix.task == 'test' && format('-resultBundlePath ''{0}/TestResults.xcresult''', runner.temp) || '' }}
+          ${{ matrix.task == 'test' && format('-maximum-parallel-testing-workers 2 -resultBundlePath ''{0}/TestResults.xcresult''', runner.temp) || '' }}
 
       # Swift Testing's failure messages only go into the result bundle, so
       # print them here and nobody has to download it for the common case.
