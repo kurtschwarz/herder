@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.0](https://github.com/kurtschwarz/herder/compare/herder-v0.5.0...herder-v0.6.0) (2026-11-20)
+
+
+### Features
+
+* **herder:** badge each session's linked pull request ([#115](https://github.com/kurtschwarz/herder/issues/115)) ([31262a4](https://github.com/kurtschwarz/herder/commit/31262a43fcd8208ab97ab2658f27521385119d9c)), closes [#112](https://github.com/kurtschwarz/herder/issues/112)
+* **herder:** connect GitHub with the Herder GitHub App ([#113](https://github.com/kurtschwarz/herder/issues/113)) ([1f7cc83](https://github.com/kurtschwarz/herder/commit/1f7cc83b64cebf09bee002694ffd6f33668249e8))
+* **herder:** move all git operations to herderd ([#110](https://github.com/kurtschwarz/herder/issues/110)) ([e3cdc1f](https://github.com/kurtschwarz/herder/commit/e3cdc1f1dab003e0edaeeda1a4d3045f4f784cce)), closes [#109](https://github.com/kurtschwarz/herder/issues/109)
+* **herder:** New order card — plan a session from a prompt ([#129](https://github.com/kurtschwarz/herder/issues/129)) ([e96e587](https://github.com/kurtschwarz/herder/commit/e96e5874d6647fa921caebc47af9c661079ee18c)), closes [#117](https://github.com/kurtschwarz/herder/issues/117)
+* **herder:** selection prompt — send a code ref from the editor to an agent session ([#107](https://github.com/kurtschwarz/herder/issues/107)) ([d1b56eb](https://github.com/kurtschwarz/herder/commit/d1b56eb088d7f8cb21ac067f0774b5d1132e4cf7)), closes [#106](https://github.com/kurtschwarz/herder/issues/106)
+
+
+### Bug Fixes
+
+* **deps:** lock file maintenance ([#116](https://github.com/kurtschwarz/herder/issues/116)) ([8271145](https://github.com/kurtschwarz/herder/commit/8271145977734571036e09d38b70c2a10bdf05ff))
+* **herderd:** add worktrees to bare repos with no git identity ([#114](https://github.com/kurtschwarz/herder/issues/114)) ([d6665c3](https://github.com/kurtschwarz/herder/commit/d6665c3dcaf169968eab489e22431e0cdb51b49a))
+
 ## [0.5.0](https://github.com/kurtschwarz/herder/compare/herder-v0.4.0...herder-v0.5.0) (2026-11-18)
 
 
