@@ -45,6 +45,10 @@ public final class AppEnvironment {
     /// App-wide: Settings edits it and every window starts sessions from it.
     public let agents: AgentCatalog
 
+    /// Where the naming call for a new order goes: Settings edits it and every
+    /// window's New order card reads it.
+    public let naming: NamingSettings
+
     /// Every agent session there has been. App-wide, so that two windows
     /// listing one repository share one writer of its history. What each
     /// window has open is the window's own: see ``makeWindow(id:restoring:)``.
@@ -87,6 +91,7 @@ public final class AppEnvironment {
     /// What each window's models are built from. The services are the app's;
     /// the models made from them are the window's. See ``makeWindow(id:)``.
     private let git: any GitClient
+    private let namer: any SessionNamer
     private let files: any FileClient
     private let folderPicker: any FolderPickerClient
     private let saveLocation: any SaveLocationClient
@@ -179,7 +184,9 @@ public final class AppEnvironment {
             updater: updater,
             daemon: daemon,
             githubAuth: LiveGitHubAuthClient(clientID: gitHubClientID),
-            githubVault: KeychainGitHubTokenVault()
+            githubVault: KeychainGitHubTokenVault(),
+            namer: AnthropicSessionNamer(),
+            namingVault: KeychainNamingKeyVault()
         )
     }
 
@@ -217,6 +224,8 @@ public final class AppEnvironment {
         daemon: (any DaemonClient)? = nil,
         githubAuth: (any GitHubAuthClient)? = nil,
         githubVault: (any GitHubTokenVault)? = nil,
+        namer: (any SessionNamer)? = nil,
+        namingVault: (any NamingKeyVault)? = nil,
         bundle: URL = Bundle.main.bundleURL
     ) {
         self.persistence = persistence
@@ -228,6 +237,8 @@ public final class AppEnvironment {
         self.repositories = repositories
         self.windows = WindowStore(snapshots: snapshots, state: persistence.state)
         self.agents = AgentCatalog(state: persistence.state)
+        self.naming = NamingSettings(state: persistence.state, vault: namingVault)
+        self.namer = namer ?? UnavailableSessionNamer()
         let sessions = AgentSessions(state: persistence.state, clock: clock)
         self.sessions = sessions
         self.processes = RunningProcesses()
@@ -269,7 +280,9 @@ public final class AppEnvironment {
     /// windows must not share an editor.
     func makeWindow(id: UUID = UUID(), restoring snapshot: WindowSnapshot? = nil) -> WindowEnvironment {
         let list = WindowRepositories(store: repositories, members: snapshot?.repositories ?? [])
-        let repositoryList = RepositoriesModel(repositories: list, git: git, picker: folderPicker)
+        let repositoryList = RepositoriesModel(
+            repositories: list, git: git, picker: folderPicker, namer: namer, naming: naming, agents: agents
+        )
         let panel = AgentPanelModel(
             pty: pty, commands: commands, clock: clock, catalog: agents,
             sessions: WindowAgentSessions(store: sessions, window: id),
@@ -394,6 +407,7 @@ public final class AppEnvironment {
         if let opencode, location == .settled { await opencode.install() }
 
         await agents.load()
+        await naming.load()
         await repositories.load()
         await daemon?.connect()
         // Unawaited: it may refresh a token over the network, and no window

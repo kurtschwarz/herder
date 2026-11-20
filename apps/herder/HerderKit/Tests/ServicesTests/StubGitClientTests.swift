@@ -28,6 +28,23 @@ import Testing
         ])
     }
 
+    @Test func theStubNamesTheSeededBaseAndRecordsTheFetch() async throws {
+        let repository = URL(filePath: "/tmp/repo")
+        client.seed(fetchedBase: "origin/main", at: repository)
+
+        #expect(try await client.fetchDefaultBranch(in: repository) == "origin/main")
+        #expect(try await client.fetchDefaultBranch(in: URL(filePath: "/tmp/other")) == nil)
+        #expect(client.fetchedRepositories.first == repository)
+    }
+
+    @Test func theStubCanRefuseToFetch() async {
+        client.failFetching(with: "offline")
+
+        await #expect(throws: GitClientError.commandFailed("offline")) {
+            try await client.fetchDefaultBranch(in: URL(filePath: "/tmp/repo"))
+        }
+    }
+
     @Test func theStubCanRefuseToAdd() async {
         client.failAddingWorktrees(with: "nope")
 

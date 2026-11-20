@@ -184,7 +184,7 @@ private struct WindowView: View {
         // Where ⌘O finds the window it should open the modal in.
         .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
         .modifier(TabCommandValues(editor: window.editor, terminal: window.terminal, agents: window.agentPanel))
-        .modifier(AgentCommandValues(agents: window.agentPanel))
+        .modifier(AgentCommandValues(repositories: window.repositoryList))
     }
 
     /// The agent panel, the editor over the terminal, and the file tree.
@@ -304,7 +304,7 @@ private struct WindowActions: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
-            .environment(\.startAgentSession, StartAgentSessionAction { window.startAgentSession(in: $0, agent: $1, mode: $2) })
+            .environment(\.startAgentSession, StartAgentSessionAction { window.startAgentSession(in: $0, agent: $1, mode: $2, prompt: $3, name: $4) })
             .environment(\.showAgentSession, ShowAgentSessionAction { window.showAgentSession($0, takingFocus: $1) })
             .environment(\.resumeAgentSession, ResumeAgentSessionAction { window.resumeAgentSession($0, in: $1) })
             .environment(\.renameAgentSession, RenameAgentSessionAction { window.agentPanel.rename($0.id, to: $1) })
@@ -319,13 +319,13 @@ private struct WindowActions: ViewModifier {
 /// ``TabCommandValues`` for the same reason: one more value was too much for
 /// the type checker.
 private struct AgentCommandValues: ViewModifier {
-    let agents: AgentPanelModel
+    let repositories: RepositoriesModel
 
     func body(content: Content) -> some View {
         content
             .focusedSceneValue(
                 \.newAgentSession,
-                agents.workspace == nil ? nil : { Task { await agents.startSession() } }
+                repositories.canPlanOrder ? { repositories.focusNewOrder() } : nil
             )
     }
 }

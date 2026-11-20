@@ -29,7 +29,7 @@ import Testing
 
         #expect(body.count == length)
         #expect(String(decoding: body, as: UTF8.self)
-            == #"{"client":"Herder 1.0","max_protocol":4,"min_protocol":4,"type":"hello"}"#)
+            == #"{"client":"Herder 1.0","max_protocol":5,"min_protocol":4,"type":"hello"}"#)
     }
 
     @Test func aWelcomeIsConnected() {
@@ -247,6 +247,9 @@ import Testing
         #expect(DaemonWire.mergeBase(fromResult: ["sha": NSNull()]) == .some(nil))
         #expect(DaemonWire.mergeBase(fromResult: [:]) == nil)
         #expect(DaemonWire.upstream(fromResult: ["upstream": NSNull()]) == .some(nil))
+        #expect(DaemonWire.fetchedBase(fromResult: ["base": "origin/main"]) == .some("origin/main"))
+        #expect(DaemonWire.fetchedBase(fromResult: ["base": NSNull()]) == .some(nil))
+        #expect(DaemonWire.fetchedBase(fromResult: [:]) == nil)
         #expect(DaemonWire.contents(fromResult: ["text": "x"]) == .some("x"))
         #expect(DaemonWire.changeSummary(fromResult: ["summary": NSNull()]) == .some(nil))
         #expect(DaemonWire.changeSummary(fromResult: ["summary": ["insertions": 2, "deletions": 1]])

@@ -24,6 +24,17 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// runs the normal command. May name the session with ``sessionToken``.
     public var planCommand: String?
 
+    /// How a first prompt is given to a new session, added to the end of the
+    /// command line: ``promptToken`` stands for the prompt, quoted for the
+    /// shell. `nil` for an agent that cannot be given one, which starts as it
+    /// would without.
+    public var promptArgument: String?
+
+    /// Whether the agent only fills its input with the first prompt, and the
+    /// message has to be sent with Return once it shows. `nil` and `false` for
+    /// an agent that sends it itself.
+    public var promptNeedsReturn: Bool?
+
     /// The command line that picks a session up again after its terminal was
     /// closed, or `nil` for an agent that cannot: it starts afresh instead.
     /// May name the session with ``sessionToken``.
@@ -44,11 +55,16 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// it is the id the agent chose, once the lookup has found it.
     public static let sessionToken = "{session}"
 
+    /// Stands for the first prompt in ``promptArgument``.
+    public static let promptToken = "{prompt}"
+
     public init(
         id: ID,
         name: String,
         command: String,
         planCommand: String? = nil,
+        promptArgument: String? = nil,
+        promptNeedsReturn: Bool? = nil,
         resumeCommand: String? = nil,
         sessionLookup: String? = nil,
         environment: [String: String]? = nil
@@ -57,6 +73,8 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
         self.name = name
         self.command = command
         self.planCommand = planCommand
+        self.promptArgument = promptArgument
+        self.promptNeedsReturn = promptNeedsReturn
         self.resumeCommand = resumeCommand
         self.sessionLookup = sessionLookup
         self.environment = environment
@@ -72,9 +90,36 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// or picking one up. Resuming with no resume command starts afresh.
     /// `mode` only matters for a new session: a resumed one has its mode
     /// already, in the agent's own session.
-    public func commandLine(session: String, resuming: Bool, mode: SessionMode = .build) -> String {
+    ///
+    /// `prompt` is the session's first message, for a new session of an agent
+    /// that has a ``promptArgument``; a resumed one has had its first message
+    /// already, so it is left out.
+    public func commandLine(
+        session: String,
+        resuming: Bool,
+        mode: SessionMode = .build,
+        prompt: String? = nil
+    ) -> String {
         let template = resuming ? (nonBlank(resumeCommand) ?? command) : newCommand(for: mode)
-        return template.replacing(Self.sessionToken, with: session)
+        var line = template.replacing(Self.sessionToken, with: session)
+        if !resuming, let argument = promptArgument(for: prompt) { line += " " + argument }
+        return line
+    }
+
+    private func promptArgument(for prompt: String?) -> String? {
+        guard let template = nonBlank(promptArgument), let prompt,
+              !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        var quoted = Self.shellQuoted(prompt)
+        // A bare prompt that begins with a dash would be read as an option.
+        if template == Self.promptToken, prompt.hasPrefix("-") { quoted = "-- " + quoted }
+        return template.replacing(Self.promptToken, with: quoted)
+    }
+
+    /// `text` as one word for a POSIX shell: in single quotes, with each
+    /// single quote closed, escaped and reopened.
+    static func shellQuoted(_ text: String) -> String {
+        "'" + text.replacing("'", with: #"'\''"#) + "'"
     }
 
     private func newCommand(for mode: SessionMode) -> String {
@@ -110,13 +155,23 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
             name: "Claude Code",
             command: "claude --session-id \(sessionToken)",
             planCommand: "claude --session-id \(sessionToken) --permission-mode plan",
+            promptArgument: promptToken,
             resumeCommand: "claude --resume \(sessionToken)"
         ),
-        Agent(id: "codex", name: "Codex", command: "codex", resumeCommand: "codex resume --last"),
+        Agent(
+            id: "codex",
+            name: "Codex",
+            command: "codex",
+            promptArgument: promptToken,
+            resumeCommand: "codex resume --last"
+        ),
         Agent(
             id: "opencode",
             name: "opencode",
             command: "opencode",
+            promptArgument: "--prompt \(promptToken)",
+            // 2.0.16 puts the text in the input and waits.
+            promptNeedsReturn: true,
             resumeCommand: "opencode -s \(sessionToken)",
             sessionLookup: "opencode session list --format json -n 20",
             environment: ["OPENCODE_CLI_CONFIG_CONTENT": #"{"theme":{"name":"herder"}}"#]
@@ -125,6 +180,7 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
             id: "pi",
             name: "Pi",
             command: "pi --session-id \(sessionToken)",
+            promptArgument: promptToken,
             resumeCommand: "pi --session-id \(sessionToken)"
         ),
     ]

@@ -11,6 +11,7 @@ public struct SettingsView: View {
     @State private var selection: SettingsPane = .general
 
     private let agents: AgentCatalog
+    private let naming: NamingSettings
     private let version: AppVersion
     private let updater: (any UpdaterClient)?
     private let daemon: DaemonConnection?
@@ -18,10 +19,11 @@ public struct SettingsView: View {
     private let pullRequests: LinkedPullRequests?
 
     public init(
-        agents: AgentCatalog, version: AppVersion, updater: (any UpdaterClient)?, daemon: DaemonConnection?,
+        agents: AgentCatalog, naming: NamingSettings, version: AppVersion, updater: (any UpdaterClient)?, daemon: DaemonConnection?,
         github: GitHubConnection?, pullRequests: LinkedPullRequests? = nil
     ) {
         self.agents = agents
+        self.naming = naming
         self.version = version
         self.updater = updater
         self.daemon = daemon
@@ -50,6 +52,7 @@ public struct SettingsView: View {
                 version: version, updater: updater, daemon: daemon, github: github, pullRequests: pullRequests
             )
         case .agents: AgentsSettings(catalog: agents)
+        case .providers: ProvidersSettings(naming: naming)
         }
     }
 }
@@ -58,6 +61,7 @@ public struct SettingsView: View {
 #Preview {
     SettingsView(
         agents: AgentCatalog(state: InMemoryStateStore()),
+        naming: NamingSettings(state: InMemoryStateStore(), vault: InMemoryNamingKeyVault()),
         version: AppVersion(version: "0.1.0", build: "1", commit: "e87cd6e"),
         updater: StubUpdaterClient(),
         daemon: DaemonConnection(client: StubDaemonClient()),

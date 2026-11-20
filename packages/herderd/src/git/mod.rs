@@ -57,6 +57,7 @@ pub fn handle(op: &GitOp) -> Result<GitResult, GitError> {
             worktree_add::add(path, worktree, new_branch, base, exclude.as_deref())
                 .map(|worktree| GitResult::AddedWorktree { worktree })
         }
+        GitOp::Fetch { path } => Ok(GitResult::Fetched { base: history::fetch_default_branch(path) }),
         GitOp::Contents { path, file, revision } => {
             Ok(GitResult::Contents { text: history::contents(path, file, revision) })
         }

@@ -20,6 +20,10 @@ struct WorkspaceSelector: View {
     let model: RepositoriesModel
     let selection: Selection
 
+    /// A line of text with a caret, for a sentence it sits in, instead of the
+    /// plate the sidebar's header uses.
+    var isInline = false
+
     @State private var isOpen = false
 
     private var shape: RoundedRectangle {
@@ -28,25 +32,11 @@ struct WorkspaceSelector: View {
 
     var body: some View {
         Button { isOpen.toggle() } label: {
-            HStack(spacing: Theme.Spacing.normal) {
-                PhIcon(Ph.folderSimpleDuotone, size: 16)
-                    .foregroundStyle(Theme.Palette.violet)
-                Text(model.selectionTitle(for: picked))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.Palette.text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 0)
-                PhIcon(Ph.caretUpDown, size: 12)
-                    .foregroundStyle(Theme.Palette.secondaryText)
+            if isInline {
+                inlineLabel
+            } else {
+                plateLabel
             }
-            .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-            .frame(maxWidth: .infinity, minHeight: Theme.Size.control + 4)
-            .background(Theme.Palette.control, in: shape)
-            .overlay {
-                shape.strokeBorder(isOpen ? Theme.Palette.violet : Theme.Palette.hairline, lineWidth: 1)
-            }
-            .contentShape(shape)
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
@@ -63,6 +53,41 @@ struct WorkspaceSelector: View {
                 }
             )
         }
+    }
+
+    private var inlineLabel: some View {
+        HStack(spacing: Theme.Spacing.tight) {
+            Text(model.selectionTitle(for: picked))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.Palette.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            PhIcon(Ph.caretUpDown, size: 10)
+                .foregroundStyle(Theme.Palette.secondaryText)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var plateLabel: some View {
+        HStack(spacing: Theme.Spacing.normal) {
+            PhIcon(Ph.folderSimpleDuotone, size: 16)
+                .foregroundStyle(Theme.Palette.violet)
+            Text(model.selectionTitle(for: picked))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.Palette.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
+            PhIcon(Ph.caretUpDown, size: 12)
+                .foregroundStyle(Theme.Palette.secondaryText)
+        }
+        .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+        .frame(maxWidth: .infinity, minHeight: Theme.Size.control + 4)
+        .background(Theme.Palette.control, in: shape)
+        .overlay {
+            shape.strokeBorder(isOpen ? Theme.Palette.violet : Theme.Palette.hairline, lineWidth: 1)
+        }
+        .contentShape(shape)
     }
 
     private var isMultiple: Bool {

@@ -46,7 +46,7 @@ public struct RepositoriesView: View {
             if repositories.isEmpty {
                 EmptyRepositories { model.beginAdding() }
             } else {
-                SessionLauncher(model: model)
+                NewOrderCard(model: model)
                 VStack(spacing: 0) {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 2) {
@@ -153,7 +153,11 @@ private struct EmptyRepositories: View {
     let store = RepositoryStore(bookmarks: InMemoryBookmarkClient(), git: git, state: InMemoryStateStore())
     let list = WindowRepositories(store: store)
 
-    RepositoriesView(model: RepositoriesModel(repositories: list, git: git, picker: StubFolderPickerClient()))
+    RepositoriesView(model: RepositoriesModel(
+        repositories: list, git: git, picker: StubFolderPickerClient(), namer: StubSessionNamer(),
+        naming: NamingSettings(state: InMemoryStateStore(), vault: InMemoryNamingKeyVault()),
+        agents: AgentCatalog(state: InMemoryStateStore())
+    ))
     .frame(width: Theme.Size.defaultSidebarWidth, height: 420)
     .glassPaneBackground()
     .padding(Theme.Spacing.windowPadding)

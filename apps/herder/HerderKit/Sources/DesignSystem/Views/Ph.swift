@@ -17,6 +17,7 @@ public enum Ph {
     public static var caretUpDown: Image { icon("caret-up-down") }
     public static var chatCenteredDots: Image { icon("chat-centered-dots") }
     public static var checkBold: Image { icon("check-bold") }
+    public static var clipboardText: Image { icon("clipboard-text") }
     public static var dotsThree: Image { icon("dots-three") }
     public static var file: Image { icon("file") }
     public static var folderSimpleDuotone: Image { icon("folder-simple-duotone") }
@@ -29,6 +30,7 @@ public enum Ph {
     public static var hammer: Image { icon("hammer") }
     public static var magnifyingGlass: Image { icon("magnifying-glass") }
     public static var notepad: Image { icon("notepad") }
+    public static var plugsConnected: Image { icon("plugs-connected") }
     public static var plus: Image { icon("plus") }
     public static var pushPinFill: Image { icon("push-pin-fill") }
     public static var sparkle: Image { icon("sparkle") }

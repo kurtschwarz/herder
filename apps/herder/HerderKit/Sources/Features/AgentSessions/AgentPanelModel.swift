@@ -89,7 +89,7 @@ public final class AgentPanelModel {
     /// A session to start once its worktree is the one showing, with the
     /// agent asked for, or `nil` for the one used last. See
     /// ``requestSession(in:agent:)``.
-    private var pending: (workspace: WorkspaceID, agent: Agent?, mode: SessionMode)?
+    private var pending: (workspace: WorkspaceID, agent: Agent?, mode: SessionMode, prompt: String?, name: String?)?
 
     /// Changes when the panel should take the keyboard.
     public private(set) var focusRequest = 0
@@ -183,7 +183,7 @@ public final class AgentPanelModel {
         let resuming = pendingResume
         pendingResume = nil
         if let requested, requested.workspace == workspace.id {
-            await startSession(requested.agent, mode: requested.mode)
+            await startSession(requested.agent, mode: requested.mode, prompt: requested.prompt, name: requested.name)
         } else if let resuming, resuming.target == workspace.id {
             await resume(resuming.session, in: resuming.target)
         } else {
@@ -263,11 +263,17 @@ public final class AgentPanelModel {
     /// Asks for a new session in `id`, with `agent` or the one used last. If
     /// that is the workspace showing, it starts now; otherwise when the window
     /// gets there, which it is already on its way to. See ``show(_:)``.
-    public func requestSession(in id: WorkspaceID, agent: Agent? = nil, mode: SessionMode = .build) {
+    public func requestSession(
+        in id: WorkspaceID,
+        agent: Agent? = nil,
+        mode: SessionMode = .build,
+        prompt: String? = nil,
+        name: String? = nil
+    ) {
         if workspace?.id == id {
-            Task { await startSession(agent, mode: mode) }
+            Task { await startSession(agent, mode: mode, prompt: prompt, name: name) }
         } else {
-            pending = (id, agent, mode)
+            pending = (id, agent, mode, prompt, name)
         }
     }
 
@@ -275,13 +281,23 @@ public final class AgentPanelModel {
     /// showing, whichever tab is in front: a new session is a fresh start, not
     /// a copy of the one beside it. In plan mode it runs the agent's plan
     /// command, if it has one.
-    public func startSession(_ agent: Agent? = nil, mode: SessionMode = .build) async {
+    ///
+    /// `prompt` is the session's first message, for an agent that can be given
+    /// one, and `name` is what the tab is called until the person renames it.
+    public func startSession(
+        _ agent: Agent? = nil,
+        mode: SessionMode = .build,
+        prompt: String? = nil,
+        name: String? = nil
+    ) async {
         guard let workspace else { return }
         let agent = agent ?? catalog.lastUsed
         guard agent.isRunnable else { return }
         catalog.markUsed(agent)
 
-        let tab = AgentTab(agent: agent, number: nextNumber(of: agent, in: workspace.id), mode: mode)
+        let tab = AgentTab(
+            agent: agent, number: nextNumber(of: agent, in: workspace.id), mode: mode, name: name, firstPrompt: prompt
+        )
         await open(tab, in: workspace)
     }
 
@@ -485,7 +501,12 @@ public final class AgentPanelModel {
         // An agent that names its own sessions cannot be pointed at one
         // nobody found, so that one starts afresh.
         let resuming = tab.hasStarted && !tab.isMissingSessionID
-        let line = tab.agent.commandLine(session: tab.sessionName, resuming: resuming, mode: tab.mode)
+        // Only a session's first start is given its first message: a restart
+        // would say it twice.
+        let firstPrompt = tab.hasStarted ? nil : tab.firstPrompt
+        let line = tab.agent.commandLine(
+            session: tab.sessionName, resuming: resuming, mode: tab.mode, prompt: firstPrompt
+        )
         var spec = ShellLaunch.command(
             "exec \(line)",
             environment: environment(for: tab.agent),
@@ -496,7 +517,31 @@ public final class AgentPanelModel {
         await tab.attach(using: pty, spec: spec)
         enter(tab, in: workspace)
         recordStart(of: tab, in: workspace)
+        if let firstPrompt, tab.agent.promptNeedsReturn == true {
+            Task { await sendReturn(once: firstPrompt, shows: tab) }
+        }
     }
+
+    /// Presses Return in an agent that only filled its input with the first
+    /// prompt, once the prompt shows on screen: sooner, the keystroke would
+    /// reach the terminal UI before it is reading. Gives up after a while
+    /// rather than press Return into something that never came up.
+    private func sendReturn(once prompt: String, shows tab: AgentTab) async {
+        let line = prompt.split(whereSeparator: \.isNewline).first.map(String.init) ?? prompt
+        // The start of the line, short enough not to be split by a wrap.
+        let marker = String(line.trimmingCharacters(in: .whitespaces).prefix(12))
+        for _ in 0..<Self.promptWaitPolls {
+            do { try await clock.sleep(for: Self.promptWaitInterval) } catch { return }
+            guard tab.phase == .running else { return }
+            if let screen = tab.screen, screen.visibleText.contains(marker) {
+                screen.send(text: "\r")
+                return
+            }
+        }
+    }
+
+    private static let promptWaitInterval: Duration = .milliseconds(100)
+    private static let promptWaitPolls = 150
 
     /// Lists the tab for the Task Manager, with its process once it has one.
     /// A restored tab is listed paused, as the sidebar lists it, and one that

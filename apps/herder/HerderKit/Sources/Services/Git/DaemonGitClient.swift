@@ -110,6 +110,12 @@ public struct DaemonGitClient: GitClient {
         return commit
     }
 
+    public func fetchDefaultBranch(in repository: URL) async throws -> String? {
+        let result = try await ask("fetch", ["path": repository.resolvingSymlinksInPath().path(percentEncoded: false)])
+        guard let base = DaemonWire.fetchedBase(fromResult: result) else { throw Self.unrecognised }
+        return base
+    }
+
     public func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws {
         // Before resolving: `path` was built from `repository` as the caller
         // had it, so that is the pair that compares.

@@ -32,6 +32,18 @@ fn default_branch(repo: &gix::Repository) -> Option<String> {
         .find(|name| !name.is_empty() && resolve_commit(repo, name).is_some())
 }
 
+/// Fetches the remote's default branch, when the default branch is a
+/// remote-tracking ref, and returns it. A failed fetch is ignored: offline, or
+/// without credentials, the ref as it stands is still a base to cut from.
+pub fn fetch_default_branch(path: &str) -> Option<String> {
+    let super::kind::Opened { repo, .. } = kind::open(path)?;
+    let base = default_branch(&repo)?;
+    if let Some((remote, branch)) = base.split_once('/') {
+        let _ = super::cli::fetch(repo.git_dir(), remote, branch);
+    }
+    Some(base)
+}
+
 fn resolve_commit<'r>(repo: &'r gix::Repository, revision: &str) -> Option<gix::Id<'r>> {
     // A leading dash would be read as an option.
     if revision.starts_with('-') {

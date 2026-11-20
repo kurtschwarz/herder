@@ -6,7 +6,7 @@ import Foundation
 public enum DaemonWire {
     /// The versions this build of the app speaks. Raise `supported.upperBound`
     /// when the app starts using a message the daemon gained in that version.
-    public static let supported = 4...4
+    public static let supported = 4...5
 
     /// A frame is a big-endian `UInt32` length and then that many bytes.
     public static let headerSize = 4
@@ -316,6 +316,10 @@ public enum DaemonWire {
 
     public static func upstream(fromResult result: [String: Any]) -> String?? {
         nullable(result, "upstream") { $0 as? String }
+    }
+
+    public static func fetchedBase(fromResult result: [String: Any]) -> String?? {
+        nullable(result, "base") { $0 as? String }
     }
 
     public static func contents(fromResult result: [String: Any]) -> String?? {

@@ -13,10 +13,12 @@ public struct AgentsSnapshot: Codable, Sendable, Equatable {
     public var version = 1
     public var custom: [Agent]
     public var lastUsed: Agent.ID?
+    public var firstPromptTemplate: String?
 
-    public init(custom: [Agent] = [], lastUsed: Agent.ID? = nil) {
+    public init(custom: [Agent] = [], lastUsed: Agent.ID? = nil, firstPromptTemplate: String? = nil) {
         self.custom = custom
         self.lastUsed = lastUsed
+        self.firstPromptTemplate = firstPromptTemplate
     }
 
     public init(from decoder: any Decoder) throws {
@@ -24,5 +26,6 @@ public struct AgentsSnapshot: Codable, Sendable, Equatable {
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
         custom = try container.decodeIfPresent([Agent].self, forKey: .custom) ?? []
         lastUsed = try container.decodeIfPresent(Agent.ID.self, forKey: .lastUsed)
+        firstPromptTemplate = try container.decodeIfPresent(String.self, forKey: .firstPromptTemplate)
     }
 }

@@ -72,6 +72,56 @@ import Testing
         #expect(model.activeTab?.mode == .plan)
     }
 
+    @Test func aSessionStartsWithItsFirstPromptAndItsName() async throws {
+        let (model, _, _) = try await shown()
+
+        await model.startSession(mode: .plan, prompt: "add a minimap", name: "Add a minimap")
+
+        let id = try #require(model.activeTab?.id).uuidString.lowercased()
+        #expect(pty.specs.last?.arguments.last
+            == "exec claude --session-id \(id) --permission-mode plan 'add a minimap'")
+        #expect(model.activeTab?.customName == "Add a minimap")
+    }
+
+    @Test func anAgentThatOnlyFillsItsPromptIsSentReturnOnceItShows() async throws {
+        let (model, _, _) = try await shown()
+        let opencode = try #require(Agent.presets.first { $0.id == "opencode" })
+
+        await model.startSession(opencode, mode: .plan, prompt: "add a minimap to the editor")
+
+        let session = try #require(pty.sessions.last)
+        #expect(session.spec.arguments.last == "exec opencode --prompt 'add a minimap to the editor'")
+        // Not yet: the prompt is not in the box.
+        #expect(!session.input.contains("\r"))
+
+        session.emit("\u{1B}[2J\u{1B}[H> add a minimap to the editor")
+
+        try await eventually("Return arrives") { session.input == "\r" }
+    }
+
+    @Test func anAgentThatSubmitsItsOwnPromptIsNotSentReturn() async throws {
+        let (model, _, _) = try await shown()
+
+        await model.startSession(mode: .plan, prompt: "add a minimap")
+        let session = try #require(pty.sessions.last)
+        session.emit("add a minimap")
+        try await Task.sleep(for: .milliseconds(300))
+
+        #expect(session.input.isEmpty)
+    }
+
+    @Test func aRequestedSessionKeepsItsPromptUntilItsWorkspaceShows() async throws {
+        let registry = makeRegistry()
+        let model = makeModel()
+        await model.show(try await workspace(root, in: registry))
+
+        model.requestSession(in: WorkspaceID(other), mode: .plan, prompt: "add a minimap", name: "Minimap")
+        await model.show(try await workspace(other, in: registry))
+
+        #expect(pty.specs.last?.arguments.last?.hasSuffix("--permission-mode plan 'add a minimap'") == true)
+        #expect(model.activeTab?.customName == "Minimap")
+    }
+
     @Test func aRequestedSessionKeepsItsModeUntilItsWorkspaceShows() async throws {
         let registry = makeRegistry()
         let model = makeModel()

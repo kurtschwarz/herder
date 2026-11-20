@@ -13,6 +13,9 @@ public final class StubGitClient: GitClient {
     private let branchLists = Mutex<[String: [String]]>([:])
     private let added = Mutex<[AddedWorktree]>([])
     private let addFailure = Mutex<String?>(nil)
+    private let fetchBases = Mutex<[String: String?]>([:])
+    private let fetched = Mutex<[URL]>([])
+    private let fetchFailure = Mutex<String?>(nil)
     private let unreadable = Mutex<Set<String>>([])
     private let gitDirectories = Mutex<[String: URL?]>([:])
     private let checkouts = Mutex<[String: GitWorktree.Checkout?]>([:])
@@ -66,6 +69,22 @@ public final class StubGitClient: GitClient {
     /// Makes `addWorktree` throw `commandFailed(message)`.
     public func failAddingWorktrees(with message: String) {
         addFailure.withLock { $0 = message }
+    }
+
+    /// Declares the ref `fetchDefaultBranch` names for the repository at `url`.
+    /// Unseeded, there is none.
+    public func seed(fetchedBase: String?, at url: URL) {
+        fetchBases.withLock { $0[FolderKey.of(url)] = fetchedBase }
+    }
+
+    /// Makes `fetchDefaultBranch` throw `commandFailed(message)`.
+    public func failFetching(with message: String) {
+        fetchFailure.withLock { $0 = message }
+    }
+
+    /// Every repository `fetchDefaultBranch` was asked about, in order.
+    public var fetchedRepositories: [URL] {
+        fetched.withLock { $0 }
     }
 
     /// Every `addWorktree` call so far, in order.
@@ -293,6 +312,14 @@ public final class StubGitClient: GitClient {
 
     public func branches(at url: URL) async throws -> [String] {
         branchLists.withLock { $0[FolderKey.of(url)] } ?? []
+    }
+
+    public func fetchDefaultBranch(in repository: URL) async throws -> String? {
+        fetched.withLock { $0.append(repository) }
+        if let message = fetchFailure.withLock({ $0 }) {
+            throw GitClientError.commandFailed(message)
+        }
+        return fetchBases.withLock { $0[FolderKey.of(repository)] } ?? nil
     }
 
     public func addWorktree(

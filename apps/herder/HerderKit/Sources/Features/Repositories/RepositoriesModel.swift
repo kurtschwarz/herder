@@ -30,6 +30,9 @@ public final class RepositoriesModel {
     private let git: any GitClient
     private let picker: any FolderPickerClient
 
+    /// The New order card's state.
+    let order: NewOrderModel
+
     private(set) var listings: [UUID: Listing] = [:]
 
     /// Where a repository's session history is kept, and the worktrees it has
@@ -65,11 +68,18 @@ public final class RepositoriesModel {
     public init(
         repositories: WindowRepositories,
         git: any GitClient,
-        picker: any FolderPickerClient
+        picker: any FolderPickerClient,
+        namer: any SessionNamer,
+        naming: NamingSettings,
+        agents: AgentCatalog
     ) {
         self.list = repositories
         self.git = git
         self.picker = picker
+        self.order = NewOrderModel(
+            git: git, namer: namer, naming: { naming.configuration },
+            promptTemplate: { agents.firstPromptTemplate }
+        )
     }
 
     /// The repositories this window lists, in its order.
@@ -170,6 +180,36 @@ public final class RepositoriesModel {
         return usable.first
     }
 
+    // MARK: - New order
+
+    /// Where the New order card plans: the workspace picked by hand, which it
+    /// stays on, else the one the window is in, else the first that can be used.
+    func orderRepository(active: URL?) -> Repository? {
+        if let id = order.pickedRepository, let picked = list.repository(id: id), picked.isAvailable {
+            return picked
+        }
+        return repositoryForNewSession(active: active)
+    }
+
+    /// Gives the New order card the keyboard, for ⌥⌘N.
+    public func focusNewOrder() {
+        order.requestFocus()
+    }
+
+    /// Whether there is a workspace for the card to plan in.
+    public var canPlanOrder: Bool { !repositories.isEmpty }
+
+    /// Makes the worktree for the order typed, shows it under its repository,
+    /// which is put on show if it was not, and says where its session starts.
+    /// A failure leaves the text and shows in the card.
+    func submitOrder(active: URL?) async -> (worktree: WorkspaceID, started: NewOrderModel.Started)? {
+        guard let repository = orderRepository(active: active) else { return nil }
+        guard let started = await order.submit(in: URL(filePath: repository.path)) else { return nil }
+        if !list.isShown(repository) { list.setShown(repository, true) }
+        await refresh(repository)
+        return (WorkspaceID(started.worktree), started)
+    }
+
     public func beginAdding() {
         guard !isModalPresented else { return }
         adding = AddRepositoryModel(repositories: list, picker: picker)
@@ -189,18 +229,6 @@ public final class RepositoriesModel {
     /// The worktree the window had open when the modal opened, which it starts
     /// on in whichever repository holds it.
     private var newSessionActiveWorktree: URL?
-
-    /// Where Plan and Build start a session at once, without the modal: the
-    /// main worktree of the one repository on show, or for a bare one the
-    /// first listed. `nil` when there is no such one to name, and the modal,
-    /// which has the workspace selector, is the way in: several are on show,
-    /// the one cannot be reached, or its worktrees are not read yet.
-    var quickStartWorktree: WorkspaceID? {
-        guard shownRepositories.count == 1, let repository = shownRepositories.first, repository.isAvailable,
-              case .loaded(let worktrees)? = listings[repository.id]
-        else { return nil }
-        return (worktrees.first(where: \.isMainWorkingTree) ?? worktrees.first).map { WorkspaceID($0.path) }
-    }
 
     func beginNewSession(in repository: Repository, active: URL? = nil, mode: SessionMode = .build) {
         guard !isModalPresented, repository.isAvailable else { return }
