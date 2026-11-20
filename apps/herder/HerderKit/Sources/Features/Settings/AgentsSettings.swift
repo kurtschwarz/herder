@@ -6,7 +6,6 @@ import SwiftUI
 /// the user's own, which are a name and a command each.
 struct AgentsSettings: View {
     let catalog: AgentCatalog
-    let naming: NamingSettings
 
     var body: some View {
         SettingsPaneContent(pane: .agents) {
@@ -16,8 +15,6 @@ struct AgentsSettings: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             FirstPromptSection(catalog: catalog)
-
-            NamingSection(naming: naming)
 
             SettingsSection("Built in") {
                 ForEach(Agent.presets) { agent in
@@ -89,56 +86,6 @@ private struct FirstPromptSection: View {
                 .padding(.horizontal, Theme.Spacing.normal)
                 .padding(.vertical, Theme.Spacing.normal - 2)
                 .frame(minHeight: Theme.Size.control, alignment: .leading)
-                .fieldSurface()
-        }
-    }
-}
-
-/// Where the naming call for a New order goes. Any Anthropic-compatible base
-/// URL works; Meridian's local API is the default, and needs no key.
-private struct NamingSection: View {
-    let naming: NamingSettings
-
-    var body: some View {
-        SettingsSection("Naming") {
-            Text("A New order asks a small model for a branch name and a session title. It sends the text typed to the endpoint below, which can be Meridian (https://github.com/rynfar/meridian), api.anthropic.com or anything else that speaks the Anthropic Messages API. When the call fails or is slow, the branch is named from two random words instead.")
-                .font(.callout)
-                .foregroundStyle(Theme.Palette.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, Theme.Spacing.tight)
-
-            field("Endpoint", prompt: NamingConfiguration.defaultEndpoint) {
-                TextField(NamingConfiguration.defaultEndpoint, text: Binding(
-                    get: { naming.endpoint },
-                    set: { naming.setEndpoint($0) }
-                ))
-                .autocorrectionDisabled()
-            }
-            field("API key", prompt: "Optional") {
-                SecureField("Optional, kept in the Keychain", text: Binding(
-                    get: { naming.apiKey },
-                    set: { naming.setAPIKey($0) }
-                ))
-            }
-            if let error = naming.keyError {
-                Text(error)
-                    .font(.callout)
-                    .foregroundStyle(Theme.Palette.danger)
-            }
-        }
-    }
-
-    private func field(_ title: String, prompt: String, @ViewBuilder _ content: () -> some View) -> some View {
-        HStack(spacing: Theme.Spacing.normal) {
-            Text(title)
-                .foregroundStyle(Theme.Palette.text)
-                .frame(width: 80, alignment: .leading)
-            content()
-                .textFieldStyle(.plain)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(Theme.Palette.text)
-                .padding(.horizontal, Theme.Spacing.normal)
-                .frame(height: Theme.Size.control)
                 .fieldSurface()
         }
     }

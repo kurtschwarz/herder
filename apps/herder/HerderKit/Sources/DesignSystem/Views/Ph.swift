@@ -30,6 +30,7 @@ public enum Ph {
     public static var hammer: Image { icon("hammer") }
     public static var magnifyingGlass: Image { icon("magnifying-glass") }
     public static var notepad: Image { icon("notepad") }
+    public static var plugsConnected: Image { icon("plugs-connected") }
     public static var plus: Image { icon("plus") }
     public static var pushPinFill: Image { icon("push-pin-fill") }
     public static var sparkle: Image { icon("sparkle") }

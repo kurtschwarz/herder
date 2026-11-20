@@ -5,6 +5,7 @@ import SwiftUI
 enum SettingsPane: String, CaseIterable, Identifiable {
     case general
     case agents
+    case providers
 
     var id: String { rawValue }
 
@@ -12,6 +13,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .agents: "Agents"
+        case .providers: "Providers"
         }
     }
 
@@ -20,6 +22,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: Ph.gearSixFill
         case .agents: Ph.sparkleFill
+        case .providers: Ph.plugsConnected
         }
     }
 
@@ -27,6 +30,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: Theme.Gradient.graphiteTile
         case .agents: Theme.Gradient.violetTile
+        case .providers: Theme.Gradient.graphiteTile
         }
     }
 }
