@@ -21,12 +21,6 @@ private struct AnthropicSection: View {
 
     var body: some View {
         SettingsSection("Claude / Anthropic") {
-            Text("A New order asks a small Claude model for a branch name and a session title, and sends the text typed to the endpoint below. It can be Meridian (https://github.com/rynfar/meridian), api.anthropic.com or anything else that speaks the Anthropic Messages API. When the call fails or is slow, the branch is named from two random words instead.")
-                .font(.callout)
-                .foregroundStyle(Theme.Palette.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, Theme.Spacing.tight)
-
             field("API endpoint") {
                 TextField(NamingConfiguration.defaultEndpoint, text: Binding(
                     get: { naming.endpoint },
