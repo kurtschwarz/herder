@@ -8,6 +8,7 @@ struct GeneralSettings: View {
     let updater: (any UpdaterClient)?
     let daemon: DaemonConnection?
     let github: GitHubConnection?
+    let pullRequests: LinkedPullRequests?
 
     /// A copy of the updater's setting, which it does not publish changes to.
     /// Read when the pane appears and written back on every change.
@@ -23,7 +24,7 @@ struct GeneralSettings: View {
             }
 
             if let github {
-                GitHubSection(github: github)
+                GitHubSection(github: github, pullRequests: pullRequests)
             }
 
             if let daemon {

@@ -64,6 +64,10 @@ public final class AppEnvironment {
     /// which is what a test or a preview is given.
     public let github: GitHubConnection?
 
+    /// Finds each session's pull request by polling herderd. `nil` when there
+    /// is no GitHub connection to ask through.
+    public let pullRequests: LinkedPullRequests?
+
     /// Where windows' snapshots are kept, and which exist.
     let windows: WindowStore
 
@@ -224,13 +228,21 @@ public final class AppEnvironment {
         self.repositories = repositories
         self.windows = WindowStore(snapshots: snapshots, state: persistence.state)
         self.agents = AgentCatalog(state: persistence.state)
-        self.sessions = AgentSessions(state: persistence.state, clock: clock)
+        let sessions = AgentSessions(state: persistence.state, clock: clock)
+        self.sessions = sessions
         self.processes = RunningProcesses()
         self.daemon = daemon.map { DaemonConnection(client: $0) }
         if let daemon, let githubAuth, let githubVault {
-            self.github = GitHubConnection(auth: githubAuth, vault: githubVault, daemon: daemon, clock: clock)
+            let github = GitHubConnection(auth: githubAuth, vault: githubVault, daemon: daemon, clock: clock)
+            self.github = github
+            // GitHub refusing the token is `recheck()`'s case already: one
+            // refresh, then a reconnect.
+            self.pullRequests = LinkedPullRequests(
+                sessions: sessions, daemon: daemon, clock: clock, signInRefused: { await github.recheck() }
+            )
         } else {
             self.github = nil
+            self.pullRequests = nil
         }
         self.worktrees = WorkspaceRegistry(
             files: files, git: git, watcher: watcher, clock: clock, state: persistence.state
@@ -387,6 +399,7 @@ public final class AppEnvironment {
         // Unawaited: it may refresh a token over the network, and no window
         // should wait for that.
         if let github { Task { await github.start() } }
+        pullRequests?.start()
     }
 
     /// Hands back every folder the sandbox is holding open and stops watching
@@ -400,6 +413,7 @@ public final class AppEnvironment {
     /// the app, which some do not notice.
     public func stop() {
         for window in openWindows.values { window.agentPanel.terminateForQuit() }
+        pullRequests?.stop()
         worktrees.stop()
         repositories.access.endAll()
     }

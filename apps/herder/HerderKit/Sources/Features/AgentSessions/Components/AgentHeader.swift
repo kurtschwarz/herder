@@ -18,6 +18,7 @@ struct AgentHeader: View {
                     subject(of: tab)
                     HStack(spacing: Theme.Spacing.tight + 2) {
                         branch
+                        pullRequestBadge(of: tab)
                         Text("\u{00B7}")
                         AgentStateDot(tab.state)
                         elapsed(since: tab.startedAt)
@@ -88,6 +89,13 @@ struct AgentHeader: View {
             }
             .lineLimit(1)
             .truncationMode(.tail)
+        }
+    }
+
+    @ViewBuilder
+    private func pullRequestBadge(of tab: AgentTab) -> some View {
+        if let pullRequest = model.sessions.store.session(tab.id)?.pullRequest {
+            PullRequestBadge(pullRequest)
         }
     }
 

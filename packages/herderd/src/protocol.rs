@@ -14,9 +14,10 @@ use serde::{Deserialize, Serialize};
 /// because nothing used the daemon before it, so there is no older app to keep
 /// serving.
 pub const MIN_PROTOCOL: u32 = 2;
-/// The newest protocol version this build speaks. 3 added the GitHub token.
-/// Nothing in 3 changes a message of 2, so an app that speaks 2 is still served.
-pub const MAX_PROTOCOL: u32 = 3;
+/// The newest protocol version this build speaks. 3 added the GitHub token and
+/// 4 added pull request queries. Nothing in either changes a message of 2, so
+/// an app that speaks 2 is still served.
+pub const MAX_PROTOCOL: u32 = 4;
 
 /// A credential. Its `Debug` never shows the value, so a message that carries
 /// one can be logged, printed in a panic or put in an error without leaking it.
@@ -86,6 +87,79 @@ pub enum ClientMessage {
     /// Added in protocol 3.
     #[serde(rename = "check_github")]
     CheckGitHub { id: u64 },
+    /// Asks for the newest pull request of each branch, in one request to
+    /// GitHub however many repositories and branches there are. The answer is
+    /// a [`DaemonMessage::PullRequestResponse`]. Added in protocol 4.
+    #[serde(rename = "pull_request_query")]
+    PullRequestQuery { id: u64, repos: Vec<PullRequestRepo> },
+}
+
+/// A repository to ask about, and the branches of it to look for pull
+/// requests from. `path` is a folder on the daemon's host; the GitHub
+/// repository is the one its `origin` names.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PullRequestRepo {
+    pub path: String,
+    pub branches: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PullRequestState {
+    Open,
+    Merged,
+    Closed,
+}
+
+/// A pull request, as far as a badge needs it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PullRequest {
+    pub number: u64,
+    pub url: String,
+    pub title: String,
+    pub state: PullRequestState,
+    pub is_draft: bool,
+    /// ISO 8601, as GitHub gives it.
+    pub merged_at: Option<String>,
+    pub updated_at: String,
+}
+
+/// What asking GitHub about one repository came to. Never quotes the token.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum PullRequestRepoStatus {
+    Ok,
+    /// The GitHub App is not installed on the repository, or the signed-in
+    /// user cannot see it.
+    NotAccessible,
+    /// GitHub refused the token, or the daemon holds none.
+    Unauthorized,
+    /// GitHub could not be asked. The branches, when there are any, are what
+    /// it last said.
+    Error {
+        message: String,
+    },
+}
+
+/// The newest same-repository pull request from one branch, or `None`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BranchPullRequest {
+    pub branch: String,
+    pub pull_request: Option<PullRequest>,
+}
+
+/// The answer for one [`PullRequestRepo`], under the same `path`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepoPullRequests {
+    pub path: String,
+    /// `owner/name`, as `origin` names it.
+    pub repository: String,
+    pub status: PullRequestRepoStatus,
+    /// The repository's default branch, once GitHub has said. Nothing is
+    /// looked up for it, so the app can leave it out of later queries.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub default_branch: Option<String>,
+    pub branches: Vec<BranchPullRequest>,
 }
 
 /// A git operation and its arguments. Paths are strings on the daemon's host,
@@ -401,6 +475,12 @@ pub enum DaemonMessage {
     /// daemon found out, never the token.
     #[serde(rename = "github_response")]
     GitHubResponse { id: u64, check: GitHubCheck },
+    /// The outcome of a [`ClientMessage::PullRequestQuery`], with the same
+    /// `id`. A repository whose `origin` is not on github.com has no entry.
+    /// `next_poll_seconds` is how long the app should wait before asking
+    /// again: it grows while GitHub cannot be reached.
+    #[serde(rename = "pull_request_response")]
+    PullRequestResponse { id: u64, repos: Vec<RepoPullRequests>, next_poll_seconds: u64 },
 }
 
 /// The highest version both sides speak, if there is one.
@@ -469,6 +549,56 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&reply).unwrap(),
             r#"{"type":"github_response","id":4,"check":{"state":"ok","login":"kurt"}}"#
+        );
+    }
+
+    #[test]
+    fn a_pull_request_query_is_tagged_json() {
+        let query = ClientMessage::PullRequestQuery {
+            id: 2,
+            repos: vec![PullRequestRepo { path: "/r".into(), branches: vec!["a".into()] }],
+        };
+        let json = serde_json::to_string(&query).unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"pull_request_query","id":2,"repos":[{"path":"/r","branches":["a"]}]}"#
+        );
+        assert_eq!(serde_json::from_str::<ClientMessage>(&json).unwrap(), query);
+    }
+
+    #[test]
+    fn a_pull_request_response_names_each_state() {
+        let reply = DaemonMessage::PullRequestResponse {
+            id: 2,
+            next_poll_seconds: 60,
+            repos: vec![RepoPullRequests {
+                path: "/r".into(),
+                repository: "o/r".into(),
+                status: PullRequestRepoStatus::Error { message: "no".into() },
+                default_branch: None,
+                branches: vec![BranchPullRequest {
+                    branch: "a".into(),
+                    pull_request: Some(PullRequest {
+                        number: 3,
+                        url: "u".into(),
+                        title: "t".into(),
+                        state: PullRequestState::Merged,
+                        is_draft: false,
+                        merged_at: Some("2026-01-01T00:00:00Z".into()),
+                        updated_at: "2026-01-01T00:00:00Z".into(),
+                    }),
+                }],
+            }],
+        };
+        assert_eq!(
+            serde_json::to_string(&reply).unwrap(),
+            concat!(
+                r#"{"type":"pull_request_response","id":2,"repos":[{"path":"/r","repository":"o/r","#,
+                r#""status":{"state":"error","message":"no"},"branches":[{"branch":"a","pull_request":"#,
+                r#"{"number":3,"url":"u","title":"t","state":"merged","is_draft":false,"#,
+                r#""merged_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}}]}],"#,
+                r#""next_poll_seconds":60}"#
+            )
         );
     }
 

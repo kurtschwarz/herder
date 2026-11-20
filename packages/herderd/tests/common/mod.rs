@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 
+pub mod stub;
+
 pub struct Fixture {
     dir: TempDir,
 }
@@ -123,5 +125,15 @@ impl Fixture {
         self.seed(name, &bare);
         self.git(&["worktree", "add", "main", "main"], &project);
         project
+    }
+}
+
+impl Fixture {
+    /// A repository with one commit whose `origin` is `url`, which is never
+    /// contacted.
+    pub fn repository_with_origin(&self, name: &str, url: &str) -> PathBuf {
+        let path = self.repository(name);
+        self.git(&["remote", "add", "origin", url], &path);
+        path
     }
 }

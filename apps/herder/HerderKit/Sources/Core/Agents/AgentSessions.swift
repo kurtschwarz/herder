@@ -285,6 +285,48 @@ public final class AgentSessions {
         scheduleSave(key)
     }
 
+    // MARK: - Pull requests
+
+    /// The branches worth asking GitHub about, for each repository whose
+    /// history is loaded: those of sessions that have not ended, and of ended
+    /// ones whose pull request is still open. A branch whose pull request is
+    /// merged or closed is left alone, and so is a detached checkout, whose
+    /// "branch" is a commit.
+    public func watchedBranches() -> [PathKey: Set<String>] {
+        var watched: [PathKey: Set<String>] = [:]
+        for session in sessions.values {
+            guard let key = repositoryOfSession[session.id],
+                  let branch = session.branch, !Self.isCommit(branch)
+            else { continue }
+            if session.isEnded {
+                guard let pullRequest = session.pullRequest, !pullRequest.state.isSettled else { continue }
+            } else if session.pullRequest?.state.isSettled == true {
+                continue
+            }
+            watched[key, default: []].insert(branch)
+        }
+        return watched
+    }
+
+    /// Records `pullRequest` on every session of `branch` in `repository`, ended
+    /// or not, because it was found by branch and not by session. A different
+    /// pull request replaces the one there.
+    public func link(_ pullRequest: LinkedPullRequest, branch: String, in repository: PathKey) {
+        var next = sessions
+        for (id, session) in sessions
+        where repositoryOfSession[id] == repository && session.branch == branch && session.pullRequest != pullRequest {
+            next[id]?.pullRequest = pullRequest
+        }
+        guard next != sessions else { return }
+        sessions = next
+        scheduleSave(repository)
+    }
+
+    /// Whether a recorded branch is the short commit of a detached `HEAD`.
+    private static func isCommit(_ branch: String) -> Bool {
+        (7...40).contains(branch.count) && branch.allSatisfy(\.isHexDigit)
+    }
+
     private func update(_ id: UUID, _ change: (inout AgentSession) -> Bool) {
         guard let key = repositoryOfSession[id], var session = sessions[id], change(&session) else { return }
         sessions[id] = session

@@ -1,6 +1,6 @@
 # 0003. GitHub connection: the app signs in, herderd is handed the token
 
-Status: accepted. Tracking issue: #111. The first piece of linked pull requests; later tickets build on the **GitHub connection** it provides.
+Status: accepted. Tracking issues: #111 (the GitHub connection) and #112 (finding and linking pull requests, in the last section).
 
 ## Context
 
@@ -32,3 +32,27 @@ Future hardening, not in scope: herderd could verify each client's code signatur
 - herderd's binary gains `ureq` and `rustls`, about 4 MB: the universal release binary went from 11.7 to 15.5 MB.
 - herderd is the first thing in the daemon that makes a network request. `github.rs` is the only module that does, and it is not part of the portable core.
 - Sign-in needs the human step of registering the App and putting its client ID in `project.yml`: see [0003-github-app-registration.md](0003-github-app-registration.md).
+
+## Linked pull requests
+
+Tracking issue: #112. A session's branch is looked up on GitHub, and the pull request found is saved on the session (a **linked pull request**, `AgentSession.pullRequest`) and shown as a `#123` badge.
+
+### Decision
+
+- **Where the repository comes from.** herderd reads `remote.origin.url` with gix, in `git/remote.rs`, and parses the owner and name of a github.com remote (https, `git@` and `ssh://`). Only github.com is supported, and only pull requests whose head branch is in the same repository: a pull request from a fork is dropped. A folder whose `origin` is anything else, or missing, has no entry in the answer and is not an error.
+- **The query.** One GraphQL request per poll covers every watched repository and branch: an alias per repository, and inside it an alias per branch on `pullRequests(headRefName:, first: 5, orderBy: {field: CREATED_AT, direction: DESC})`, with `headRepository` to filter forks. Owners, names and branches are GraphQL variables, never part of the query text. It reads five pull requests rather than one so that a fork's newer pull request from a branch of the same name cannot hide the repository's own; the newest same-repository one wins. `defaultBranchRef` rides in the same request, so herderd can say which branch is the default and give it no pull request, and the app can stop asking about it.
+- **Transport is app-driven polling**, because herderd cannot push events yet. A loop in the app (`LinkedPullRequests`, on a `ClockClient`) sends `pull_request_query` and gets a `pull_request_response`. herderd keeps an in-memory cache and nothing on disk. Protocol 4 adds the two messages; an app that speaks 2 or 3 is still served, and `MIN_PROTOCOL` stays at 2.
+- **The answer** has, for each repository, a status (`ok`, `not_accessible`, `unauthorized` or `error`), `owner/name`, the default branch when known, and for each branch its pull request or none.
+- **Failures.** On a network error, a 5xx, a 403 or 429, or GraphQL's `RATE_LIMITED`, herderd answers with what it last heard, with status `error`, and tells the app to wait longer: `next_poll_seconds` is 60, doubling with each failure in a row up to 600, and is 60 again after a success. The wait is herderd's to say, so a second window or a restarted app cannot undo it. A 401, or no token, is `unauthorized`: it does not slow the poll. The app then runs the one refresh the GitHub connection already has (`GitHubConnection.recheck()`), and shows "Reconnect GitHub" if that fails. Errors are shown in Settings and nowhere in the session UI. A herderd that cannot be reached is backed off the same way by the app.
+- **Which branches are watched** (`AgentSessions.watchedBranches()`): those of sessions that have not ended, and of ended sessions whose linked pull request is still open; not a detached checkout, whose recorded branch is a short commit; not the default branch, once herderd has said which it is; and not a branch whose pull request is merged or closed. Only repositories whose history has been loaded are covered, which is the ones the sidebar lists.
+- **What a pull request is attached to.** The pull request is found by branch, and written to every session in that repository whose `branch` matches, ended or not. A branch that has no pull request leaves a session's link as it was.
+- **Saved data.** `AgentSession.pullRequest` is optional, read with `decodeIfPresent`, and saved in the session history file. It holds `number`, `url`, `title`, `state`, `isDraft`, `mergedAt` and `updatedAt`. A state this build does not know decodes as `unknown`, as `EndReason` does. There is one field: a reopened pull request updates it in place and a newer one replaces it.
+- **Repositories the App cannot reach.** If the GitHub App is not installed on a repository, GitHub answers with `null` for it, and Settings lists it as "not accessible" with an "Install app" link (`GitHubApp.installURL`, which assumes the App's slug is `herder`).
+
+### Limitations
+
+- **Nothing is checked while the app is closed.** The first poll after launch catches up.
+- **Renaming a branch breaks the link.** `session.branch` is saved once, when the session starts, and never updated, so the old name is what is asked about. A branch that is reused for a new pull request after the first was merged is not looked at again either, since its session stopped being watched.
+- **A reopened pull request is not noticed.** Once a branch's pull request is merged or closed it is no longer asked about, so a pull request reopened later, or a new one from the same branch, stays as it was. The ticket asked for both this and an in-place update on reopen; the stop wins because it is what keeps the poll cheap. Asking about closed (but not merged) branches for a while is the fix if it matters.
+- **A poll that finds nothing to watch is looked at again after five seconds**, locally. The first poll after a session starts can be a minute away.
+- Nothing notifies the user and nothing happens automatically on a merge. Recording the merge (`mergedAt`, state) leaves room for both.

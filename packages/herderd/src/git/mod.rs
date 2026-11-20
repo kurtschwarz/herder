@@ -11,6 +11,7 @@ mod history;
 mod kind;
 mod layout;
 mod natural;
+pub mod remote;
 mod status;
 mod worktree_add;
 

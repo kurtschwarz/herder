@@ -15,16 +15,18 @@ public struct SettingsView: View {
     private let updater: (any UpdaterClient)?
     private let daemon: DaemonConnection?
     private let github: GitHubConnection?
+    private let pullRequests: LinkedPullRequests?
 
     public init(
         agents: AgentCatalog, version: AppVersion, updater: (any UpdaterClient)?, daemon: DaemonConnection?,
-        github: GitHubConnection?
+        github: GitHubConnection?, pullRequests: LinkedPullRequests? = nil
     ) {
         self.agents = agents
         self.version = version
         self.updater = updater
         self.daemon = daemon
         self.github = github
+        self.pullRequests = pullRequests
     }
 
     public var body: some View {
@@ -44,7 +46,9 @@ public struct SettingsView: View {
     @ViewBuilder
     private var detail: some View {
         switch selection {
-        case .general: GeneralSettings(version: version, updater: updater, daemon: daemon, github: github)
+        case .general: GeneralSettings(
+                version: version, updater: updater, daemon: daemon, github: github, pullRequests: pullRequests
+            )
         case .agents: AgentsSettings(catalog: agents)
         }
     }

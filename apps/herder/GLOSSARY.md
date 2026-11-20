@@ -49,3 +49,8 @@ _Avoid_: mention, link, snippet.
 **GitHub connection**:
 The app's one signed-in GitHub account, made from Settings with the Herder GitHub App's device flow. The app keeps its tokens in one Keychain item and refreshes them; herderd is handed the current access token, holds it in memory only, and confirms it works by asking GitHub who it belongs to. It is what linked pull requests read through. Not a git remote or a credential for `git` itself.
 _Avoid_: GitHub login, GitHub account (the account is who it is connected as), OAuth.
+
+**Linked pull request**:
+The pull request GitHub has for a session's branch, saved on the session (`AgentSession.pullRequest`) with its number, link, title, state (open, merged, closed), whether it is a draft, and when it was merged and last updated. Found by branch, so every session of that branch in the repository gets it; only same-repository pull requests count, not ones from forks; and it is the most recent, so a newer one replaces it. Shown as a `#123` badge, coloured by state, next to the branch in the agent header and on the session's row in the sidebar. Herder stops asking about a branch once its pull request is merged or closed.
+_Avoid_: PR link, PR status.
+
