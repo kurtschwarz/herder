@@ -198,6 +198,9 @@ public final class TerminalScreen {
         send(Data(text.utf8), submits: text.contains("\r"))
     }
 
+    /// Whether the program asked for pasted text to be bracketed.
+    public var isBracketedPasteOn: Bool { emulator.isBracketedPasteOn }
+
     /// Pastes `text`, bracketed if the program asked for that.
     public func paste(_ text: String) {
         send(emulator.encodePaste(text))

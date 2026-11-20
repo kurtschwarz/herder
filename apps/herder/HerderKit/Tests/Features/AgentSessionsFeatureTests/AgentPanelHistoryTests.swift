@@ -35,13 +35,6 @@ import Testing
         return model
     }
 
-    func eventually(_ what: String, _ condition: () -> Bool) async throws {
-        for _ in 0..<400 {
-            if condition() { return }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        Issue.record("never happened: \(what)")
-    }
 
     func started(_ agent: Agent? = nil) async throws -> (AgentPanelModel, AgentSession) {
         let model = try await shown()

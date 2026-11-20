@@ -727,6 +727,9 @@ final class TerminalEmulator {
         return screen == GHOSTTY_TERMINAL_SCREEN_ALTERNATE
     }
 
+    /// Whether the program asked for pasted text to be bracketed.
+    var isBracketedPasteOn: Bool { isEnabled(ghostty_mode_new(2004, false)) }
+
     private func isEnabled(_ mode: GhosttyMode) -> Bool {
         var config = GhosttyTerminalModeConfig(mode: mode, value: false)
         ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_MODE, &config)
@@ -866,7 +869,7 @@ final class TerminalEmulator {
         var bytes = Array(text.utf8CString.dropLast())
         // A newline typed into a terminal is a carriage return.
         for index in bytes.indices where bytes[index] == 0x0a { bytes[index] = 0x0d }
-        let bracketed = isEnabled(ghostty_mode_new(2004, false))
+        let bracketed = isBracketedPasteOn
         var output = [CChar](repeating: 0, count: bytes.count + 16)
         var written = 0
         guard ghostty_paste_encode(&bytes, bytes.count, bracketed, &output, output.count, &written) == GHOSTTY_SUCCESS else {

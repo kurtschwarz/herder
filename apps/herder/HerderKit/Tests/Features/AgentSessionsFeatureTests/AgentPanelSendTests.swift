@@ -11,10 +11,6 @@ import Testing
 @Suite(.timeLimit(.minutes(1))) struct AgentPanelSendTests {
     let base = AgentPanelModelTests()
 
-    private func eventually(_ what: String, _ condition: () -> Bool) async throws {
-        try await base.eventually(what, condition)
-    }
-
     @Test func textIsPastedWithoutReturnUnlessSubmitted() async throws {
         let (model, _, _) = try await base.shown(sessions: 1)
         let id = try #require(model.activeTab?.id)
@@ -22,7 +18,8 @@ import Testing
 
         // The agent asks for bracketed paste, as the ones Herder runs do.
         session.emit("\u{1B}[?2004h")
-        try await Task.sleep(for: .milliseconds(100))
+        let screen = try #require(model.activeTab?.screen)
+        try await eventually("the terminal turns bracketed paste on") { screen.isBracketedPasteOn }
 
         model.send("@Foo.swift#L1-2\n\nwhy?", to: id, submit: false)
 
