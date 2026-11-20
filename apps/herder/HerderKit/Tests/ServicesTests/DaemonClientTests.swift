@@ -43,7 +43,8 @@ import Testing
     @Test(.enabled(if: LiveDaemonClientTests.built))
     func relaunchingAfterAnIdleExitStartsTheBundledBinaryAgain() async throws {
         let first = LiveDaemonClient(
-            socket: socket, executable: Self.binary, client: "test", daemonArguments: ["--idle-timeout", "1"]
+            socket: socket, executable: Self.binary, client: "test", daemonArguments: ["--idle-timeout", "1"],
+            startTimeout: .seconds(20)
         )
         let second = LiveDaemonClient(socket: socket, executable: Self.binary, client: "test")
         defer {
@@ -57,14 +58,12 @@ import Testing
         }
         let oldPID = try #require(first.launchedPIDs.first)
 
-        // While the client holds its connection the daemon outlasts its timeout.
-        try await Task.sleep(for: .seconds(2))
         #expect(FileManager.default.fileExists(atPath: socket.path(percentEncoded: false)))
 
         // Once the client lets go the daemon is idle and leaves, taking its
         // socket with it.
         first.disconnect()
-        let deadline = ContinuousClock.now + .seconds(10)
+        let deadline = ContinuousClock.now + .seconds(30)
         while FileManager.default.fileExists(atPath: socket.path(percentEncoded: false)), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(50))
         }

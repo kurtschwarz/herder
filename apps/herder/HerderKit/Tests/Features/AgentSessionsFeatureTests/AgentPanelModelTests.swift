@@ -48,13 +48,6 @@ import Testing
         try #require(await registry.open(WorkspaceID(url)))
     }
 
-    func eventually(_ what: String, _ condition: () -> Bool) async throws {
-        for _ in 0..<400 {
-            if condition() { return }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        Issue.record("never happened: \(what)")
-    }
 
     /// A model showing `root`, with `count` sessions started.
     func shown(sessions count: Int = 0) async throws -> (AgentPanelModel, Workspace, WorkspaceRegistry) {

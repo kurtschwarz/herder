@@ -18,13 +18,6 @@ import Testing
         return (TerminalScreen(session: session, size: PTYSize(columns: 40, rows: 10)), session)
     }
 
-    func eventually(_ what: String, _ condition: () -> Bool) async throws {
-        for _ in 0..<400 {
-            if condition() { return }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        Issue.record("never happened: \(what)")
-    }
 
     func firstLine(of screen: TerminalScreen) -> String {
         screen.emulator.cells.first?.map { $0.text.isEmpty ? " " : $0.text }.joined().replacing(/\s+$/, with: "") ?? ""
