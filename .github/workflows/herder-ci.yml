@@ -60,9 +60,13 @@ jobs:
           - name: Test macOS app
             task: test
             timeout: 25
+            # ripgrep runs the boundary check. The tests never generate the project.
+            tools: just ripgrep
           - name: Build macOS app
             task: build
             timeout: 15
+            # xcodegen generates the project the build compiles.
+            tools: just xcodegen
     env:
       ZIG_VERSION: 0.17.0
 
@@ -107,7 +111,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install tools
-        run: brew install just xcodegen ripgrep
+        run: brew install ${{ matrix.tools }}
 
       - name: Show toolchain versions
         id: toolchain
