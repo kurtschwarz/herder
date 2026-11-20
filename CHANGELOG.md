@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/kurtschwarz/herder/compare/herder-v0.6.0...herder-v0.6.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **deps:** lock file maintenance ([#130](https://github.com/kurtschwarz/herder/issues/130)) ([d04fbbb](https://github.com/kurtschwarz/herder/commit/d04fbbb720bdfa3ab2fc8ab3569f2c2131b0811d))
+
 ## [0.6.0](https://github.com/kurtschwarz/herder/compare/herder-v0.5.0...herder-v0.6.0) (2026-11-20)
 
 
