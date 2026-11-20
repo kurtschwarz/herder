@@ -44,6 +44,16 @@ _Avoid_: popover (it is not an `NSPopover`), inline chat.
 A pointer at whole lines of a file, in the form an agent reads: `@path#L10-12`, with the path relative to the worktree, else absolute, and quoted if it has a space. For a buffer with unsaved edits, whose line numbers the disk would not match, it is `path:10-12 (unsaved)` followed by the lines in a fenced block.
 _Avoid_: mention, link, snippet.
 
+## Orders
+
+**New order**:
+The card at the top of the sidebar where a session is started from a prompt. Typing what to build and pressing Plan it fetches the default branch, names the work, cuts a worktree for it and starts the last-used agent there in plan mode with the typed text as its first message. Replaces the Plan, Build and New session buttons; the new-session modal is still behind the card's terminal icon.
+_Avoid_: quick start, launcher.
+
+**Naming call**:
+The one request a New order makes to an Anthropic-compatible endpoint (Meridian by default) for a type (`feat`, `fix` or `chore`), a kebab-case slug and a title. Everything is named before the worktree exists, so nothing is renamed or moved afterwards. If it fails or takes about 4 seconds, the branch is `chore/<adjective>-<noun>` and the session is named from the start of the prompt.
+_Avoid_: auto-name, rename.
+
 ## GitHub
 
 **GitHub connection**:

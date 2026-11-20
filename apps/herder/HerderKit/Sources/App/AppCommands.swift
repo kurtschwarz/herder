@@ -35,7 +35,8 @@ extension FocusedValues {
     /// Start a shell in the workspace showing.
     @Entry var newTerminalTab: (() -> Void)?
 
-    /// Start an agent session in the workspace showing.
+    /// Move to the sidebar's New order card, where a session is started from a
+    /// prompt.
     @Entry var newAgentSession: (() -> Void)?
 }
 

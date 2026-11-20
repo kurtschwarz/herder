@@ -7,6 +7,7 @@
 //! | Operation | Why `gix` is not enough |
 //! | --- | --- |
 //! | `shortstat` (and `change_summary`, which ends in it) | `gix` has no combined staged-plus-unstaged diff of the working tree against a commit. |
+//! | `fetch` | `gix` is built without a network transport, and the user's own `git` already has their credentials. |
 //! | `changed_files` | The same, and `gix`'s rename pairing can differ from `git diff -M`, which the app has always shown. |
 
 use crate::protocol::{GitError, GitErrorCode};
@@ -30,4 +31,22 @@ pub fn run(dir: &Path, args: &[&str]) -> Result<Option<Vec<u8>>, GitError> {
             message: format!("could not run git: {error}"),
         })?;
     Ok(output.status.success().then_some(output.stdout))
+}
+
+/// Fetches `branch` from `remote` into its remote-tracking ref, and nothing
+/// else. Whether it worked is all the caller learns.
+pub fn fetch(git_dir: &Path, remote: &str, branch: &str) -> bool {
+    if remote.starts_with('-') || branch.starts_with('-') {
+        return false;
+    }
+    Command::new("git")
+        .arg("--git-dir")
+        .arg(git_dir)
+        .args(["fetch", "--no-tags", "--quiet", remote, branch])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
 }

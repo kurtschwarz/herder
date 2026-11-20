@@ -14,10 +14,10 @@ use serde::{Deserialize, Serialize};
 /// because nothing used the daemon before it, so there is no older app to keep
 /// serving.
 pub const MIN_PROTOCOL: u32 = 2;
-/// The newest protocol version this build speaks. 3 added the GitHub token and
-/// 4 added pull request queries. Nothing in either changes a message of 2, so
-/// an app that speaks 2 is still served.
-pub const MAX_PROTOCOL: u32 = 4;
+/// The newest protocol version this build speaks. 3 added the GitHub token, 4
+/// added pull request queries and 5 added the `fetch` git operation. Nothing in
+/// any of them changes a message of 2, so an app that speaks 2 is still served.
+pub const MAX_PROTOCOL: u32 = 5;
 
 /// A credential. Its `Debug` never shows the value, so a message that carries
 /// one can be logged, printed in a panic or put in an error without leaking it.
@@ -231,6 +231,12 @@ pub enum GitOp {
         base: String,
         exclude: Option<String>,
     },
+    /// Fetches the remote's default branch, and only that, then names the ref
+    /// a new branch should be cut from. A fetch that fails is not an error:
+    /// the existing remote-tracking ref is named all the same.
+    Fetch {
+        path: String,
+    },
 }
 
 /// What a working tree has checked out.
@@ -407,6 +413,11 @@ pub enum GitResult {
     },
     AddedWorktree {
         worktree: String,
+    },
+    /// The default branch as a ref (`origin/main`, else `main`, else
+    /// `master`), or `null` when there is none.
+    Fetched {
+        base: Option<String>,
     },
 }
 
@@ -599,6 +610,24 @@ mod tests {
                 r#""merged_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}}]}],"#,
                 r#""next_poll_seconds":60}"#
             )
+        );
+    }
+
+    #[test]
+    fn a_fetch_request_and_its_answer_are_flat_objects() {
+        let request = ClientMessage::GitRequest { id: 8, op: GitOp::Fetch { path: "/r".into() } };
+        let json = serde_json::to_string(&request).unwrap();
+        assert_eq!(json, r#"{"type":"git_request","id":8,"op":"fetch","path":"/r"}"#);
+        assert_eq!(serde_json::from_str::<ClientMessage>(&json).unwrap(), request);
+
+        let reply = DaemonMessage::GitResponse {
+            id: 8,
+            result: Some(GitResult::Fetched { base: Some("origin/main".into()) }),
+            error: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&reply).unwrap(),
+            r#"{"type":"git_response","id":8,"result":{"base":"origin/main"}}"#
         );
     }
 

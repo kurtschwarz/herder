@@ -18,6 +18,7 @@ public struct SettingsWindow: View {
     public var body: some View {
         SettingsView(
             agents: environment.agents,
+            naming: environment.naming,
             version: AppVersion(info: Bundle.main.infoDictionary ?? [:]),
             updater: environment.updater,
             daemon: environment.daemon,

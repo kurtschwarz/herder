@@ -432,6 +432,30 @@ import Testing
         #expect(try await client.status(in: plain).entries.isEmpty)
     }
 
+    // MARK: - fetchDefaultBranch
+
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func fetchingNamesTheRemoteDefaultBranchAndBringsItUpToDate() async throws {
+        defer { stop() }
+        let origin = try fixture.makeRepository("origin")
+        let clone = try fixture.makeDirectory("clone")
+        try fixture.git("clone", origin.path(percentEncoded: false), clone.path(percentEncoded: false), in: origin)
+        try "x".write(to: origin.appending(path: "new.txt"), atomically: true, encoding: .utf8)
+        try fixture.git("add", ".", in: origin)
+        try fixture.git("commit", "-m", "second", in: origin)
+        let tip = try fixture.git("rev-parse", "HEAD", in: origin)
+
+        #expect(try await client.fetchDefaultBranch(in: clone) == "origin/main")
+        #expect(try fixture.git("rev-parse", "origin/main", in: clone) == tip)
+    }
+
+    @Test(.enabled(if: LiveDaemonClientTests.built))
+    func aRepositoryWithNoRemoteNamesItsLocalDefaultBranch() async throws {
+        defer { stop() }
+        let repository = try fixture.makeRepository("repo")
+        #expect(try await client.fetchDefaultBranch(in: repository) == "main")
+    }
+
     // MARK: - addWorktree
 
     @Test(.enabled(if: LiveDaemonClientTests.built))

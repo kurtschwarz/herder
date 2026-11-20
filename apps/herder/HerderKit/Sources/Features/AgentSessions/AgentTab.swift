@@ -49,6 +49,11 @@ final class AgentTab: Identifiable {
         customName = trimmed.isEmpty ? nil : String(trimmed.prefix(Self.maxNameLength))
     }
 
+    /// What the agent is told as its first message, when it starts for the
+    /// first time. Not kept across launches: a session that has started has
+    /// had it.
+    let firstPrompt: String?
+
     private(set) var phase: Phase
 
     /// Whether its agent has been started before, here or before a relaunch:
@@ -118,9 +123,11 @@ final class AgentTab: Identifiable {
         name: String? = nil,
         restored: Bool = false,
         sessionID: String? = nil,
-        startedAt: Date? = nil
+        startedAt: Date? = nil,
+        firstPrompt: String? = nil
     ) {
         self.id = id
+        self.firstPrompt = firstPrompt
         self.agent = agent
         self.number = number
         self.mode = mode

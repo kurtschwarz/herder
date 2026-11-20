@@ -17,6 +17,18 @@ public protocol GitClient: Sendable {
     /// Changes the repository, unlike everything else here.
     func addWorktree(in repository: URL, at path: URL, newBranch: String, from base: String) async throws
 
+    /// Fetches the remote's default branch in the repository at `repository`,
+    /// and only that, then names the ref a new branch should be cut from:
+    /// `origin/main`, or the local `main` or `master` when there is no remote.
+    /// `nil` when there is no default branch at all.
+    ///
+    /// A fetch that fails, offline or without credentials, is not an error:
+    /// the remote-tracking ref as it stands is named all the same. Throws only
+    /// when the answer could not be had, such as a daemon too old to fetch.
+    ///
+    /// Changes the repository, as `addWorktree` does.
+    func fetchDefaultBranch(in repository: URL) async throws -> String?
+
     /// Where the working tree at `url` keeps its `index` and its `HEAD`.
     ///
     /// Worth asking for separately because `git add` writes no file in the

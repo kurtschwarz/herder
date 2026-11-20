@@ -209,8 +209,10 @@ final class WindowEnvironment {
         activate(worktree)
     }
 
-    func startAgentSession(in id: WorkspaceID, agent: Agent?, mode: SessionMode) {
-        agentPanel.requestSession(in: id, agent: agent, mode: mode)
+    func startAgentSession(
+        in id: WorkspaceID, agent: Agent?, mode: SessionMode, prompt: String? = nil, name: String? = nil
+    ) {
+        agentPanel.requestSession(in: id, agent: agent, mode: mode, prompt: prompt, name: name)
         activate(id)
     }
 
