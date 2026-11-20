@@ -20,7 +20,7 @@ private struct AnthropicSection: View {
     let naming: NamingSettings
 
     var body: some View {
-        SettingsSection("Claude / Anthropic") {
+        SettingsSection("Anthropic") {
             field("API endpoint") {
                 TextField(NamingConfiguration.defaultEndpoint, text: Binding(
                     get: { naming.endpoint },
