@@ -49,6 +49,10 @@ syntax:
 daemon:
     just --justfile {{ daemon_pkg }}/justfile --working-directory {{ daemon_pkg }} build
 
+# Build herderd for this machine's architecture alone, for the tests.
+daemon-host:
+    just --justfile {{ daemon_pkg }}/justfile --working-directory {{ daemon_pkg }} host
+
 # Build libghostty-vt and put its XCFramework where HerderKit expects it.
 # Needs Zig 0.17.x. Skipped when the framework already came from the pinned
 # commit, so this is cheap to depend on.
@@ -86,7 +90,7 @@ project:
 # Without -parallel-testing-enabled the test bundles run one after another, so
 # the whole run waits on each bundle's slowest suite in turn. Side by side they
 # take about a quarter of the time. Their output interleaves as a result.
-test *args: syntax ghostty daemon
+test *args: syntax ghostty daemon-host
     cd {{ kit }} && xcodebuild test -scheme HerderKit -destination 'platform=macOS,arch={{ arch }}' -parallel-testing-enabled YES {{ args }}
 
 # Build the app. Extra arguments go to xcodebuild, as with `test`.

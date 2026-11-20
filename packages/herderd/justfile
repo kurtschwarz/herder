@@ -44,6 +44,17 @@ build: bootstrap
     codesign --force --sign - "{{ binary }}"
     print -P "%F{cyan}==>%f {{ binary }}"
 
+# Build for this machine's architecture alone, to the same path as `build`.
+# The tests only run it here, and a lighter profile than release is enough for them.
+host: bootstrap
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    cargo build --profile fast
+    mkdir -p target
+    cp target/fast/herderd "{{ binary }}"
+    codesign --force --sign - "{{ binary }}"
+    print -P "%F{cyan}==>%f {{ binary }} ({{ arch() }} only)"
+
 # Run the tests and the linter
 test *args:
     cargo test {{ args }}
