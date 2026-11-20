@@ -6,6 +6,7 @@ on:
       - apps/herder/**
       - packages/herder-ghostty-vt/**
       - packages/herder-syntax-highlighter/**
+      - packages/herderd/**
       - justfile
       - .github/workflows/herder-ci.yml
   # Caches are scoped to the ref that saved them, and only main's are visible to
@@ -23,6 +24,28 @@ permissions:
   contents: read
 
 jobs:
+  herderd:
+    name: Test herderd
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: packages/herderd -> target
+          shared-key: herderd-check
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install tools
+        run: brew install just
+
+      - name: Run just test
+        run: just test packages/herderd
+
   # Both compile all of HerderKit, and not into the same DerivedData, so running
   # them side by side rather than one after the other halves the wait.
   herder:
@@ -72,6 +95,15 @@ jobs:
           # Otherwise the key names the job, and Herder Package's job is another.
           shared-key: herder-syntax-highlighter
           # Only main's cache is visible to other refs.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # One cache per task: both would save under the same key otherwise, and
+      # the second to finish would find it taken.
+      - name: Cache herderd build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: packages/herderd -> target
+          shared-key: herderd-${{ matrix.task }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install tools
