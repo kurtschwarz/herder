@@ -19,6 +19,10 @@ public final class AgentCatalog {
 
     private var lastUsedID: Agent.ID?
 
+    /// What every New order's text is put in before the agent is told it. See
+    /// ``FirstPromptTemplate``. Empty leaves the text as typed.
+    public private(set) var firstPromptTemplate = ""
+
     /// The tail of the saves. Each waits for the one before, so an older list
     /// can never be written over a newer one.
     @ObservationIgnored
@@ -54,6 +58,7 @@ public final class AgentCatalog {
         else { return }
         custom = snapshot.custom
         lastUsedID = snapshot.lastUsed
+        firstPromptTemplate = snapshot.firstPromptTemplate ?? ""
     }
 
     // MARK: - Changing
@@ -81,6 +86,12 @@ public final class AgentCatalog {
         save()
     }
 
+    public func setFirstPromptTemplate(_ template: String) {
+        guard template != firstPromptTemplate else { return }
+        firstPromptTemplate = template
+        save()
+    }
+
     public func remove(_ id: Agent.ID) {
         guard custom.contains(where: { $0.id == id }) else { return }
         custom.removeAll { $0.id == id }
@@ -93,7 +104,7 @@ public final class AgentCatalog {
     /// Writes the list at once, not after a pause: it changes only when
     /// somebody edits it or starts a session, and the snapshot is a few lines.
     private func save() {
-        let snapshot = AgentsSnapshot(custom: custom, lastUsed: lastUsedID)
+        let snapshot = AgentsSnapshot(custom: custom, lastUsed: lastUsedID, firstPromptTemplate: firstPromptTemplate.isEmpty ? nil : firstPromptTemplate)
         let previous = saving
         saving = Task { [state] in
             await previous?.value

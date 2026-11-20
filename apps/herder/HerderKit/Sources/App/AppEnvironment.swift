@@ -281,7 +281,7 @@ public final class AppEnvironment {
     func makeWindow(id: UUID = UUID(), restoring snapshot: WindowSnapshot? = nil) -> WindowEnvironment {
         let list = WindowRepositories(store: repositories, members: snapshot?.repositories ?? [])
         let repositoryList = RepositoriesModel(
-            repositories: list, git: git, picker: folderPicker, namer: namer, naming: naming
+            repositories: list, git: git, picker: folderPicker, namer: namer, naming: naming, agents: agents
         )
         let panel = AgentPanelModel(
             pty: pty, commands: commands, clock: clock, catalog: agents,

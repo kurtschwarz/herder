@@ -46,6 +46,19 @@ import Testing
         #expect(!model.isWorking)
     }
 
+    @Test func theAgentIsToldTheTextInTheUsersTemplateButNamingSeesItAsTyped() async throws {
+        let templated = NewOrderModel(
+            git: git, namer: namer, naming: { NamingConfiguration(endpoint: URL(string: "http://x")!) },
+            promptTemplate: { "/grill-me {prompt}" }, namingTimeout: .milliseconds(100)
+        )
+        templated.text = "add a minimap"
+
+        let order = try #require(await templated.submit(in: repository))
+
+        #expect(order.prompt == "/grill-me add a minimap")
+        #expect(namer.prompts == ["add a minimap"])
+    }
+
     @Test func theNamingCallAndTheFetchBothHappen() async throws {
         model.text = "add a minimap"
 

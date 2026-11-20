@@ -155,7 +155,8 @@ private struct EmptyRepositories: View {
 
     RepositoriesView(model: RepositoriesModel(
         repositories: list, git: git, picker: StubFolderPickerClient(), namer: StubSessionNamer(),
-        naming: NamingSettings(state: InMemoryStateStore(), vault: InMemoryNamingKeyVault())
+        naming: NamingSettings(state: InMemoryStateStore(), vault: InMemoryNamingKeyVault()),
+        agents: AgentCatalog(state: InMemoryStateStore())
     ))
     .frame(width: Theme.Size.defaultSidebarWidth, height: 420)
     .glassPaneBackground()

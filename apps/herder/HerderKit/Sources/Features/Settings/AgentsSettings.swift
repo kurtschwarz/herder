@@ -15,6 +15,8 @@ struct AgentsSettings: View {
                 .foregroundStyle(Theme.Palette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
+            FirstPromptSection(catalog: catalog)
+
             NamingSection(naming: naming)
 
             SettingsSection("Built in") {
@@ -59,6 +61,35 @@ struct AgentsSettings: View {
                     .buttonStyle(.secondary)
                     .padding(.top, Theme.Spacing.tight)
             }
+        }
+    }
+}
+
+/// What a New order's text is put in before the agent is told it, so every
+/// order can start with the same skill or instructions.
+private struct FirstPromptSection: View {
+    let catalog: AgentCatalog
+
+    var body: some View {
+        SettingsSection("First prompt") {
+            Text("Wraps the text typed in a New order before the agent sees it. \(FirstPromptTemplate.token) stands for the text, so \u{201C}/grill-me \(FirstPromptTemplate.token)\u{201D} starts every order with the grill-me skill. Without it, the template goes first, then a blank line, then the text. Empty sends the text as typed. The same template is used for every agent.")
+                .font(.callout)
+                .foregroundStyle(Theme.Palette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, Theme.Spacing.tight)
+
+            TextField("/grill-me \(FirstPromptTemplate.token)", text: Binding(
+                get: { catalog.firstPromptTemplate },
+                set: { catalog.setFirstPromptTemplate($0) }
+            ), axis: .vertical)
+                .lineLimit(1...6)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(Theme.Palette.text)
+                .padding(.horizontal, Theme.Spacing.normal)
+                .padding(.vertical, Theme.Spacing.normal - 2)
+                .frame(minHeight: Theme.Size.control, alignment: .leading)
+                .fieldSurface()
         }
     }
 }

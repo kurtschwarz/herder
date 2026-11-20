@@ -19,7 +19,8 @@ import Testing
         list = WindowRepositories(store: store)
         model = RepositoriesModel(
             repositories: list, git: git, picker: picker, namer: StubSessionNamer(),
-            naming: NamingSettings(state: InMemoryStateStore(), vault: InMemoryNamingKeyVault())
+            naming: NamingSettings(state: InMemoryStateStore(), vault: InMemoryNamingKeyVault()),
+            agents: AgentCatalog(state: InMemoryStateStore())
         )
     }
 

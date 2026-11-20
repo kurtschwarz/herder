@@ -21,7 +21,8 @@ final class NewOrderModel {
         var worktree: URL
         /// What the session is called in the sidebar.
         var title: String
-        /// The typed text, which is the agent's first message.
+        /// The typed text in the user's template, which is the agent's first
+        /// message.
         var prompt: String
     }
 
@@ -31,6 +32,7 @@ final class NewOrderModel {
     private let git: any GitClient
     private let namer: any SessionNamer
     private let naming: () -> NamingConfiguration
+    private let promptTemplate: () -> String
     private let namingTimeout: Duration
 
     /// What was typed. Only the input reads it, so typing redraws the input
@@ -60,11 +62,13 @@ final class NewOrderModel {
         git: any GitClient,
         namer: any SessionNamer,
         naming: @escaping () -> NamingConfiguration,
+        promptTemplate: @escaping () -> String = { "" },
         namingTimeout: Duration = .seconds(4)
     ) {
         self.git = git
         self.namer = namer
         self.naming = naming
+        self.promptTemplate = promptTemplate
         self.namingTimeout = namingTimeout
     }
 
@@ -123,7 +127,7 @@ final class NewOrderModel {
                 worktree: location,
                 title: sessionName.map(\.title).flatMap(Self.nonBlank).map { String($0.prefix(Self.maxTitleLength)) }
                     ?? Self.title(from: prompt),
-                prompt: prompt
+                prompt: FirstPromptTemplate.apply(promptTemplate(), to: prompt)
             )
         } catch GitClientError.commandFailed(let message) {
             failure = message

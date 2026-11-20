@@ -70,12 +70,16 @@ public final class RepositoriesModel {
         git: any GitClient,
         picker: any FolderPickerClient,
         namer: any SessionNamer,
-        naming: NamingSettings
+        naming: NamingSettings,
+        agents: AgentCatalog
     ) {
         self.list = repositories
         self.git = git
         self.picker = picker
-        self.order = NewOrderModel(git: git, namer: namer, naming: { naming.configuration })
+        self.order = NewOrderModel(
+            git: git, namer: namer, naming: { naming.configuration },
+            promptTemplate: { agents.firstPromptTemplate }
+        )
     }
 
     /// The repositories this window lists, in its order.
