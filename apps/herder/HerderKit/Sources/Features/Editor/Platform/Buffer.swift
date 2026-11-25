@@ -36,6 +36,27 @@ final class Buffer: NSObject, NSTextViewDelegate {
     private var textView: NSTextView?
     private var gutter: LineNumberGutter?
 
+    /// Hands TextKit the paragraphs that draw the whitespace markers.
+    private let whitespace = WhitespaceFragmentSource(
+        font: NSFont.monospacedSystemFont(ofSize: Theme.Size.code, weight: .regular),
+        colour: NSColor(Theme.Palette.whitespace)
+    )
+
+    /// Which whitespace is marked on screen. Never in the text.
+    var showWhitespace: ShowWhitespace {
+        get { whitespace.mode }
+        set {
+            guard newValue != whitespace.mode else { return }
+            whitespace.mode = newValue
+            layout.enumerateTextLayoutFragments(from: nil, options: []) { fragment in
+                (fragment as? WhitespaceLayoutFragment)?.mode = newValue
+                return true
+            }
+            // Drawing, like colour, is no edit: see ``paint(_:)``.
+            textView.map(markForDisplay)
+        }
+    }
+
     /// The ⌘L pill and the prompt it opens, with what was typed in it and not
     /// sent.
     private(set) lazy var selectionPrompt = SelectionPromptController { [unowned self] in storage.string }
@@ -64,6 +85,7 @@ final class Buffer: NSObject, NSTextViewDelegate {
             object: storage
         )
         content.addTextLayoutManager(layout)
+        layout.delegate = whitespace
         layout.textContainer = container
     }
 

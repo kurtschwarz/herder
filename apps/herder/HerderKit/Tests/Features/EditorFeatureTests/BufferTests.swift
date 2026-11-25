@@ -63,6 +63,100 @@ import Testing
         #expect(cleanAfter.isEmpty)
     }
 
+    /// The fragments laid out for `textView`'s paragraphs, in order.
+    private func fragments(of textView: NSTextView) -> [WhitespaceLayoutFragment] {
+        var found: [WhitespaceLayoutFragment] = []
+        textView.textLayoutManager?.enumerateTextLayoutFragments(from: nil, options: [.ensuresLayout]) { fragment in
+            if let fragment = fragment as? WhitespaceLayoutFragment { found.append(fragment) }
+            return true
+        }
+        return found
+    }
+
+    /// The markers are drawn by the paragraphs, so every paragraph has to be
+    /// one that can, and a change of mode has to reach those already made.
+    @Test func everyParagraphFollowsTheWhitespaceMode() {
+        let (buffer, textView) = drawn("a b\nc\n")
+        let laidOut = fragments(of: textView)
+        #expect(laidOut.count == 2)
+        #expect(laidOut.allSatisfy { $0.mode == .none && $0.markers().isEmpty })
+
+        buffer.showWhitespace = .all
+
+        #expect(fragments(of: textView).allSatisfy { $0.mode == .all })
+    }
+
+    /// What the pane looks like now, as pixels.
+    private func pixels(of buffer: Buffer) -> Data? {
+        let pane = buffer.pane
+        pane.displayIfNeeded()
+        guard let rep = pane.bitmapImageRepForCachingDisplay(in: pane.bounds) else { return nil }
+        pane.cacheDisplay(in: pane.bounds, to: rep)
+        return rep.tiffRepresentation
+    }
+
+    /// Placement can be right while nothing is drawn: a glyph made as a line
+    /// fragment outside any layout measured and painted nothing, and every
+    /// other test here passed.
+    @Test func theMarkersAreDrawn() throws {
+        let (buffer, _) = drawn("a    b\n\t\tc\n")
+        let none = try #require(pixels(of: buffer))
+
+        buffer.showWhitespace = .all
+
+        #expect(try #require(pixels(of: buffer)) != none)
+    }
+
+    /// The same as colour: a new mode is no edit, so nothing else would
+    /// redraw the paragraphs.
+    @Test func changingTheModeAsksEveryParagraphToDrawAgain() {
+        let (buffer, textView) = drawn(String(repeating: "let name = 1\n", count: 20))
+        let views = paragraphs(of: textView)
+        #expect(!(views.filter { !$0.needsDisplay } + views.flatMap(clean(under:))).isEmpty)
+
+        buffer.showWhitespace = .all
+
+        #expect((views.filter { !$0.needsDisplay } + views.flatMap(clean(under:))).isEmpty)
+    }
+
+    @Test func aParagraphMadeAfterTheModeChangedHasIt() {
+        let (buffer, textView) = drawn("a\n")
+        buffer.showWhitespace = .trailing
+
+        textView.insertText("b  \n", replacementRange: NSRange(location: 2, length: 0))
+
+        let laidOut = fragments(of: textView)
+        #expect(laidOut.allSatisfy { $0.mode == .trailing })
+        #expect(laidOut.last?.markers().map(\.kind) == [.space, .space])
+    }
+
+    /// A tab's arrow at the tab's start, a space's dot inside its own width,
+    /// and a line ending's hook right after the last character.
+    @Test func markersArePlacedOnTheCharactersTheyMark() throws {
+        let (buffer, textView) = drawn("a\tb c\n")
+        buffer.showWhitespace = .all
+        let fragment = try #require(fragments(of: textView).first)
+        let line = try #require(fragment.textLineFragments.first)
+        func x(_ offset: Int) -> CGFloat { line.typographicBounds.minX + line.locationForCharacter(at: offset).x }
+
+        let markers = fragment.markers()
+
+        #expect(markers.map(\.kind) == [.tab, .space, .lineEnding])
+        #expect(markers[0].origin.x == x(1))
+        #expect(markers[1].origin.x >= x(3) && markers[1].origin.x < x(4))
+        #expect(markers[2].origin.x == x(5))
+        #expect(markers.allSatisfy { $0.origin.y == line.typographicBounds.minY + line.glyphOrigin.y })
+    }
+
+    @Test func aFinalLineWithNoNewlineHasNoHook() throws {
+        let (buffer, textView) = drawn("a\nb")
+        buffer.showWhitespace = .all
+
+        let laidOut = fragments(of: textView)
+
+        #expect(laidOut.map { $0.markers().map(\.kind) } == [[.lineEnding], []])
+    }
+
     /// The colour painted over the character at `offset`, or `nil` for none.
     ///
     /// The enumeration skips ahead to the next coloured run rather than

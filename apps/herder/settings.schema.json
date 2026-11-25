@@ -38,6 +38,18 @@
         }
       }
     },
+    "editor": {
+      "description": "How the editor draws.",
+      "type": "object",
+      "properties": {
+        "show_whitespace": {
+          "description": "Which whitespace gets a marker: a dot for a space, an arrow for a tab and a hook for a line ending. Only drawn on screen; never part of the text. trailing marks the spaces and tabs at the end of a line, and not line endings.",
+          "type": "string",
+          "enum": ["none", "trailing", "all"],
+          "default": "none"
+        }
+      }
+    },
     "providers": {
       "description": "The services Herder itself calls, as opposed to the agents it runs.",
       "type": "object",

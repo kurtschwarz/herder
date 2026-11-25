@@ -4,6 +4,7 @@ import SwiftUI
 /// One entry in the settings sidebar, and the pane it shows.
 enum SettingsPane: String, CaseIterable, Identifiable {
     case general
+    case editor
     case agents
     case providers
 
@@ -12,6 +13,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: "General"
+        case .editor: "Editor"
         case .agents: "Agents"
         case .providers: "Providers"
         }
@@ -21,6 +23,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     var glyph: Image {
         switch self {
         case .general: Ph.gearSixFill
+        case .editor: Ph.code
         case .agents: Ph.sparkleFill
         case .providers: Ph.plugsConnected
         }
@@ -29,6 +32,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     var tint: LinearGradient {
         switch self {
         case .general: Theme.Gradient.graphiteTile
+        case .editor: Theme.Gradient.graphiteTile
         case .agents: Theme.Gradient.violetTile
         case .providers: Theme.Gradient.graphiteTile
         }

@@ -317,6 +317,8 @@ public final class AppEnvironment {
         // editor knows nothing about settings.
         let settingsKey = PathKey(settings.url)
         editor.diagnostic = { [settings] key in key == settingsKey ? settings.problem : nil }
+        // The same for the whitespace setting, which every window follows.
+        Self.follow(settings, in: editor)
         return WindowEnvironment(
             id: id,
             repositories: list,
@@ -329,6 +331,19 @@ public final class AppEnvironment {
             windows: windows,
             restoring: snapshot
         )
+    }
+
+    /// Keeps `editor` showing the whitespace the settings ask for, as they
+    /// change. Stops with the window: the editor is held weakly.
+    private static func follow(_ settings: UserSettingsStore, in editor: EditorModel) {
+        withObservationTracking {
+            editor.showWhitespace = settings.settings.showWhitespace
+        } onChange: { [weak editor] in
+            Task { @MainActor in
+                guard let editor else { return }
+                follow(settings, in: editor)
+            }
+        }
     }
 
     /// The Task Manager's model. One per window it is shown in, which is one:

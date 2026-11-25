@@ -129,6 +129,36 @@ import Testing
         #expect(store.problem == "agents.custom[0].type \u{201C}aider\u{201D} is not a built-in agent: one of claude-code, codex, opencode, pi.")
     }
 
+    @Test(arguments: ShowWhitespace.allCases)
+    func showWhitespaceDecodesEveryMode(_ mode: ShowWhitespace) throws {
+        let decoded = try UserSettings.decode(#"{"editor":{"show_whitespace":"\#(mode.rawValue)"}}"#)
+
+        #expect(decoded.showWhitespace == mode)
+    }
+
+    @Test func showWhitespaceIsNoneWhenTheKeyOrTheObjectIsMissing() throws {
+        #expect(try UserSettings.decode("{}").showWhitespace == .none)
+        #expect(try UserSettings.decode(#"{"editor":{}}"#).showWhitespace == .none)
+    }
+
+    @Test func showWhitespaceIsWrittenOnlyWhenItIsNotNone() throws {
+        var settings = UserSettings()
+        #expect(!(try settings.encoded().contains("editor")))
+
+        settings.showWhitespace = .trailing
+        let text = try settings.encoded()
+        #expect(text.contains(#""show_whitespace" : "trailing""#))
+        #expect(try UserSettings.decode(text).showWhitespace == .trailing)
+    }
+
+    @Test func anUnknownShowWhitespaceIsAProblemThatNamesTheModes() async {
+        file.edit(#"{"editor":{"show_whitespace":"selection"}}"#)
+
+        await store.load()
+
+        #expect(store.problem == "editor.show_whitespace \u{201C}selection\u{201D} is not one of none, trailing, all.")
+    }
+
     @Test func anExternalEditIsAppliedLive() async {
         await store.load()
         store.startWatching()

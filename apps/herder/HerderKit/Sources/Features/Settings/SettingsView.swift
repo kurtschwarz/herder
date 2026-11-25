@@ -59,6 +59,7 @@ public struct SettingsView: View {
         case .general: GeneralSettings(
                 settings: settings, version: version, updater: updater, daemon: daemon, github: github, pullRequests: pullRequests
             )
+        case .editor: EditorSettings(settings: settings)
         case .agents: AgentsSettings(catalog: agents)
         case .providers: ProvidersSettings(naming: naming)
         }
