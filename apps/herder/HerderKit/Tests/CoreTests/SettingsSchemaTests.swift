@@ -82,6 +82,8 @@ import Testing
         let presets = try #require(try object(id["not"])["enum"] as? [String])
 
         #expect(presets == Agent.presets.map(\.id))
+        let type = try object(try object(agent["properties"])["type"])
+        #expect(type["enum"] as? [String] == Agent.presets.map(\.id))
         for candidate in ["aider", "my-aider-2", "My Aider", "", "custom_1", "éa"] {
             let matches = candidate.wholeMatch(of: try Regex(String(pattern.dropFirst().dropLast()))) != nil
             #expect(matches == UserSettings.isValidAgentID(candidate), "\(candidate)")

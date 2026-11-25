@@ -81,6 +81,54 @@ import Testing
         #expect(store.settings.customAgents.isEmpty)
     }
 
+    // MARK: - Types
+
+    @Test func aTypedAgentTakesWhatItLeavesOutFromItsPreset() throws {
+        let settings = try UserSettings.decode("""
+            {"agents":{"custom":[{
+              "id":"opencode-work","name":"OpenCode (Work)","type":"opencode",
+              "environment":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:3457/v1"}
+            }]}}
+            """)
+
+        let opencode = try #require(Agent.preset("opencode"))
+        var expected = opencode.withID("opencode-work")
+        expected.name = "OpenCode (Work)"
+        expected.type = "opencode"
+        expected.environment = opencode.environment?.merging(["ANTHROPIC_BASE_URL": "http://127.0.0.1:3457/v1"]) { $1 }
+        #expect(settings.customAgents == [expected])
+    }
+
+    @Test func aTypedAgentIsWrittenWithOnlyWhatDiffersFromItsPreset() throws {
+        var agent = try #require(Agent.preset("opencode")).withID("opencode-work")
+        agent.type = "opencode"
+        agent.name = "OpenCode (Work)"
+        agent.resumeCommand = nil
+        agent.environment?["ANTHROPIC_BASE_URL"] = "http://127.0.0.1:3457/v1"
+        var settings = UserSettings()
+        settings.customAgents = [agent]
+
+        let text = try settings.encoded()
+
+        #expect(text.contains(#""ANTHROPIC_BASE_URL" : "http://127.0.0.1:3457/v1""#))
+        #expect(!text.contains("OPENCODE_CLI_CONFIG_CONTENT"))
+        #expect(!text.contains(#""command""#))
+        #expect(!text.contains(#""session_lookup""#))
+        #expect(text.contains(#""resume_command" : """#))
+        // The cleared resume command comes back as empty, which runs afresh.
+        let decoded = try #require(try UserSettings.decode(text).customAgents.first)
+        #expect(decoded.resumeCommand == "")
+        #expect(decoded.commandLine(session: "x", resuming: true) == "opencode")
+    }
+
+    @Test func aTypeThatIsNotAPresetIsAProblem() async {
+        file.edit(#"{"agents":{"custom":[{"id":"mine","type":"aider"}]}}"#)
+
+        await store.load()
+
+        #expect(store.problem == "agents.custom[0].type \u{201C}aider\u{201D} is not a built-in agent: one of claude-code, codex, opencode, pi.")
+    }
+
     @Test func anExternalEditIsAppliedLive() async {
         await store.load()
         store.startWatching()

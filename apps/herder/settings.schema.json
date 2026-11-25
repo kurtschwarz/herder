@@ -68,13 +68,18 @@
           "pattern": "^[a-z0-9-]+$",
           "not": { "enum": ["claude-code", "codex", "opencode", "pi"] }
         },
+        "type": {
+          "description": "A built-in agent this one is a variant of. Every field left out takes that agent's value, and environment is laid over its environment. An empty string clears a command the built-in agent has.",
+          "type": "string",
+          "enum": ["claude-code", "codex", "opencode", "pi"]
+        },
         "name": {
-          "description": "What menus call the agent.",
+          "description": "What menus call the agent. Without one, the type's name, or none.",
           "type": "string",
           "default": ""
         },
         "command": {
-          "description": "The command line that starts a new session. {session} stands for the session's id.",
+          "description": "The command line that starts a new session. {session} stands for the session's id. Without one, the type's command.",
           "type": "string",
           "default": "",
           "examples": ["aider --model sonnet"]
@@ -102,7 +107,7 @@
           "type": "string"
         },
         "environment": {
-          "description": "Variables set for the agent's terminal alone, over the app's own.",
+          "description": "Variables set for the agent's terminal alone, over the app's own and, with a type, over that agent's.",
           "type": "object",
           "additionalProperties": { "type": "string" },
           "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }

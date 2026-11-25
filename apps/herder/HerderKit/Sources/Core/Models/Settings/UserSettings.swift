@@ -132,6 +132,7 @@ extension UserSettings: Codable {
     /// snapshots already, camel-cased, and cannot change.
     enum AgentKeys: String, CodingKey, CaseIterable {
         case id
+        case type
         case name
         case command
         case planCommand = "plan_command"
@@ -162,7 +163,7 @@ extension UserSettings: Codable {
                 while !list.isAtEnd {
                     let index = list.currentIndex
                     let entry = try list.nestedContainer(keyedBy: AgentKeys.self)
-                    let agent = try Self.decodeAgent(from: entry)
+                    let agent = try Self.decodeAgent(from: entry, at: index)
                     let place = "agents.custom[\(index)].id"
                     guard Self.isValidAgentID(agent.id) else {
                         throw UserSettingsError(message: "\(place) \u{201C}\(agent.id)\u{201D} may only use lowercase letters, digits and dashes.")
@@ -187,18 +188,70 @@ extension UserSettings: Codable {
         }
     }
 
-    private static func decodeAgent(from entry: KeyedDecodingContainer<AgentKeys>) throws -> Agent {
-        Agent(
+    /// An entry with a `type` starts from that preset: what the entry leaves
+    /// out is the preset's, and its environment is laid over the preset's.
+    private static func decodeAgent(from entry: KeyedDecodingContainer<AgentKeys>, at index: Int) throws -> Agent {
+        let type = try entry.decodeIfPresent(String.self, forKey: .type)
+        let base: Agent?
+        if let type {
+            guard let preset = Agent.preset(type) else {
+                let names = Agent.presets.map(\.id).joined(separator: ", ")
+                throw UserSettingsError(
+                    message: "agents.custom[\(index)].type \u{201C}\(type)\u{201D} is not a built-in agent: one of \(names)."
+                )
+            }
+            base = preset
+        } else {
+            base = nil
+        }
+        let environment = try entry.decodeIfPresent([String: String].self, forKey: .environment)
+        let merged = (base?.environment ?? [:]).merging(environment ?? [:]) { $1 }
+        return Agent(
             id: try entry.decode(String.self, forKey: .id),
-            name: try entry.decodeIfPresent(String.self, forKey: .name) ?? "",
-            command: try entry.decodeIfPresent(String.self, forKey: .command) ?? "",
-            planCommand: try entry.decodeIfPresent(String.self, forKey: .planCommand),
-            promptArgument: try entry.decodeIfPresent(String.self, forKey: .promptArgument),
-            promptNeedsReturn: try entry.decodeIfPresent(Bool.self, forKey: .promptNeedsReturn),
-            resumeCommand: try entry.decodeIfPresent(String.self, forKey: .resumeCommand),
-            sessionLookup: try entry.decodeIfPresent(String.self, forKey: .sessionLookup),
-            environment: try entry.decodeIfPresent([String: String].self, forKey: .environment)
+            name: try entry.decodeIfPresent(String.self, forKey: .name) ?? base?.name ?? "",
+            command: try entry.decodeIfPresent(String.self, forKey: .command) ?? base?.command ?? "",
+            planCommand: try entry.decodeIfPresent(String.self, forKey: .planCommand) ?? base?.planCommand,
+            promptArgument: try entry.decodeIfPresent(String.self, forKey: .promptArgument) ?? base?.promptArgument,
+            promptNeedsReturn: try entry.decodeIfPresent(Bool.self, forKey: .promptNeedsReturn) ?? base?.promptNeedsReturn,
+            resumeCommand: try entry.decodeIfPresent(String.self, forKey: .resumeCommand) ?? base?.resumeCommand,
+            sessionLookup: try entry.decodeIfPresent(String.self, forKey: .sessionLookup) ?? base?.sessionLookup,
+            environment: merged.isEmpty ? nil : merged,
+            type: type
         )
+    }
+
+    /// Writes `agent` as an entry: every field it has, or, for one with a
+    /// `type`, only those that differ from the preset. A field the preset
+    /// has and the agent does not is written empty, which is how the file
+    /// says none.
+    private static func encodeAgent(_ agent: Agent, into entry: inout KeyedEncodingContainer<AgentKeys>) throws {
+        try entry.encode(agent.id, forKey: .id)
+        guard let type = agent.type, let base = Agent.preset(type) else {
+            try entry.encode(agent.name, forKey: .name)
+            try entry.encode(agent.command, forKey: .command)
+            try entry.encodeIfPresent(agent.planCommand, forKey: .planCommand)
+            try entry.encodeIfPresent(agent.promptArgument, forKey: .promptArgument)
+            try entry.encodeIfPresent(agent.promptNeedsReturn, forKey: .promptNeedsReturn)
+            try entry.encodeIfPresent(agent.resumeCommand, forKey: .resumeCommand)
+            try entry.encodeIfPresent(agent.sessionLookup, forKey: .sessionLookup)
+            try entry.encodeIfPresent(agent.environment, forKey: .environment)
+            return
+        }
+        try entry.encode(type, forKey: .type)
+        if agent.name != base.name { try entry.encode(agent.name, forKey: .name) }
+        if agent.command != base.command { try entry.encode(agent.command, forKey: .command) }
+        func differing(_ value: String?, _ preset: String?, _ key: AgentKeys) throws {
+            if value != preset { try entry.encode(value ?? "", forKey: key) }
+        }
+        try differing(agent.planCommand, base.planCommand, .planCommand)
+        try differing(agent.promptArgument, base.promptArgument, .promptArgument)
+        if (agent.promptNeedsReturn ?? false) != (base.promptNeedsReturn ?? false) {
+            try entry.encode(agent.promptNeedsReturn ?? false, forKey: .promptNeedsReturn)
+        }
+        try differing(agent.resumeCommand, base.resumeCommand, .resumeCommand)
+        try differing(agent.sessionLookup, base.sessionLookup, .sessionLookup)
+        let own = (agent.environment ?? [:]).filter { base.environment?[$0.key] != $0.value }
+        if !own.isEmpty { try entry.encode(own, forKey: .environment) }
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -221,15 +274,7 @@ extension UserSettings: Codable {
                 var list = agents.nestedUnkeyedContainer(forKey: .custom)
                 for agent in customAgents {
                     var entry = list.nestedContainer(keyedBy: AgentKeys.self)
-                    try entry.encode(agent.id, forKey: .id)
-                    try entry.encode(agent.name, forKey: .name)
-                    try entry.encode(agent.command, forKey: .command)
-                    try entry.encodeIfPresent(agent.planCommand, forKey: .planCommand)
-                    try entry.encodeIfPresent(agent.promptArgument, forKey: .promptArgument)
-                    try entry.encodeIfPresent(agent.promptNeedsReturn, forKey: .promptNeedsReturn)
-                    try entry.encodeIfPresent(agent.resumeCommand, forKey: .resumeCommand)
-                    try entry.encodeIfPresent(agent.sessionLookup, forKey: .sessionLookup)
-                    try entry.encodeIfPresent(agent.environment, forKey: .environment)
+                    try Self.encodeAgent(agent, into: &entry)
                 }
             }
         }

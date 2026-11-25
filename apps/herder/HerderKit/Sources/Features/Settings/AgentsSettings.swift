@@ -108,7 +108,8 @@ private struct CustomAgentRow: View {
                     .fieldSurface()
                 // Made from the name it was added with, and kept through a
                 // rename: it is what settings.json and the history call it.
-                Text(agent.id)
+                // Then the preset it is a variant of, if any.
+                Text(agent.type.map { "\(agent.id) \u{00B7} \($0)" } ?? agent.id)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.Palette.tertiaryText)
                     .textSelection(.enabled)

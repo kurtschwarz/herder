@@ -50,6 +50,14 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// can reach, without changing it in the person's other terminals.
     public var environment: [String: String]?
 
+    /// The preset this agent is a variant of, by id, or `nil` for one built
+    /// from nothing. `settings.json` calls it `type`: an entry with one takes
+    /// the preset's value for every field it leaves out, and the preset's
+    /// environment under its own. Read when the file is, so every field here
+    /// already holds what the agent runs with; it is kept for writing the
+    /// file back sparse and for drawing the preset's badge.
+    public var type: ID?
+
     /// Stands for the session's id in a command. For most agents Herder mints
     /// the id, a UUID, and tells the agent; for one with a ``sessionLookup``,
     /// it is the id the agent chose, once the lookup has found it.
@@ -67,7 +75,8 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
         promptNeedsReturn: Bool? = nil,
         resumeCommand: String? = nil,
         sessionLookup: String? = nil,
-        environment: [String: String]? = nil
+        environment: [String: String]? = nil,
+        type: ID? = nil
     ) {
         self.id = id
         self.name = name
@@ -78,6 +87,7 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
         self.resumeCommand = resumeCommand
         self.sessionLookup = sessionLookup
         self.environment = environment
+        self.type = type
     }
 
     /// The same agent under another id.
@@ -85,7 +95,7 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
         Agent(
             id: id, name: name, command: command, planCommand: planCommand, promptArgument: promptArgument,
             promptNeedsReturn: promptNeedsReturn, resumeCommand: resumeCommand, sessionLookup: sessionLookup,
-            environment: environment
+            environment: environment, type: type
         )
     }
 
@@ -196,6 +206,11 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
 
     public var isPreset: Bool {
         Self.presets.contains { $0.id == id }
+    }
+
+    /// The preset called `id`, if there is one.
+    public static func preset(_ id: ID) -> Agent? {
+        presets.first { $0.id == id }
     }
 
     /// The program the command runs, for saying it could not be found.
