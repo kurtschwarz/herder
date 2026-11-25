@@ -42,6 +42,7 @@ final class CodePane: NSView {
             height: bounds.height
         )
         whitespace.frame = scrollView.frame
+        whitespace.needsDisplay = true
         onLayout()
     }
 }
