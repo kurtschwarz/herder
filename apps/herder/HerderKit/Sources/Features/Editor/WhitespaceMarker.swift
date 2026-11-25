@@ -1,8 +1,9 @@
 import Core
 import Foundation
 
-/// A character the editor marks, and where it is.
-struct WhitespaceMarker: Equatable {
+/// A character the editor marks, and where it is. Nonisolated, because the
+/// paragraphs that draw the markers may be laid out off the main actor.
+nonisolated struct WhitespaceMarker: Equatable {
     enum Kind: Equatable {
         case space
         case tab

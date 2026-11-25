@@ -493,7 +493,7 @@ shows it.
 - `NonisolatedNonsendingByDefault` is enabled on every target. Without it a plain `nonisolated` async function runs on whichever actor called it, so `@concurrent` is what asks for the global executor — which is how the highlighter parses a megabyte without stopping the editor from redrawing.
 - `Features`, components, `DesignSystem` and `AppFeature` use `.defaultIsolation(MainActor.self)`. `Core` and `Services` keep the nonisolated default; stores in Core are marked `@MainActor` explicitly.
 - Prefer structured concurrency: `async`/`await`, task groups, and SwiftUI's `.task(id:)` for view-tied work so it cancels automatically.
-- No new `DispatchQueue` usage and no completion-handler APIs in new code. The ones that exist are at a C or AppKit boundary with no `async` equivalent (FSEvents needs a dispatch queue; the line-number gutter, the current-line band and the whitespace overlay defer `needsDisplay` out of a layout pass) and carry a `// CONCURRENCY:` comment.
+- No new `DispatchQueue` usage and no completion-handler APIs in new code. The ones that exist are at a C or AppKit boundary with no `async` equivalent (FSEvents needs a dispatch queue; the line-number gutter and the current-line band defer `needsDisplay` out of a layout pass) and carry a `// CONCURRENCY:` comment.
 - Escape hatches (`@unchecked Sendable`, `nonisolated(unsafe)`, `@preconcurrency import`) require a `// CONCURRENCY:` comment on the same or preceding line explaining why it's safe.
 
 ## Rust

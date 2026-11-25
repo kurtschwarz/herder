@@ -35,11 +35,26 @@ final class Buffer: NSObject, NSTextViewDelegate {
 
     private var textView: NSTextView?
     private var gutter: LineNumberGutter?
-    private var whitespace: WhitespaceOverlay?
+
+    /// Hands TextKit the paragraphs that draw the whitespace markers.
+    private let whitespace = WhitespaceFragmentSource(attributes: [
+        .font: NSFont.monospacedSystemFont(ofSize: Theme.Size.code, weight: .regular),
+        .foregroundColor: NSColor(Theme.Palette.whitespace),
+    ])
 
     /// Which whitespace is marked on screen. Never in the text.
-    var showWhitespace = ShowWhitespace.none {
-        didSet { whitespace?.mode = showWhitespace }
+    var showWhitespace: ShowWhitespace {
+        get { whitespace.mode }
+        set {
+            guard newValue != whitespace.mode else { return }
+            whitespace.mode = newValue
+            layout.enumerateTextLayoutFragments(from: nil, options: []) { fragment in
+                (fragment as? WhitespaceLayoutFragment)?.mode = newValue
+                return true
+            }
+            // Drawing, like colour, is no edit: see ``paint(_:)``.
+            textView.map(markForDisplay)
+        }
     }
 
     /// The ⌘L pill and the prompt it opens, with what was typed in it and not
@@ -70,6 +85,7 @@ final class Buffer: NSObject, NSTextViewDelegate {
             object: storage
         )
         content.addTextLayoutManager(layout)
+        layout.delegate = whitespace
         layout.textContainer = container
     }
 
@@ -86,7 +102,6 @@ final class Buffer: NSObject, NSTextViewDelegate {
         selectionPrompt.textDidChange()
         textView?.setSelectedRange(NSRange(location: 0, length: 0))
         gutter?.textDidChange(to: text)
-        whitespace?.textDidChange()
     }
 
     // MARK: - Going to a place
@@ -248,8 +263,6 @@ final class Buffer: NSObject, NSTextViewDelegate {
         gutter.textDidChange(to: storage.string)
         gutter.changes = changes
         let highlight = CurrentLineHighlight(scrollView: scrollView, textView: textView)
-        let whitespace = WhitespaceOverlay(scrollView: scrollView, textView: textView)
-        whitespace.mode = showWhitespace
         textView.onSelect = { [weak self, weak gutter, weak highlight] in
             gutter?.selectionDidChange()
             highlight?.selectionDidChange()
@@ -259,8 +272,7 @@ final class Buffer: NSObject, NSTextViewDelegate {
         textView.onMouseDown = { [weak self] in self?.selectionPrompt.mouseDown() }
         self.textView = textView
         self.gutter = gutter
-        self.whitespace = whitespace
-        let pane = CodePane(scrollView: scrollView, gutter: gutter, highlight: highlight, whitespace: whitespace)
+        let pane = CodePane(scrollView: scrollView, gutter: gutter, highlight: highlight)
         pane.onLayout = { [weak self] in
             self?.scrollIfLaidOut()
             self?.selectionPrompt.layoutOverlays()
@@ -297,7 +309,6 @@ final class Buffer: NSObject, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         gutter?.textDidChange(to: storage.string)
-        whitespace?.textDidChange()
         selectionPrompt.textDidChange()
         onEdit()
     }

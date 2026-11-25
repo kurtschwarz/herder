@@ -10,21 +10,18 @@ final class CodePane: NSView {
     let scrollView: NSScrollView
     let gutter: LineNumberGutter
     let highlight: CurrentLineHighlight
-    let whitespace: WhitespaceOverlay
 
     /// Told after each layout, for what waits on there being a size.
     var onLayout: () -> Void = {}
 
-    init(scrollView: NSScrollView, gutter: LineNumberGutter, highlight: CurrentLineHighlight, whitespace: WhitespaceOverlay) {
+    init(scrollView: NSScrollView, gutter: LineNumberGutter, highlight: CurrentLineHighlight) {
         self.scrollView = scrollView
         self.gutter = gutter
         self.highlight = highlight
-        self.whitespace = whitespace
         super.init(frame: .zero)
         addSubview(highlight)
         addSubview(gutter)
         addSubview(scrollView)
-        addSubview(whitespace)
     }
 
     required init(coder: NSCoder) {
@@ -41,8 +38,6 @@ final class CodePane: NSView {
             width: max(0, bounds.width - Theme.Size.gutter),
             height: bounds.height
         )
-        whitespace.frame = scrollView.frame
-        whitespace.needsDisplay = true
         onLayout()
     }
 }
