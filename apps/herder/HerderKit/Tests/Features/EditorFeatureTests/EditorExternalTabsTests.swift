@@ -73,6 +73,21 @@ import Testing
         #expect(model.canCreateFile == false)
     }
 
+    @Test func openingItFocusedAsksForTheKeyboard() async throws {
+        await model.openExternal(settings, focusing: true)
+
+        // No window in a test, so the pane takes it once it has one.
+        #expect(try #require(model.activeBuffer).wantsFocus)
+    }
+
+    @Test func aRequestToFocusOutlivesTheRestore() async throws {
+        model.requestOpenExternal(settings, focusing: true)
+
+        await model.restore(in: nil)
+
+        #expect(try #require(model.activeBuffer).wantsFocus)
+    }
+
     @Test func itsBreadcrumbStartsAtHome() async {
         await model.openExternal(settings)
 

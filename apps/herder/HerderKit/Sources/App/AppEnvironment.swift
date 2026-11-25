@@ -369,7 +369,7 @@ public final class AppEnvironment {
         if lastKeyWindow == nil { lastKeyWindow = window }
         if opensSettingsFileInNextWindow {
             opensSettingsFileInNextWindow = false
-            window.editor.requestOpenExternal(settings.url)
+            window.editor.requestOpenExternal(settings.url, focusing: true)
         }
         return window
     }
@@ -388,7 +388,8 @@ public final class AppEnvironment {
     }
 
     /// Opens `settings.json` as a tab in the main window that was key last,
-    /// making the file first if there is none, and raises that window.
+    /// making the file first if there is none, and raises that window with
+    /// the keyboard in the file.
     ///
     /// `false` when no main window is open: the caller opens one, which
     /// shows the file once it appears. Only a view can open a window.
@@ -398,7 +399,7 @@ public final class AppEnvironment {
             opensSettingsFileInNextWindow = true
             return false
         }
-        await window.editor.openExternal(settings.url)
+        await window.editor.openExternal(settings.url, focusing: true)
         window.raise()
         return true
     }

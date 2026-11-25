@@ -12,6 +12,7 @@ public struct SettingsWindow: View {
     private let environment: AppEnvironment
 
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
 
     public init(environment: AppEnvironment) {
         self.environment = environment
@@ -44,12 +45,12 @@ public struct SettingsWindow: View {
             .preferredColorScheme(.dark)
     }
 
-    /// In the main window used last, or in a new one when none is open. This
-    /// window stays open behind it.
+    /// In the main window used last, or in a new one when none is open, and
+    /// closes this window: the file is where the editing goes on now.
     private func openSettingsFile() {
         Task {
-            guard await !environment.openSettingsFile() else { return }
-            openWindow(id: MainWindow.id)
+            if await !environment.openSettingsFile() { openWindow(id: MainWindow.id) }
+            dismissWindow(id: Self.id)
         }
     }
 }

@@ -84,7 +84,7 @@ public final class EditorModel {
     /// An external file asked for before the pane was restored, held until
     /// the restore. See ``requestOpenExternal(_:)``.
     @ObservationIgnored
-    private var pendingExternal: URL?
+    private var pendingExternal: (url: URL, focusing: Bool)?
 
     /// A message to show over a tab, such as why the settings file cannot be
     /// used, or `nil` for none. Read as the view draws, so an `@Observable`
@@ -278,7 +278,15 @@ public final class EditorModel {
     ///
     /// Works with no workspace at all. The tab stays when the window switches
     /// workspace, and is not remembered: a relaunch does not bring it back.
-    public func openExternal(_ url: URL) async {
+    ///
+    /// `focusing` gives its text the keyboard too, for a file opened from
+    /// somewhere other than this window.
+    public func openExternal(_ url: URL, focusing: Bool = false) async {
+        await showExternal(url)
+        if focusing { activeBuffer?.focus() }
+    }
+
+    private func showExternal(_ url: URL) async {
         let key = PathKey(url)
         if let scope, key.isInside(scope.root) {
             await open(key, remembering: true)
@@ -297,8 +305,8 @@ public final class EditorModel {
     /// restored, for a window that has only just been made and is about to
     /// be: the restore empties what is showing. Answered by the next
     /// ``restore(in:)``.
-    public func requestOpenExternal(_ url: URL) {
-        pendingExternal = url
+    public func requestOpenExternal(_ url: URL, focusing: Bool = false) {
+        pendingExternal = (url, focusing)
     }
 
     /// Reads an external tab again when its folder changes, if it is showing.
@@ -375,7 +383,7 @@ public final class EditorModel {
         let requestedExternal = pendingExternal
         pendingExternal = nil
         await restoreTabs(in: workspace, requested: requested)
-        if let requestedExternal { await openExternal(requestedExternal) }
+        if let requestedExternal { await openExternal(requestedExternal.url, focusing: requestedExternal.focusing) }
     }
 
     private func restoreTabs(in workspace: Workspace?, requested: (url: URL, line: Int?, column: Int?)?) async {
