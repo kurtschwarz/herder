@@ -176,6 +176,10 @@ public enum Theme {
         /// The band behind the line the caret is on in the editor.
         public static let currentLine = Color.white.opacity(0.05)
 
+        /// The markers the editor draws for whitespace. Dim, close to the
+        /// gutter's line numbers, so they stay out of the code's way.
+        public static let whitespace = tertiaryText.opacity(0.7)
+
         /// Folder glyphs and the primary button. Distinct from `accent`, which
         /// is the blue of interactive text.
         public static let violet = Color(red: 184 / 255, green: 156 / 255, blue: 240 / 255)

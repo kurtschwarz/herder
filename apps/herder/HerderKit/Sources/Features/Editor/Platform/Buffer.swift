@@ -35,6 +35,12 @@ final class Buffer: NSObject, NSTextViewDelegate {
 
     private var textView: NSTextView?
     private var gutter: LineNumberGutter?
+    private var whitespace: WhitespaceOverlay?
+
+    /// Which whitespace is marked on screen. Never in the text.
+    var showWhitespace = ShowWhitespace.none {
+        didSet { whitespace?.mode = showWhitespace }
+    }
 
     /// The ⌘L pill and the prompt it opens, with what was typed in it and not
     /// sent.
@@ -80,6 +86,7 @@ final class Buffer: NSObject, NSTextViewDelegate {
         selectionPrompt.textDidChange()
         textView?.setSelectedRange(NSRange(location: 0, length: 0))
         gutter?.textDidChange(to: text)
+        whitespace?.textDidChange()
     }
 
     // MARK: - Going to a place
@@ -241,6 +248,8 @@ final class Buffer: NSObject, NSTextViewDelegate {
         gutter.textDidChange(to: storage.string)
         gutter.changes = changes
         let highlight = CurrentLineHighlight(scrollView: scrollView, textView: textView)
+        let whitespace = WhitespaceOverlay(scrollView: scrollView, textView: textView)
+        whitespace.mode = showWhitespace
         textView.onSelect = { [weak self, weak gutter, weak highlight] in
             gutter?.selectionDidChange()
             highlight?.selectionDidChange()
@@ -250,7 +259,8 @@ final class Buffer: NSObject, NSTextViewDelegate {
         textView.onMouseDown = { [weak self] in self?.selectionPrompt.mouseDown() }
         self.textView = textView
         self.gutter = gutter
-        let pane = CodePane(scrollView: scrollView, gutter: gutter, highlight: highlight)
+        self.whitespace = whitespace
+        let pane = CodePane(scrollView: scrollView, gutter: gutter, highlight: highlight, whitespace: whitespace)
         pane.onLayout = { [weak self] in
             self?.scrollIfLaidOut()
             self?.selectionPrompt.layoutOverlays()
@@ -287,6 +297,7 @@ final class Buffer: NSObject, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         gutter?.textDidChange(to: storage.string)
+        whitespace?.textDidChange()
         selectionPrompt.textDidChange()
         onEdit()
     }

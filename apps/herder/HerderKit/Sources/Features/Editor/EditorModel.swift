@@ -93,6 +93,16 @@ public final class EditorModel {
     @ObservationIgnored
     public var diagnostic: (PathKey) -> String? = { _ in nil }
 
+    /// Which whitespace every tab marks on screen. Set by the composition
+    /// root, which is what knows it is a setting; applies to the tabs open
+    /// and to those opened later.
+    @ObservationIgnored
+    public var showWhitespace = ShowWhitespace.none {
+        didSet {
+            for buffer in buffers.values { buffer.showWhitespace = showWhitespace }
+        }
+    }
+
     /// Counts each read, so one that comes back after a newer one started is
     /// dropped instead of overwriting it.
     private var generation = 0
@@ -353,6 +363,7 @@ public final class EditorModel {
 
     private func makeBuffer(text: String) -> Buffer {
         let buffer = Buffer(text: text)
+        buffer.showWhitespace = showWhitespace
         buffer.onEdit = { [weak self, weak buffer] in
             guard let buffer else { return }
             self?.bufferDidChange(buffer)

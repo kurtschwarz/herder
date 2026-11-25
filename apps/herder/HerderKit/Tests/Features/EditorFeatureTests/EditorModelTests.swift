@@ -89,6 +89,22 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
         .text(SourceText(text: text))
     }
 
+    @Test func theWhitespaceSettingReachesTheTabsOpenAndThoseOpenedLater() async throws {
+        _ = try await start(with: ["a.txt", "b.txt"])
+        await model.open(root.appending(path: "a.txt"))
+        #expect(model.activeBuffer?.showWhitespace == ShowWhitespace.none)
+
+        model.showWhitespace = .all
+        #expect(model.activeBuffer?.showWhitespace == .all)
+
+        await model.open(root.appending(path: "b.txt"))
+        #expect(model.activeBuffer?.showWhitespace == .all)
+
+        model.showWhitespace = .trailing
+        await model.open(root.appending(path: "a.txt"))
+        #expect(model.activeBuffer?.showWhitespace == .trailing)
+    }
+
     @Test func openingAFileShowsItsText() async throws {
         _ = try await start(with: ["a.txt"])
 

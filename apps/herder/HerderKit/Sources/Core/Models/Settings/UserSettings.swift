@@ -32,6 +32,9 @@ public struct UserSettings: Sendable, Equatable {
     /// preset's: see ``isValidAgentID(_:)``.
     public var customAgents: [Agent] = []
 
+    /// `editor.show_whitespace`.
+    public var showWhitespace = ShowWhitespace.none
+
     /// `providers.anthropic.endpoint`, as typed: it may not be a URL.
     public var anthropicEndpoint = NamingConfiguration.defaultEndpoint
 
@@ -108,6 +111,7 @@ extension UserSettings: Codable {
         case schema = "$schema"
         case updates
         case agents
+        case editor
         case providers
     }
 
@@ -118,6 +122,10 @@ extension UserSettings: Codable {
     enum AgentsKeys: String, CodingKey, CaseIterable {
         case firstPromptTemplate = "first_prompt_template"
         case custom
+    }
+
+    enum EditorKeys: String, CodingKey, CaseIterable {
+        case showWhitespace = "show_whitespace"
     }
 
     enum ProvidersKeys: String, CodingKey, CaseIterable {
@@ -176,6 +184,19 @@ extension UserSettings: Codable {
                     }
                     customAgents.append(agent)
                 }
+            }
+        }
+
+        if root.contains(.editor) {
+            let editor = try root.nestedContainer(keyedBy: EditorKeys.self, forKey: .editor)
+            if let value = try editor.decodeIfPresent(String.self, forKey: .showWhitespace) {
+                guard let mode = ShowWhitespace(rawValue: value) else {
+                    let names = ShowWhitespace.allCases.map(\.rawValue).joined(separator: ", ")
+                    throw UserSettingsError(
+                        message: "editor.show_whitespace \u{201C}\(value)\u{201D} is not one of \(names)."
+                    )
+                }
+                showWhitespace = mode
             }
         }
 
@@ -277,6 +298,11 @@ extension UserSettings: Codable {
                     try Self.encodeAgent(agent, into: &entry)
                 }
             }
+        }
+
+        if all || showWhitespace != defaults.showWhitespace {
+            var editor = root.nestedContainer(keyedBy: EditorKeys.self, forKey: .editor)
+            try editor.encode(showWhitespace.rawValue, forKey: .showWhitespace)
         }
 
         if all || anthropicEndpoint != defaults.anthropicEndpoint {

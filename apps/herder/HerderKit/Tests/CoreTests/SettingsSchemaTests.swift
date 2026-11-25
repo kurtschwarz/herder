@@ -46,6 +46,7 @@ import Testing
         #expect(Set(try properties(at: []).keys) == names(UserSettings.RootKeys.self))
         #expect(Set(try properties(at: ["updates"]).keys) == names(UserSettings.UpdatesKeys.self))
         #expect(Set(try properties(at: ["agents"]).keys) == names(UserSettings.AgentsKeys.self))
+        #expect(Set(try properties(at: ["editor"]).keys) == names(UserSettings.EditorKeys.self))
         #expect(Set(try properties(at: ["providers"]).keys) == names(UserSettings.ProvidersKeys.self))
         #expect(Set(try properties(at: ["providers", "anthropic"]).keys) == names(UserSettings.AnthropicKeys.self))
 
@@ -72,7 +73,7 @@ import Testing
         }
         try compare(schema, encoded, at: "")
 
-        #expect(checked == 4)
+        #expect(checked == 5)
     }
 
     @Test func anAgentsIDFollowsTheSameRuleAsTheApp() throws {
@@ -88,6 +89,13 @@ import Testing
             let matches = candidate.wholeMatch(of: try Regex(String(pattern.dropFirst().dropLast()))) != nil
             #expect(matches == UserSettings.isValidAgentID(candidate), "\(candidate)")
         }
+    }
+
+    @Test func showWhitespaceIsAnEnumOfTheModesWithNoneAsTheDefault() throws {
+        let property = try object(try properties(at: ["editor"])["show_whitespace"])
+
+        #expect(property["enum"] as? [String] == ShowWhitespace.allCases.map(\.rawValue))
+        #expect(property["default"] as? String == "none")
     }
 
     @Test func itHoldsNoSecrets() throws {
