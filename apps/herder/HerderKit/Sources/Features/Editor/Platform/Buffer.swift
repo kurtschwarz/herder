@@ -258,9 +258,11 @@ final class Buffer: NSObject, NSTextViewDelegate {
         textView.isContinuousSpellCheckingEnabled = false
         textView.isGrammarCheckingEnabled = false
         textView.smartInsertDeleteEnabled = false
+        textView.isHorizontallyResizable = true
         textView.isVerticallyResizable = true
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.containerSize = textView.maxSize
         textView.textContainerInset = NSSize(width: Theme.Spacing.normal, height: Theme.Spacing.normal)
 
         let scrollView = NSScrollView()

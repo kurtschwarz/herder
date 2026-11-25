@@ -442,4 +442,11 @@ import Testing
 
         #expect(topLine(of: buffer) == before)
     }
+
+    @Test func withWrapOffALineOfOnlyTabsStaysOneLine() {
+        let tabs = String(repeating: "\t", count: 60)
+        let (_, textView) = drawn("x\n" + tabs)
+
+        #expect(lines(of: textView).last == [tabs])
+    }
 }
