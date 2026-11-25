@@ -16,13 +16,24 @@ public struct PersistenceStack {
     /// implementation there is.
     public let state: any StateStore
 
-    private init(state: any StateStore) {
+    /// The user's `settings.json`. Not app state: the user edits it, and it
+    /// has a schema. See `docs/adr/0004-user-settings-file.md`.
+    public let settingsFile: any SettingsFileClient
+
+    private init(state: any StateStore, settingsFile: any SettingsFileClient) {
         self.state = state
+        self.settingsFile = settingsFile
     }
 
-    /// Backed by files under Application Support. Used by the app.
+    /// Backed by files under Application Support, and the settings file under
+    /// `~/.config/herder`. Used by the app.
     public static func live() throws -> PersistenceStack {
-        PersistenceStack(state: try FileStateStore.live())
+        PersistenceStack(
+            state: try FileStateStore.live(),
+            settingsFile: LiveSettingsFileClient(url: LiveSettingsFileClient.location(
+                environment: ProcessInfo.processInfo.environment, home: .homeDirectory
+            ))
+        )
     }
 
     /// Backed by a fresh directory under the system temporary directory, unique
@@ -34,7 +45,10 @@ public struct PersistenceStack {
     /// system clears them.
     public static func temporary() -> PersistenceStack {
         let root = URL.temporaryDirectory.appending(path: "herder-state-\(UUID().uuidString)")
-        return PersistenceStack(state: FileStateStore(root: root))
+        return PersistenceStack(
+            state: FileStateStore(root: root),
+            settingsFile: LiveSettingsFileClient(url: root.appending(path: "config/herder/settings.json"))
+        )
     }
 
     /// Where the state file lives, for a message that has to name it.

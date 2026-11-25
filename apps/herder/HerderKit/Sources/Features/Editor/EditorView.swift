@@ -41,7 +41,7 @@ public struct EditorView<BreadcrumbTrailing: View, EmptyState: View>: View {
 
     private var breadcrumb: [String] {
         var components = model.breadcrumb
-        if let rootName, !components.isEmpty { components[0] = rootName }
+        if let rootName, !components.isEmpty, !model.isShowingExternal { components[0] = rootName }
         return components
     }
 
@@ -62,6 +62,9 @@ public struct EditorView<BreadcrumbTrailing: View, EmptyState: View>: View {
                 EditorTabBar(model: model)
                 Breadcrumb(components: breadcrumb, isDeleted: model.isDeleted) { breadcrumbTrailing }
                 Rectangle().fill(Theme.Palette.hairline).frame(height: 1)
+                if let message = model.activeDiagnostic {
+                    DiagnosticBanner(message: message)
+                }
                 if model.isStale {
                     StaleBanner(
                         reload: { Task { await model.reloadFromDisk() } },
@@ -126,7 +129,8 @@ public struct EditorView<BreadcrumbTrailing: View, EmptyState: View>: View {
             if let buffer = model.activeBuffer, let tab = model.activeTab {
                 CodeTextView(
                     buffer: buffer,
-                    prompt: SelectionPromptContext(
+                    // An external file is in no worktree an agent works in.
+                    prompt: model.isExternal(tab) ? nil : SelectionPromptContext(
                         file: tab,
                         worktree: workspace,
                         isUnsaved: model.isDirty(tab),
@@ -181,6 +185,28 @@ private struct StaleBanner: View {
                 .help("Keep your changes; saving will replace what is on disk")
         }
         .buttonStyle(.borderless)
+        .padding(.horizontal, Theme.Spacing.paneInset)
+        .padding(.vertical, Theme.Spacing.normal)
+        .background(Theme.Palette.control)
+    }
+}
+
+/// A problem with the file showing that something outside the editor found,
+/// such as settings that cannot be read. Says so and asks nothing.
+private struct DiagnosticBanner: View {
+    let message: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.normal) {
+            PhIcon(Ph.warningFill, size: 12)
+                .foregroundStyle(Theme.Palette.warning)
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(Theme.Palette.text)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
         .padding(.horizontal, Theme.Spacing.paneInset)
         .padding(.vertical, Theme.Spacing.normal)
         .background(Theme.Palette.control)

@@ -13,7 +13,8 @@ struct CodeTextView: NSViewRepresentable {
     let buffer: Buffer
 
     /// What the selection prompt reaches out to, which the buffer cannot see.
-    let prompt: SelectionPromptContext
+    /// `nil` for a buffer with no prompt.
+    let prompt: SelectionPromptContext?
 
     func makeNSView(context: Context) -> PaneHost {
         PaneHost()
@@ -28,10 +29,13 @@ struct CodeTextView: NSViewRepresentable {
 /// Holds whichever pane is showing.
 final class PaneHost: NSView {
     private var shown: CodePane?
+    private weak var shownBuffer: Buffer?
 
     func show(_ buffer: Buffer) {
+        defer { buffer.takeFocusIfWanted(in: window) }
         let pane = buffer.pane
         guard pane !== shown else { return }
+        shownBuffer = buffer
 
         // Typing continues across a tab switch only if the keyboard follows it.
         let hadFocus = window?.firstResponder.map(isInside) ?? false
@@ -42,6 +46,13 @@ final class PaneHost: NSView {
         addSubview(pane)
 
         if hadFocus, let responder = buffer.responder { window?.makeFirstResponder(responder) }
+    }
+
+    /// A pane mounted before its window existed, as in a window just
+    /// opened, takes the keyboard it was asked for here.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        shownBuffer?.takeFocusIfWanted(in: window)
     }
 
     private func isInside(_ responder: NSResponder) -> Bool {

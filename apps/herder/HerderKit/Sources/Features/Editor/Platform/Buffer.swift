@@ -262,6 +262,27 @@ final class Buffer: NSObject, NSTextViewDelegate {
     /// The view that takes the keyboard when this tab is shown.
     var responder: NSView? { textView }
 
+    /// The keyboard was asked for before the view was in a window, so the
+    /// pane takes it once it is. See ``focus()``.
+    private(set) var wantsFocus = false
+
+    /// Gives this buffer the keyboard: now, if its view is in a window, or
+    /// as soon as the pane puts it in one.
+    func focus() {
+        if let textView, let window = textView.window {
+            window.makeFirstResponder(textView)
+        } else {
+            wantsFocus = true
+        }
+    }
+
+    /// Takes the keyboard if it was asked for, now the view is in `window`.
+    func takeFocusIfWanted(in window: NSWindow?) {
+        guard wantsFocus, let window, let textView else { return }
+        wantsFocus = false
+        window.makeFirstResponder(textView)
+    }
+
     // MARK: - NSTextViewDelegate
 
     func textDidChange(_ notification: Notification) {

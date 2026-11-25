@@ -203,7 +203,7 @@ private struct NewSessionCard: View {
         FlowLayout {
             ForEach(agents) { agent in
                 ChoiceChip(title: agent.displayName, isSelected: agent.id == agentID) {
-                    AgentBadge(id: agent.id, name: agent.displayName, size: 20)
+                    AgentBadge(id: agent.type ?? agent.id, name: agent.displayName, size: 20)
                 } action: { agentID = agent.id }
             }
         }

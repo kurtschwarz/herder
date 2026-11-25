@@ -39,6 +39,12 @@ struct EnvironmentEditor: View {
                 .buttonStyle(.secondary)
         }
         .onChange(of: rows) { save() }
+        // A change from `settings.json`. One the rows made themselves reads
+        // back as what they already set, and leaves a half-typed row alone.
+        .onChange(of: catalog.agent(agentID)?.environment) { _, environment in
+            guard EnvironmentVariable.dictionary(from: rows) != environment else { return }
+            rows = EnvironmentVariable.rows(from: environment)
+        }
     }
 
     private func field(_ prompt: String, text: Binding<String>) -> some View {

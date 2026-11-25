@@ -152,11 +152,12 @@ private struct EmptyRepositories: View {
     let git = StubGitClient()
     let store = RepositoryStore(bookmarks: InMemoryBookmarkClient(), git: git, state: InMemoryStateStore())
     let list = WindowRepositories(store: store)
+    let settings = UserSettingsStore.inMemory()
 
     RepositoriesView(model: RepositoriesModel(
         repositories: list, git: git, picker: StubFolderPickerClient(), namer: StubSessionNamer(),
-        naming: NamingSettings(state: InMemoryStateStore(), vault: InMemoryNamingKeyVault()),
-        agents: AgentCatalog(state: InMemoryStateStore())
+        naming: NamingSettings(settings: settings, vault: InMemoryNamingKeyVault()),
+        agents: AgentCatalog(state: InMemoryStateStore(), settings: settings)
     ))
     .frame(width: Theme.Size.defaultSidebarWidth, height: 420)
     .glassPaneBackground()

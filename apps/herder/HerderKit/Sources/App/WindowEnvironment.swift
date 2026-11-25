@@ -251,8 +251,11 @@ final class WindowEnvironment {
     /// already showing does nothing, so it stops after one hop. A highlight
     /// pointing at a file you are not looking at is a small lie the pane would
     /// otherwise tell constantly.
+    ///
+    /// A file outside the workspace has no place in the tree, so nothing is
+    /// highlighted while one is showing.
     func followShownFile() {
-        fileTree.select(editor.file)
+        fileTree.select(editor.isShowingExternal ? nil : editor.file)
     }
 
     /// Writes down the pane widths. Asked for when a drag ends rather than as it

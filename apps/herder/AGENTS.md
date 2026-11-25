@@ -39,7 +39,8 @@ rationale.
 | A colour for a token kind | `DesignSystem/Theme.swift`, paired in `Features/Editor/Platform/SyntaxAttributes.swift` |
 | A message the daemon and the app exchange | `packages/herderd/src/protocol.rs` and `Core/Models/Daemon/DaemonWire.swift`, together, additively. See `docs/adr/0001-herderd.md`. |
 | Anything that constructs a concrete service | `AppFeature` — nowhere else |
-| Something the app persists about itself | nothing new — add a field to a snapshot, decoded with `decodeIfPresent`, and put it through `StateStore`. No schema, no migration. |
+| Something the app persists about itself (app state) | nothing new — add a field to a snapshot, decoded with `decodeIfPresent`, and put it through `StateStore`. No schema, no migration. That rule is for app state only. |
+| A setting the user chooses | a field on `UserSettings` (`Core/Models/Settings/`), read and written through `UserSettingsStore`, plus its entry in `settings.schema.json`. Keys are frozen and only ever added. Never a secret. See `docs/adr/0004-user-settings-file.md`. |
 | A key the app stores state under | a `static let persistenceKey` beside the snapshot. **Never rename one** — it is a file name on the user's disk, so a rename is a migration. |
 | Live state two features both read | `Core/Workspace/`, on the `Workspace`, not whichever feature needed it first |
 | A different libghostty-vt version | `../../packages/herder-ghostty-vt/GHOSTTY_COMMIT`, then fix what `TerminalUI` breaks |

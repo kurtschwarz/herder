@@ -8,31 +8,46 @@ import Observation
 /// sidebar start sessions from it, and "the one used last" means the last one
 /// anywhere.
 ///
+/// The user's agents and the first-prompt template are user settings, read
+/// and written through ``UserSettingsStore``. Which agent was used last is the
+/// app's own state, and stays in the `agents` snapshot.
+///
 /// The annotation is explicit because `Core` keeps the nonisolated default.
 @MainActor
 @Observable
 public final class AgentCatalog {
     private let state: any StateStore
-
-    /// The agents the user added, in the order they were added.
-    public private(set) var custom: [Agent] = []
+    private let store: UserSettingsStore
 
     private var lastUsedID: Agent.ID?
 
-    /// What every New order's text is put in before the agent is told it. See
-    /// ``FirstPromptTemplate``. Empty leaves the text as typed.
-    public private(set) var firstPromptTemplate = ""
+    /// The snapshot as it was read, so writing the agent used last keeps the
+    /// fields builds before `settings.json` wrote. Nothing reads them now.
+    @ObservationIgnored
+    private var snapshot = AgentsSnapshot()
 
     /// The tail of the saves. Each waits for the one before, so an older list
     /// can never be written over a newer one.
     @ObservationIgnored
     private var saving: Task<Void, Never>?
 
-    public init(state: any StateStore) {
+    public init(state: any StateStore, settings: UserSettingsStore) {
         self.state = state
+        self.store = settings
     }
 
     // MARK: - Reading
+
+    /// The agents the user added, in the order they were added.
+    public var custom: [Agent] {
+        store.settings.customAgents
+    }
+
+    /// What every New order's text is put in before the agent is told it. See
+    /// ``FirstPromptTemplate``. Empty leaves the text as typed.
+    public var firstPromptTemplate: String {
+        store.settings.firstPromptTemplate
+    }
 
     /// Everything a menu offers, presets first.
     public var agents: [Agent] {
@@ -45,36 +60,40 @@ public final class AgentCatalog {
         lastUsedID.flatMap(agent) ?? Agent.presets[0]
     }
 
+    /// The agent with `id`. An id minted before `settings.json` was `custom-`
+    /// and an uppercase UUID, and the file holds it lowercased, so one that
+    /// matches nothing exactly is matched ignoring case: that is what a saved
+    /// tab or a session in the history still names.
     public func agent(_ id: Agent.ID) -> Agent? {
-        agents.first { $0.id == id }
+        agents.first { $0.id == id } ?? agents.first { $0.id.caseInsensitiveCompare(id) == .orderedSame }
     }
 
     // MARK: - Loading
 
-    /// Reads what was saved. Unreadable state is no agents of the user's own,
-    /// which loses less than refusing to start.
+    /// Reads which agent was used last. Unreadable state is none, which loses
+    /// less than refusing to start.
     public func load() async {
         guard let snapshot = await state.loadIfReadable(AgentsSnapshot.self, forKey: AgentsSnapshot.persistenceKey)
         else { return }
-        custom = snapshot.custom
+        self.snapshot = snapshot
         lastUsedID = snapshot.lastUsed
-        firstPromptTemplate = snapshot.firstPromptTemplate ?? ""
     }
 
     // MARK: - Changing
 
     public func markUsed(_ agent: Agent) {
-        guard lastUsedID != agent.id else { return }
+        guard lastUsedID.flatMap(self.agent)?.id != agent.id else { return }
         lastUsedID = agent.id
         save()
     }
 
-    /// Adds an agent with nothing filled in, for Settings to fill in.
+    /// Adds an agent for Settings to fill in, called `name`, with an id made
+    /// from it. The id stays when the agent is renamed: the agent used last,
+    /// saved tabs and the history all name it.
     @discardableResult
-    public func add() -> Agent {
-        let agent = Agent(id: "custom-\(UUID().uuidString)", name: "", command: "")
-        custom.append(agent)
-        save()
+    public func add(named name: String = "New agent") -> Agent {
+        let agent = Agent(id: UserSettings.mintAgentID(for: name, taken: custom.map(\.id)), name: name, command: "")
+        store.update { $0.customAgents.append(agent) }
         return agent
     }
 
@@ -82,29 +101,29 @@ public final class AgentCatalog {
     /// are code.
     public func update(_ agent: Agent) {
         guard let index = custom.firstIndex(where: { $0.id == agent.id }), custom[index] != agent else { return }
-        custom[index] = agent
-        save()
+        store.update { $0.customAgents[index] = agent }
     }
 
     public func setFirstPromptTemplate(_ template: String) {
-        guard template != firstPromptTemplate else { return }
-        firstPromptTemplate = template
-        save()
+        store.update { $0.firstPromptTemplate = template }
     }
 
     public func remove(_ id: Agent.ID) {
         guard custom.contains(where: { $0.id == id }) else { return }
-        custom.removeAll { $0.id == id }
-        if lastUsedID == id { lastUsedID = nil }
-        save()
+        store.update { $0.customAgents.removeAll { $0.id == id } }
+        if lastUsedID != nil, lastUsedID.flatMap(agent) == nil {
+            lastUsedID = nil
+            save()
+        }
     }
 
     // MARK: - Saving
 
-    /// Writes the list at once, not after a pause: it changes only when
-    /// somebody edits it or starts a session, and the snapshot is a few lines.
+    /// Writes the agent used last at once, not after a pause: it changes only
+    /// when somebody starts a session, and the snapshot is a few lines.
     private func save() {
-        let snapshot = AgentsSnapshot(custom: custom, lastUsed: lastUsedID, firstPromptTemplate: firstPromptTemplate.isEmpty ? nil : firstPromptTemplate)
+        snapshot.lastUsed = lastUsedID
+        let snapshot = snapshot
         let previous = saving
         saving = Task { [state] in
             await previous?.value
@@ -112,8 +131,9 @@ public final class AgentCatalog {
         }
     }
 
-    /// Waits for every save asked for so far.
+    /// Waits for every save asked for so far, of this and of the settings.
     public func flushSaves() async {
         await saving?.value
+        await store.flushWrites()
     }
 }

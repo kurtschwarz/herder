@@ -1,7 +1,10 @@
 import Foundation
 
-/// The naming endpoint, as it goes to ``StateStore``. The key is not here: it
+/// The naming endpoint, as it went to ``StateStore``. The key is not here: it
 /// lives in the Keychain.
+///
+/// Read once, to move the endpoint into `settings.json`, and never written
+/// again: see ``UserSettingsStore``.
 public struct NamingSnapshot: Codable, Sendable, Equatable {
     /// A file name on the user's disk, so never renamed without a migration.
     public static let persistenceKey = "naming"

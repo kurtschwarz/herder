@@ -23,7 +23,7 @@ import Testing
     let other = URL(filePath: "/code/web")
 
     init() {
-        catalog = AgentCatalog(state: InMemoryStateStore())
+        catalog = AgentCatalog(state: InMemoryStateStore(), settings: .inMemory())
         open = WindowAgentSessions(store: AgentSessions(state: state, clock: clock))
     }
 

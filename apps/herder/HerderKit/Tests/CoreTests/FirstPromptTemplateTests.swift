@@ -27,17 +27,24 @@ import Testing
 
 @Suite @MainActor struct FirstPromptTemplateSettingTests {
     let state = InMemoryStateStore()
+    let file = InMemorySettingsFileClient()
+
+    func settings() -> UserSettingsStore {
+        UserSettingsStore(file: file, clock: VirtualClockClient())
+    }
 
     @Test func itIsJustThePromptUntilSet() {
-        #expect(AgentCatalog(state: state).firstPromptTemplate == "")
+        #expect(AgentCatalog(state: state, settings: settings()).firstPromptTemplate == "")
     }
 
     @Test func itSurvivesARelaunch() async {
-        let catalog = AgentCatalog(state: state)
+        let catalog = AgentCatalog(state: state, settings: settings())
         catalog.setFirstPromptTemplate("/grill-me {prompt}")
         await catalog.flushSaves()
 
-        let relaunched = AgentCatalog(state: state)
+        let reloaded = settings()
+        await reloaded.load()
+        let relaunched = AgentCatalog(state: state, settings: reloaded)
         await relaunched.load()
 
         #expect(relaunched.firstPromptTemplate == "/grill-me {prompt}")

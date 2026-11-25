@@ -4,15 +4,12 @@ import SwiftUI
 
 /// Settings that belong to no one feature, and which build this is.
 struct GeneralSettings: View {
+    let settings: UserSettingsStore
     let version: AppVersion
     let updater: (any UpdaterClient)?
     let daemon: DaemonConnection?
     let github: GitHubConnection?
     let pullRequests: LinkedPullRequests?
-
-    /// A copy of the updater's setting, which it does not publish changes to.
-    /// Read when the pane appears and written back on every change.
-    @State private var checksAutomatically = false
 
     var body: some View {
         SettingsPaneContent(pane: .general) {
@@ -50,7 +47,12 @@ struct GeneralSettings: View {
             if let updater {
                 SettingsSection("Updates") {
                     HStack(alignment: .center, spacing: Theme.Spacing.loose) {
-                        Toggle("Check for updates automatically", isOn: $checksAutomatically)
+                        // The settings file's, which the composition root
+                        // pushes into the updater.
+                        Toggle("Check for updates automatically", isOn: Binding(
+                            get: { settings.settings.checkForUpdatesAutomatically },
+                            set: { checks in settings.update { $0.checkForUpdatesAutomatically = checks } }
+                        ))
                             .toggleStyle(.switch)
                             .controlSize(.small)
                             .foregroundStyle(Theme.Palette.text)
@@ -59,10 +61,6 @@ struct GeneralSettings: View {
                             .buttonStyle(.secondary)
                     }
                     .padding(.vertical, Theme.Spacing.tight)
-                }
-                .onAppear { checksAutomatically = updater.automaticallyChecksForUpdates }
-                .onChange(of: checksAutomatically) { _, checks in
-                    updater.automaticallyChecksForUpdates = checks
                 }
             }
         }

@@ -30,6 +30,9 @@ struct WindowChrome: NSViewRepresentable {
     /// Handed the window once there is one, for whoever needs to raise it.
     var onWindow: (NSWindow) -> Void = { _ in }
 
+    /// Called each time the window becomes key.
+    var onBecomeKey: () -> Void = {}
+
     /// Whether the window moves to whichever Space is showing when it is
     /// brought forward, instead of pulling the person back to the one it first
     /// opened on.
@@ -39,8 +42,10 @@ struct WindowChrome: NSViewRepresentable {
     final class Coordinator {
         var observers: [NSObjectProtocol] = []
         var closeObserver: NSObjectProtocol?
+        var keyObserver: NSObjectProtocol?
         var doubleClickMonitor: Any?
         var onClose: () -> Void = {}
+        var onBecomeKey: () -> Void = {}
         var closeGuard: CloseGuard?
 
         // Isolated so it can reach `observers`, which this module's default
@@ -51,6 +56,9 @@ struct WindowChrome: NSViewRepresentable {
             }
             if let closeObserver {
                 NotificationCenter.default.removeObserver(closeObserver)
+            }
+            if let keyObserver {
+                NotificationCenter.default.removeObserver(keyObserver)
             }
             if let doubleClickMonitor {
                 NSEvent.removeMonitor(doubleClickMonitor)
@@ -81,6 +89,17 @@ struct WindowChrome: NSViewRepresentable {
         // Reassigned every time, because the closure captures the window's
         // state, which does not exist when the view is first made.
         coordinator.onClose = onClose
+        coordinator.onBecomeKey = onBecomeKey
+        if coordinator.keyObserver == nil {
+            coordinator.keyObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didBecomeKeyNotification,
+                object: window,
+                queue: .main
+            ) { [weak coordinator] _ in
+                MainActor.assumeIsolated { coordinator?.onBecomeKey() }
+            }
+            if window.isKeyWindow { onBecomeKey() }
+        }
         if coordinator.closeGuard == nil {
             let guarded = CloseGuard()
             guarded.original = window.delegate

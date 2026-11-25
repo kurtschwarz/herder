@@ -72,6 +72,51 @@ import Testing
         return window
     }
 
+    // MARK: - settings.json
+
+    @Test func settingsJSONOpensInTheMainWindowThatWasKeyLast() async throws {
+        let first = await environment.claimWindow(id: nil)
+        let second = await environment.claimWindow(id: nil)
+        environment.noteKey(second)
+
+        #expect(await environment.openSettingsFile())
+
+        let key = PathKey(environment.settings.url)
+        #expect(second.editor.tabs == [key])
+        #expect(first.editor.tabs.isEmpty)
+        // Made, holding only its schema, so the editor has a file to show.
+        let written = try String(contentsOf: environment.settings.url, encoding: .utf8)
+        #expect(written == "{\n  \"$schema\" : \"\(UserSettings.schemaURL)\"\n}\n")
+    }
+
+    @Test func settingsJSONAskedForWithNoWindowOpensInTheNextOne() async {
+        await environment.start()
+
+        #expect(await environment.openSettingsFile() == false)
+        let window = await environment.claimWindow(id: nil)
+        await window.showActiveWorkspace()
+
+        #expect(window.editor.tabs == [PathKey(environment.settings.url)])
+        #expect(window.editor.isShowingExternal)
+    }
+
+    @Test func theUpdateToggleIsPushedIntoTheUpdater() async {
+        let updater = StubUpdaterClient(automaticallyChecksForUpdates: false)
+        let app = AppEnvironment(
+            files: files, bookmarks: bookmarks, git: git, folderPicker: StubFolderPickerClient(),
+            watcher: StubFileWatcherClient(), clock: VirtualClockClient(), persistence: persistence,
+            updater: updater
+        )
+        await app.start()
+        // Migrated from the updater on the first launch.
+        #expect(app.settings.settings.checkForUpdatesAutomatically == false)
+
+        app.settings.update { $0.checkForUpdatesAutomatically = true }
+
+        #expect(updater.automaticallyChecksForUpdates)
+        app.stop()
+    }
+
     @Test func buildsWithFakeClients() {
         #expect(files.files.isEmpty)
     }
