@@ -13,8 +13,8 @@ nonisolated final class WhitespaceFragmentSource: NSObject, NSTextLayoutManagerD
 
     private let glyphs: WhitespaceLayoutFragment.Glyphs
 
-    init(attributes: [NSAttributedString.Key: Any]) {
-        glyphs = WhitespaceLayoutFragment.Glyphs(attributes: attributes)
+    init(font: NSFont, colour: NSColor) {
+        glyphs = WhitespaceLayoutFragment.Glyphs(font: font, colour: colour)
     }
 
     func textLayoutManager(

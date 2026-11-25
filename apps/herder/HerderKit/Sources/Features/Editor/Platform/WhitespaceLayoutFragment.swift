@@ -9,26 +9,30 @@ import Core
 /// characters: copying, saving, the caret and the columns cannot see them.
 nonisolated final class WhitespaceLayoutFragment: NSTextLayoutFragment {
     /// The three markers, laid out once and shared by every paragraph.
+    ///
+    /// Core Text lines rather than `NSTextLineFragment`s: one made outside a
+    /// layout is never laid out, so it measures nothing and draws nothing.
     final class Glyphs {
-        let space: NSTextLineFragment
-        let tab: NSTextLineFragment
-        let lineEnding: NSTextLineFragment
+        private let lines: [WhitespaceMarker.Kind: CTLine]
 
-        init(attributes: [NSAttributedString.Key: Any]) {
-            func line(_ kind: WhitespaceMarker.Kind) -> NSTextLineFragment {
-                NSTextLineFragment(string: kind.glyph, attributes: attributes, range: NSRange(location: 0, length: 1))
+        init(font: NSFont, colour: NSColor) {
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): colour.cgColor,
+            ]
+            var lines: [WhitespaceMarker.Kind: CTLine] = [:]
+            for kind in [WhitespaceMarker.Kind.space, .tab, .lineEnding] {
+                lines[kind] = CTLineCreateWithAttributedString(NSAttributedString(string: kind.glyph, attributes: attributes))
             }
-            space = line(.space)
-            tab = line(.tab)
-            lineEnding = line(.lineEnding)
+            self.lines = lines
         }
 
-        func glyph(for kind: WhitespaceMarker.Kind) -> NSTextLineFragment {
-            switch kind {
-            case .space: space
-            case .tab: tab
-            case .lineEnding: lineEnding
-            }
+        func line(for kind: WhitespaceMarker.Kind) -> CTLine {
+            lines[kind]!
+        }
+
+        func width(of kind: WhitespaceMarker.Kind) -> CGFloat {
+            CGFloat(CTLineGetTypographicBounds(line(for: kind), nil, nil, nil))
         }
     }
 
@@ -54,7 +58,7 @@ nonisolated final class WhitespaceLayoutFragment: NSTextLayoutFragment {
         guard let glyphs else { return bounds }
         for line in textLineFragments {
             let end = line.typographicBounds.minX + line.locationForCharacter(at: NSMaxRange(line.characterRange)).x
-            bounds.size.width = max(bounds.width, end + glyphs.lineEnding.typographicBounds.width - bounds.minX)
+            bounds.size.width = max(bounds.width, end + glyphs.width(of: .lineEnding) - bounds.minX)
         }
         return bounds
     }
@@ -62,15 +66,18 @@ nonisolated final class WhitespaceLayoutFragment: NSTextLayoutFragment {
     override func draw(at point: CGPoint, in context: CGContext) {
         super.draw(at: point, in: context)
         guard mode != .none, let glyphs else { return }
+        context.saveGState()
+        defer { context.restoreGState() }
+        // TextKit hands over a flipped context, and Core Text draws upright
+        // only in an unflipped one.
+        context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         for marker in markers() {
-            glyphs.glyph(for: marker.kind).draw(
-                at: CGPoint(x: point.x + marker.origin.x, y: point.y + marker.origin.y),
-                in: context
-            )
+            context.textPosition = CGPoint(x: point.x + marker.origin.x, y: point.y + marker.origin.y)
+            CTLineDraw(glyphs.line(for: marker.kind), context)
         }
     }
 
-    /// Each marker and where its glyph's line starts, relative to this
+    /// Each marker and where its glyph's baseline starts, relative to this
     /// fragment, the coordinates `draw(at:in:)` is given its point in.
     func markers() -> [(kind: WhitespaceMarker.Kind, origin: CGPoint)] {
         if let placed { return placed }
@@ -91,9 +98,9 @@ nonisolated final class WhitespaceLayoutFragment: NSTextLayoutFragment {
             var x = line.locationForCharacter(at: marker.location).x
             if marker.kind == .space {
                 let width = line.locationForCharacter(at: marker.location + 1).x - x
-                x += (width - glyphs.space.typographicBounds.width) / 2
+                x += (width - glyphs.width(of: .space)) / 2
             }
-            result.append((marker.kind, CGPoint(x: bounds.minX + x, y: bounds.minY)))
+            result.append((marker.kind, CGPoint(x: bounds.minX + x, y: bounds.minY + line.glyphOrigin.y)))
         }
         // Only once there is a layout to measure: an empty answer before
         // that is not the answer.

@@ -37,10 +37,10 @@ final class Buffer: NSObject, NSTextViewDelegate {
     private var gutter: LineNumberGutter?
 
     /// Hands TextKit the paragraphs that draw the whitespace markers.
-    private let whitespace = WhitespaceFragmentSource(attributes: [
-        .font: NSFont.monospacedSystemFont(ofSize: Theme.Size.code, weight: .regular),
-        .foregroundColor: NSColor(Theme.Palette.whitespace),
-    ])
+    private let whitespace = WhitespaceFragmentSource(
+        font: NSFont.monospacedSystemFont(ofSize: Theme.Size.code, weight: .regular),
+        colour: NSColor(Theme.Palette.whitespace)
+    )
 
     /// Which whitespace is marked on screen. Never in the text.
     var showWhitespace: ShowWhitespace {

@@ -86,6 +86,27 @@ import Testing
         #expect(fragments(of: textView).allSatisfy { $0.mode == .all })
     }
 
+    /// What the pane looks like now, as pixels.
+    private func pixels(of buffer: Buffer) -> Data? {
+        let pane = buffer.pane
+        pane.displayIfNeeded()
+        guard let rep = pane.bitmapImageRepForCachingDisplay(in: pane.bounds) else { return nil }
+        pane.cacheDisplay(in: pane.bounds, to: rep)
+        return rep.tiffRepresentation
+    }
+
+    /// Placement can be right while nothing is drawn: a glyph made as a line
+    /// fragment outside any layout measured and painted nothing, and every
+    /// other test here passed.
+    @Test func theMarkersAreDrawn() throws {
+        let (buffer, _) = drawn("a    b\n\t\tc\n")
+        let none = try #require(pixels(of: buffer))
+
+        buffer.showWhitespace = .all
+
+        #expect(try #require(pixels(of: buffer)) != none)
+    }
+
     /// The same as colour: a new mode is no edit, so nothing else would
     /// redraw the paragraphs.
     @Test func changingTheModeAsksEveryParagraphToDrawAgain() {
@@ -122,9 +143,9 @@ import Testing
 
         #expect(markers.map(\.kind) == [.tab, .space, .lineEnding])
         #expect(markers[0].origin.x == x(1))
-        #expect(markers[1].origin.x > x(3) && markers[1].origin.x < x(4))
+        #expect(markers[1].origin.x >= x(3) && markers[1].origin.x < x(4))
         #expect(markers[2].origin.x == x(5))
-        #expect(markers.allSatisfy { $0.origin.y == line.typographicBounds.minY })
+        #expect(markers.allSatisfy { $0.origin.y == line.typographicBounds.minY + line.glyphOrigin.y })
     }
 
     @Test func aFinalLineWithNoNewlineHasNoHook() throws {
