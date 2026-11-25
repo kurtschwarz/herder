@@ -49,7 +49,8 @@ public struct AppView: View {
                 saveAll: { await window?.editor.saveAll() ?? true },
                 hasTerminals: { window?.terminal.hasTerminals ?? false },
                 runningCommands: { await window?.terminal.runningCommands() ?? [] },
-                onWindow: { window?.hostWindow = $0 }
+                onWindow: { window?.hostWindow = $0 },
+                onBecomeKey: { window.map(environment.noteKey) }
             )
         )
         // After the backgrounds, so the glass runs under the title bar too.
@@ -212,7 +213,7 @@ private struct WindowView: View {
                         model: window.editor,
                         rootName: activeWorkspaceName,
                         breadcrumbTrailing: {
-                            if let workspace = window.activeWorkspace {
+                            if let workspace = window.activeWorkspace, !window.editor.isShowingExternal {
                                 DiffBaseTrigger(workspace: workspace)
                             }
                         },

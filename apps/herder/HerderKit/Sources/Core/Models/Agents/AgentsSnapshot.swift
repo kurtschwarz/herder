@@ -5,6 +5,10 @@ import Foundation
 ///
 /// The presets are not here: they are code, so a new one reaches everybody
 /// and a changed command does not stay stale on somebody's disk.
+///
+/// Only ``lastUsed`` is read now. ``custom`` and ``firstPromptTemplate`` are
+/// user settings, in `settings.json`; they were moved there once, by
+/// ``UserSettingsStore``, and are kept as they were and never written again.
 public struct AgentsSnapshot: Codable, Sendable, Equatable {
     /// Where this snapshot is stored. A file name on the user's disk, so never
     /// renamed without a migration.

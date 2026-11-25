@@ -6,16 +6,30 @@ import Testing
 
 @Suite @MainActor struct AgentCatalogTests {
     let state = InMemoryStateStore()
+    let file = InMemorySettingsFileClient()
+
+    func makeCatalog() -> AgentCatalog {
+        AgentCatalog(state: state, settings: UserSettingsStore(file: file, clock: VirtualClockClient()))
+    }
+
+    /// The same snapshots and the same settings file under a second app.
+    func relaunch() async -> AgentCatalog {
+        let settings = UserSettingsStore(file: file, clock: VirtualClockClient())
+        await settings.load()
+        let catalog = AgentCatalog(state: state, settings: settings)
+        await catalog.load()
+        return catalog
+    }
 
     @Test func thePresetsComeFirstAndClaudeCodeIsTheDefault() {
-        let catalog = AgentCatalog(state: state)
+        let catalog = makeCatalog()
 
         #expect(catalog.agents.map(\.program) == ["claude", "codex", "opencode", "pi"])
         #expect(catalog.lastUsed.id == "claude-code")
     }
 
     @Test func theAgentUsedLastAndTheUsersOwnSurviveARelaunch() async throws {
-        let catalog = AgentCatalog(state: state)
+        let catalog = makeCatalog()
         var mine = catalog.add()
         mine.name = "Aider"
         mine.command = "aider"
@@ -23,29 +37,27 @@ import Testing
         catalog.markUsed(mine)
         await catalog.flushSaves()
 
-        let relaunched = AgentCatalog(state: state)
-        await relaunched.load()
+        let relaunched = await relaunch()
 
         #expect(relaunched.custom == [mine])
         #expect(relaunched.lastUsed == mine)
     }
 
     @Test func aCustomAgentsEnvironmentSurvivesARelaunch() async throws {
-        let catalog = AgentCatalog(state: state)
+        let catalog = makeCatalog()
         var mine = catalog.add()
         mine.command = "opencode"
         mine.environment = ["ANTHROPIC_BASE_URL": "http://localhost:4000"]
         catalog.update(mine)
         await catalog.flushSaves()
 
-        let relaunched = AgentCatalog(state: state)
-        await relaunched.load()
+        let relaunched = await relaunch()
 
         #expect(relaunched.agent(mine.id)?.environment == ["ANTHROPIC_BASE_URL": "http://localhost:4000"])
     }
 
     @Test func removingTheAgentUsedLastFallsBackToTheDefault() {
-        let catalog = AgentCatalog(state: state)
+        let catalog = makeCatalog()
         let mine = catalog.add()
         catalog.markUsed(mine)
 
@@ -56,7 +68,7 @@ import Testing
     }
 
     @Test func aPresetCannotBeEditedOrRemoved() throws {
-        let catalog = AgentCatalog(state: state)
+        let catalog = makeCatalog()
         var claude = try #require(catalog.agent("claude-code"))
         claude.command = "rm -rf ~"
 
@@ -64,6 +76,42 @@ import Testing
         catalog.remove(claude.id)
 
         #expect(catalog.agent("claude-code") == Agent.presets[0])
+    }
+
+    @Test func theUsersAgentsGoToTheSettingsFileAndTheAgentUsedLastToTheState() async throws {
+        let catalog = makeCatalog()
+        var mine = catalog.add(named: "My Aider")
+        mine.command = "aider"
+        catalog.update(mine)
+        catalog.markUsed(mine)
+        await catalog.flushSaves()
+
+        #expect(mine.id == "my-aider")
+        let written = try UserSettings.decode(try #require(file.contents))
+        #expect(written.customAgents == [mine])
+        let snapshot = try #require(try await state.load(AgentsSnapshot.self, forKey: AgentsSnapshot.persistenceKey))
+        #expect(snapshot.lastUsed == "my-aider")
+        #expect(snapshot.custom.isEmpty)
+    }
+
+    @Test func anAddedAgentsIDIsMadeFromItsNameAndKeptThroughARename() {
+        let catalog = makeCatalog()
+        let first = catalog.add(named: "Aider")
+        let second = catalog.add(named: "Aider")
+        var renamed = first
+        renamed.name = "Something else"
+        catalog.update(renamed)
+
+        #expect(first.id == "aider")
+        #expect(second.id == "aider-2")
+        #expect(catalog.custom.map(\.id) == ["aider", "aider-2"])
+    }
+
+    @Test func anIDMintedBeforeTheSettingsFileStillFindsItsAgent() async {
+        file.edit(#"{"agents":{"custom":[{"id":"custom-6f9619ff-8b86","name":"Aider","command":"aider"}]}}"#)
+        let catalog = await relaunch()
+
+        #expect(catalog.agent("custom-6F9619FF-8B86")?.name == "Aider")
     }
 
     @Test func aSnapshotFromBeforeAnyAgentWasAddedStillReads() throws {

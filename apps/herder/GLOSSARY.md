@@ -44,6 +44,20 @@ _Avoid_: popover (it is not an `NSPopover`), inline chat.
 A pointer at whole lines of a file, in the form an agent reads: `@path#L10-12`, with the path relative to the worktree, else absolute, and quoted if it has a space. For a buffer with unsaved edits, whose line numbers the disk would not match, it is `path:10-12 (unsaved)` followed by the lines in a fenced block.
 _Avoid_: mention, link, snippet.
 
+**External tab**:
+An editor tab for a file outside every workspace, such as `settings.json`. It belongs to the window, not the workspace: it stays through a switch, works with no workspace open, is watched on its own and is not reopened after a relaunch. It has no git gutter, no file-tree reveal and no selection prompt.
+_Avoid_: outside file, global tab.
+
+## Settings
+
+**User settings**:
+What the user has chosen, held in `~/.config/herder/settings.json` (or under `$XDG_CONFIG_HOME`) and described by `settings.schema.json`: the update toggle, the first-prompt template, custom agents and the Anthropic endpoint. Edited in the Settings window or the file, which are two views of one value. Never holds a secret. Distinct from *app state*.
+_Avoid_: preferences, config.
+
+**App state**:
+What the app remembers about itself so a relaunch lands where the last quit left off: windows, workspaces, tabs, history, the agent used last. JSON snapshots behind `StateStore`, with no schema, and never edited by the user.
+_Avoid_: settings, preferences.
+
 ## Orders
 
 **New order**:

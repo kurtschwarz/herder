@@ -18,6 +18,12 @@ import Observation
 ///
 /// Nothing is written until ``save()``. A change on disk under a buffer with
 /// unsaved edits never replaces them.
+///
+/// A file outside any workspace opens as an external tab, with
+/// ``openExternal(_:)``. It is the window's, not the workspace's: it stays
+/// through a switch, works with no workspace at all, is never remembered, and
+/// is watched on its own. It has no git gutter, no place in the file tree and
+/// no selection prompt.
 @Observable
 public final class EditorModel {
     /// Anything bigger is not opened. An editor holding a whole build log
@@ -41,6 +47,8 @@ public final class EditorModel {
     private let files: any FileClient
     private let highlighter: any SyntaxHighlighter
     private let saveLocation: (any SaveLocationClient)?
+    private let watcher: (any FileWatcherClient)?
+    private let home: URL
 
     private var worktree: Workspace?
 
@@ -65,6 +73,25 @@ public final class EditorModel {
 
     private var registration: Workspace.Registration?
     private var fileKey: PathKey?
+
+    /// The external tabs, in no order: ``tabs`` has the order.
+    private var external: Set<PathKey> = []
+
+    /// What watches each external tab's folder. No workspace watches it.
+    @ObservationIgnored
+    private let externalWatches = ExternalWatches()
+
+    /// An external file asked for before the pane was restored, held until
+    /// the restore. See ``requestOpenExternal(_:)``.
+    @ObservationIgnored
+    private var pendingExternal: URL?
+
+    /// A message to show over a tab, such as why the settings file cannot be
+    /// used, or `nil` for none. Read as the view draws, so an `@Observable`
+    /// source it reads redraws the banner. Set by the composition root: the
+    /// editor knows nothing about what any message is for.
+    @ObservationIgnored
+    public var diagnostic: (PathKey) -> String? = { _ in nil }
 
     /// Counts each read, so one that comes back after a newer one started is
     /// dropped instead of overwriting it.
@@ -142,16 +169,24 @@ public final class EditorModel {
     ///
     /// `saveLocation` is where an untitled tab asks for its file name. With
     /// `nil` it cannot be saved, which a test that never saves one can leave.
+    ///
+    /// `watcher` watches the folders of external tabs; with `nil` they are
+    /// read when shown and not again. `home` is what their breadcrumb writes
+    /// as `~`.
     public init(
         store: WorkspaceRegistry,
         files: any FileClient,
         highlighter: any SyntaxHighlighter,
-        saveLocation: (any SaveLocationClient)? = nil
+        saveLocation: (any SaveLocationClient)? = nil,
+        watcher: (any FileWatcherClient)? = nil,
+        home: URL = .homeDirectory
     ) {
         self.store = store
         self.files = files
         self.highlighter = highlighter
         self.saveLocation = saveLocation
+        self.watcher = watcher
+        self.home = home
     }
 
     /// Which tab is showing, or `nil` when none is.
@@ -183,15 +218,28 @@ public final class EditorModel {
     }
 
     /// The worktree's folder name, then each folder down to the file showing.
-    /// An untitled tab has no folders: just its name.
+    /// An untitled tab has no folders: just its name. An external tab starts
+    /// at `~`.
     var breadcrumb: [String] {
-        guard let worktree, let fileKey else { return [] }
+        guard let fileKey else { return [] }
+        if external.contains(fileKey) { return HomeRelativePath.components(for: fileKey.url, home: home) }
+        guard let worktree else { return [] }
         if fileKey.isUntitled { return [worktree.root.name, fileKey.name] }
         return worktree.components(of: fileKey)
     }
 
     /// Whether ``newUntitled()`` has a workspace to make a tab in.
     public var canCreateFile: Bool { scope != nil }
+
+    /// Whether the tab showing is an external one: outside any workspace, so
+    /// nothing about a workspace applies to it.
+    public var isShowingExternal: Bool { fileKey.map(external.contains) ?? false }
+
+    /// Whether the tab for `key` is an external one.
+    func isExternal(_ key: PathKey) -> Bool { external.contains(key) }
+
+    /// What to show over the tab showing, if anything. See ``diagnostic``.
+    var activeDiagnostic: String? { fileKey.flatMap(diagnostic) }
 
     // MARK: - Opening and closing
 
@@ -216,7 +264,57 @@ public final class EditorModel {
     /// only ask for what it is drawing.
     func activate(_ key: PathKey) async {
         guard tabs.contains(key) else { return }
-        await open(key, remembering: true)
+        if external.contains(key) {
+            guard key != fileKey else { return }
+            await show(key, in: nil, remembering: true)
+        } else {
+            await open(key, remembering: true)
+        }
+    }
+
+    /// Shows `url` in a tab of its own, though it is outside every workspace,
+    /// opening the tab if it has none. A file inside the workspace the pane
+    /// is restored into opens as any other does.
+    ///
+    /// Works with no workspace at all. The tab stays when the window switches
+    /// workspace, and is not remembered: a relaunch does not bring it back.
+    public func openExternal(_ url: URL) async {
+        let key = PathKey(url)
+        if let scope, key.isInside(scope.root) {
+            await open(key, remembering: true)
+            return
+        }
+        if !external.contains(key) {
+            external.insert(key)
+            externalWatches.set(watch(key), for: key)
+        }
+        if !tabs.contains(key) { tabs.append(key) }
+        guard key != fileKey else { return }
+        await show(key, in: nil, remembering: true)
+    }
+
+    /// Asks for `url` to be opened as an external tab once the pane has been
+    /// restored, for a window that has only just been made and is about to
+    /// be: the restore empties what is showing. Answered by the next
+    /// ``restore(in:)``.
+    public func requestOpenExternal(_ url: URL) {
+        pendingExternal = url
+    }
+
+    /// Reads an external tab again when its folder changes, if it is showing.
+    /// One that is not is read when it is clicked, like any background tab.
+    private func watch(_ key: PathKey) -> Task<Void, Never>? {
+        guard let watcher, let folder = key.parent else { return nil }
+        let changes = watcher.watch([folder.url], from: nil)
+        return Task { [weak self] in
+            for await batch in changes {
+                guard batch.needsFullScan || !batch.vanishedRoots.isEmpty || batch.folders.contains(folder) else {
+                    continue
+                }
+                guard let self, self.fileKey == key else { continue }
+                await self.reload()
+            }
+        }
     }
 
     /// Opens a blank tab at the end of the strip and shows it. It has no file
@@ -267,25 +365,41 @@ public final class EditorModel {
     ///
     /// Then answers the open held by ``requestOpen(_:line:column:)``, if any,
     /// and drops it whether it was answered or not.
+    ///
+    /// The external tabs stay, after the workspace's. One of them shows only
+    /// when the workspace has nothing to.
     public func restore(in workspace: Workspace?) async {
         close()
         let requested = pendingOpen
         pendingOpen = nil
-        guard let workspace else { return }
+        let requestedExternal = pendingExternal
+        pendingExternal = nil
+        await restoreTabs(in: workspace, requested: requested)
+        if let requestedExternal { await openExternal(requestedExternal) }
+    }
+
+    private func restoreTabs(in workspace: Workspace?, requested: (url: URL, line: Int?, column: Int?)?) async {
+        guard let workspace else {
+            if let first = tabs.first { await show(first, in: nil, remembering: false) }
+            return
+        }
         scope = workspace
         let state = workspace.uiState(EditorUIState.self)
         // An untitled tab comes back only with text in it. An empty one is
         // dropped, as it is when the pane lets go of the workspace.
-        tabs = state.files.filter { key in
+        let restored = state.files.filter { key in
             key.isInside(workspace.root)
                 && (!key.isUntitled || documents.documents(at: key).contains(where: \.isDirty))
         }
-        pinned = Set(state.pinned).intersection(tabs)
-        let remembered = state.active.flatMap { tabs.contains($0) ? $0 : nil }
-        if let active = remembered ?? tabs.first {
+        tabs = restored + tabs
+        pinned = Set(state.pinned).intersection(restored)
+        let remembered = state.active.flatMap { restored.contains($0) ? $0 : nil }
+        if let active = remembered ?? restored.first {
             await open(active, remembering: false)
+        } else if let first = tabs.first {
+            await show(first, in: nil, remembering: false)
         }
-        let dropped = tabs.count != state.files.count
+        let dropped = restored.count != state.files.count
             || pinned.count != state.pinned.count
             || (state.active != nil && state.active != fileKey)
         if dropped {
@@ -324,19 +438,23 @@ public final class EditorModel {
         tabs.remove(at: index)
         pinned.remove(key)
         discard(documentsAt: key)
+        if external.remove(key) != nil {
+            externalWatches.cancel(key)
+        }
 
         guard key == fileKey else {
-            worktree.map(remember(on:))
+            scope.map(remember(on:))
             return
         }
         let next = tabs.indices.contains(index) ? tabs[index] : tabs.last
-        guard let next, let state = scope else {
-            let leaving = worktree
+        if let next, external.contains(next) {
+            await show(next, in: nil, remembering: true)
+        } else if let next, let state = scope {
+            await show(next, in: state, remembering: true)
+        } else {
             clear()
-            leaving.map(remember(on:))
-            return
+            scope.map(remember(on:))
         }
-        await show(next, in: state, remembering: true)
     }
 
     /// Closes the tab showing. What ⌘W does, when there is one.
@@ -351,12 +469,16 @@ public final class EditorModel {
     ///
     /// Documents with unsaved edits are kept, with their buffers, so that
     /// coming back to the checkout finds the typing where it was left.
+    ///
+    /// The external tabs are the window's, so they stay, documents and all.
     public func close() {
         clear()
         scope = nil
-        tabs = []
+        tabs = tabs.filter(external.contains)
         pinned = []
-        for document in documents.documents where !document.isDirty { discard(document) }
+        for document in documents.documents where !document.isDirty && !external.contains(document.key) {
+            discard(document)
+        }
     }
 
     /// The next tab along, wrapping at the end. What ⌘⇧] does.
@@ -387,17 +509,20 @@ public final class EditorModel {
         guard let from = tabs.firstIndex(of: key),
               TabOrder.move(&tabs, from: from, to: index, isPinned: pinned.contains)
         else { return }
-        worktree.map(remember(on:))
+        scope.map(remember(on:))
     }
 
     /// Pins the tab for `key` or lets it go. Pinned tabs sit together at the
     /// front, in the order they were pinned; the rest keep their order behind
     /// them.
+    ///
+    /// An external tab is not pinned: pins are remembered with the workspace,
+    /// and it is not the workspace's.
     func togglePin(_ key: PathKey) {
-        guard let index = tabs.firstIndex(of: key) else { return }
+        guard !external.contains(key), let index = tabs.firstIndex(of: key) else { return }
         if pinned.remove(key) == nil { pinned.insert(key) }
         TabOrder.repin(&tabs, at: index, isPinned: pinned.contains)
-        worktree.map(remember(on:))
+        scope.map(remember(on:))
     }
 
     /// Moves the tab showing one step along. What ⌘⌥⇧[ and ⌘⌥⇧] do.
@@ -424,19 +549,21 @@ public final class EditorModel {
     }
 
     /// Points the pane at `key` and reads it. The tab is already in ``tabs``.
-    private func show(_ key: PathKey, in state: Workspace, remembering: Bool) async {
+    /// `state` is `nil` for an external tab, which no workspace watches.
+    private func show(_ key: PathKey, in state: Workspace?, remembering: Bool) async {
         registration?.cancel()
+        registration = nil
         forgetBase()
         worktree = state
         file = key.isUntitled ? nil : key.url
-        if !key.isUntitled { lastShownFolder = key.parent }
+        if !key.isUntitled, state != nil { lastShownFolder = key.parent }
         fileKey = key
         content = nil
         activeDocument = nil
         language = nil
         isDeleted = false
-        if remembering { remember(on: state) }
-        registration = state.observe(
+        if remembering, let state { remember(on: state) }
+        registration = state?.observe(
             onChange: { [weak self] in
                 Task { await self?.reload() }
             },
@@ -475,10 +602,13 @@ public final class EditorModel {
     ///
     /// Observation reports reads, not writes, so the workspace cannot notice
     /// this for itself.
+    ///
+    /// The external tabs are left out: they are the window's. Showing one
+    /// leaves which of the workspace's was showing as it was.
     private func remember(on state: Workspace) {
         let ui = state.uiState(EditorUIState.self)
-        ui.files = tabs
-        ui.active = fileKey
+        ui.files = tabs.filter { !external.contains($0) }
+        if fileKey.map(external.contains) != true { ui.active = fileKey }
         ui.pinned = tabs.filter(pinned.contains)
         state.scheduleSnapshotSave()
     }
@@ -753,12 +883,13 @@ public final class EditorModel {
     /// safe, and what `SourceText` exists to prevent, is tokens from one string
     /// reaching another.
     func reload() async {
-        guard let worktree, let key = fileKey else { return }
+        guard let key = fileKey else { return }
+        let worktree = self.worktree
         if key.isUntitled {
             showUntitled(key)
             return
         }
-        if worktree.exists(key) == false {
+        if let worktree, worktree.exists(key) == false {
             isDeleted = true
             return
         }
@@ -818,7 +949,8 @@ public final class EditorModel {
             content = result
             await highlight(source.text, at: key)
         }
-        await refreshBase(of: document, at: key, in: worktree)
+        // An external tab has no worktree, so no base and no gutter.
+        if let worktree { await refreshBase(of: document, at: key, in: worktree) }
     }
 
     // MARK: - Changes since the diff base
@@ -930,7 +1062,7 @@ public final class EditorModel {
             self.fileKey = next
             file = next.url
         }
-        worktree.map(remember(on:))
+        scope.map(remember(on:))
     }
 }
 

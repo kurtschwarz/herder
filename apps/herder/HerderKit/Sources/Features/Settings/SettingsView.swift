@@ -10,6 +10,8 @@ import TestSupport
 public struct SettingsView: View {
     @State private var selection: SettingsPane = .general
 
+    private let settings: UserSettingsStore
+    private let openSettingsFile: () -> Void
     private let agents: AgentCatalog
     private let naming: NamingSettings
     private let version: AppVersion
@@ -18,10 +20,15 @@ public struct SettingsView: View {
     private let github: GitHubConnection?
     private let pullRequests: LinkedPullRequests?
 
+    /// `openSettingsFile` opens `settings.json` in a main window's editor,
+    /// which only the composition root can reach.
     public init(
+        settings: UserSettingsStore, openSettingsFile: @escaping () -> Void,
         agents: AgentCatalog, naming: NamingSettings, version: AppVersion, updater: (any UpdaterClient)?, daemon: DaemonConnection?,
         github: GitHubConnection?, pullRequests: LinkedPullRequests? = nil
     ) {
+        self.settings = settings
+        self.openSettingsFile = openSettingsFile
         self.agents = agents
         self.naming = naming
         self.version = version
@@ -43,13 +50,14 @@ public struct SettingsView: View {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .environment(\.settingsFile, SettingsFile(problem: settings.problem, open: openSettingsFile))
     }
 
     @ViewBuilder
     private var detail: some View {
         switch selection {
         case .general: GeneralSettings(
-                version: version, updater: updater, daemon: daemon, github: github, pullRequests: pullRequests
+                settings: settings, version: version, updater: updater, daemon: daemon, github: github, pullRequests: pullRequests
             )
         case .agents: AgentsSettings(catalog: agents)
         case .providers: ProvidersSettings(naming: naming)
@@ -59,9 +67,12 @@ public struct SettingsView: View {
 
 #if DEBUG
 #Preview {
+    let settings = UserSettingsStore.inMemory()
     SettingsView(
-        agents: AgentCatalog(state: InMemoryStateStore()),
-        naming: NamingSettings(state: InMemoryStateStore(), vault: InMemoryNamingKeyVault()),
+        settings: settings,
+        openSettingsFile: {},
+        agents: AgentCatalog(state: InMemoryStateStore(), settings: settings),
+        naming: NamingSettings(settings: settings, vault: InMemoryNamingKeyVault()),
         version: AppVersion(version: "0.1.0", build: "1", commit: "e87cd6e"),
         updater: StubUpdaterClient(),
         daemon: DaemonConnection(client: StubDaemonClient()),

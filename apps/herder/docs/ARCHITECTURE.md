@@ -97,10 +97,11 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   ├── Vendor/                  # gitignored: HerderSyntaxFFI.xcframework (`just syntax`), GhosttyVt.xcframework (`just ghostty`)
 │   │   │   ├── Sources/
 │   │   │   │   ├── Core/
-│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Daemon/, Editor/, Files/, Git/, GitHub/, Orders/, Processes/, Terminal/
+│   │   │   │   │   ├── Models/          # Sendable value types, in Agents/, App/, Daemon/, Editor/, Files/, Git/, GitHub/, Orders/, Processes/, Settings/, Terminal/
 │   │   │   │   │   ├── Services/        # service protocols
 │   │   │   │   │   ├── Workspace/       # WorkspaceRegistry, Workspace, snapshots, UI state
 │   │   │   │   │   ├── Repositories/    # RepositoryStore, RepositoryAccess
+│   │   │   │   │   ├── Settings/        # UserSettingsStore: settings.json, live
 │   │   │   │   │   └── Persistence/     # StateStore protocol
 │   │   │   │   ├── Services/
 │   │   │   │   │   ├── FileSystem/
@@ -112,6 +113,7 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   │   │   │   ├── Highlighting/    # wraps the syntax-highlighter bindings
 │   │   │   │   │   ├── Search/
 │   │   │   │   │   ├── Persistence/
+│   │   │   │   │   ├── Settings/        # settings.json over the file client and the watcher
 │   │   │   │   │   └── Workspace/       # WorkspaceServicesFactory implementation
 │   │   │   │   ├── PTYSpawn/            # C: starts a process on a PTY. Imported by Services only
 │   │   │   │   ├── DesignSystem/        # Liquid Glass components, tokens, icons
@@ -138,9 +140,11 @@ Herder lives in a monorepo. Everything Herder-specific lives under `apps/herder/
 │   │   ├── scripts/
 │   │   │   └── check-boundaries.sh
 │   │   ├── justfile
+│   │   ├── settings.schema.json         # the published schema for settings.json; the path is frozen
 │   │   ├── AGENTS.md                    # points here; holds only what is not in this file
 │   │   └── docs/
-│   │       └── ARCHITECTURE.md          # this file
+│   │       ├── ARCHITECTURE.md          # this file
+│   │       └── adr/                     # decisions, numbered
 │   └── ...                              # other apps: not Herder's business
 │
 └── packages/
@@ -366,7 +370,7 @@ extension Workspace {
 
 | App-scoped (built once in `AppEnvironment`) | Workspace-scoped (built per workspace by `WorkspaceServicesFactory`) |
 |---|---|
-| Settings, keybindings, theme | File system + FSEvents watcher |
+| User settings (`UserSettingsStore`), keybindings, theme | File system + FSEvents watcher |
 | `HighlightService` (Rust syntax engine) | Git |
 | `StateStore` | Search |
 | Bookmarks, folder picker | Process / PTY |
@@ -380,10 +384,10 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 
 ## Persistence
 
-- The source of truth for code is the disk and git. Herder persists only its own app state.
+- The source of truth for code is the disk and git. Herder persists two things of its own, kept apart: **app state**, which the app records about itself, and **user settings**, which the user chooses. Everything in this section up to "User settings" is about app state.
 - `StateStore` (protocol in Core) loads and saves `Codable & Sendable` values by key.
 - Live `@Observable` state converts to and from snapshot structs (`AppSnapshot`, `WorkspaceSnapshot`). Never make `@Observable` classes `Codable` directly; the macro's underscored backing storage leaks into the encoded keys.
-- Snapshots carry a `version` field. New fields use `decodeIfPresent` with defaults. That's the whole migration strategy.
+- Snapshots carry a `version` field. New fields use `decodeIfPresent` with defaults. That's the whole migration strategy — for app state. No schema, no migration is the rule for snapshots only; user settings have a schema.
 - Saves are debounced (a few hundred milliseconds after changes settle) **by their callers, not by the store**. A workspace waits 400ms after its UI state settles; the repository list does not wait at all, for the reason two lines down. A debounce inside `StateStore` would flatten that distinction and delay the one thing that must not be delayed. Writes are atomic.
 - **Nothing is saved on termination.** `willTerminate` is a synchronous callback and writing is not, so a task started there races the process exiting. The debounce is short for that reason. If a change ever matters enough to guarantee, the answer is `applicationShouldTerminate` returning `.terminateLater`, not a save in `stop()`.
 - The repository list is the exception: it saves immediately on every change, because each addition mints a security-scoped bookmark that cannot be remade.
@@ -398,6 +402,17 @@ Workspace-scoped services are created when a workspace opens and torn down when 
 - **Secrets go in the Keychain, never a file. A capability is not a secret.** A credential that grants access to something otherwise out of reach — an API token — is a secret. A security-scoped bookmark is a handle to a folder the user themselves picked, sitting in a file in their own home directory, and anything running as them can already read that folder without it. So the bookmark lives in `state.json` as base64, where it stays in one atomic write with the record it belongs to. Splitting it out would put one repository in two stores and double the window in which a crash leaves a record with no bookmark.
 - Searchable indexes, when needed, use SQLite on the Rust side. Session history is a JSON file per repository and is not one: it holds a few small records a day, and nothing searches it. If it ever needs searching, it moves.
 
+### User settings
+
+What the Settings window edits is the user's, not the app's, and lives in `settings.json`, not in a snapshot. The decision and its reasons are `docs/adr/0004-user-settings-file.md`.
+
+- **Where.** `~/.config/herder/settings.json`, or `$XDG_CONFIG_HOME/herder/settings.json`. `PersistenceStack` hands over a `SettingsFileClient` beside the `StateStore`; the live one, `Services/Settings/LiveSettingsFileClient`, is built on `LiveFileClient` and `LiveFileWatcherClient`. `PersistenceStack.temporary()` puts it in the same throwaway folder as the state.
+- **What.** `UserSettings` (`Core/Models/Settings`): the update toggle, the first-prompt template, custom agents and the Anthropic endpoint. Never a secret: keys and tokens stay in the Keychain. The presets stay in code. The agent used last is app state and stays in the `agents` snapshot.
+- **One store.** `UserSettingsStore` (`Core/Settings`, app-wide, `@MainActor @Observable`) owns decoding and encoding, the 300 ms debounce of the window's writes, ignoring its own writes when the folder reports them, the last good value, the current `problem`, and the one-time migration out of the `agents` and `naming` snapshots. `AgentCatalog` and `NamingSettings` read and write through it. `AppEnvironment` pushes the update toggle into the updater through `onChange`.
+- **The file.** Sparse: only what differs from a default. Strict JSON, re-serialized whole on every write, keys sorted so `$schema` comes first. Keys are `snake_case`, nested by pane, frozen once released, and only ever added; unknown keys are ignored. A missing file is every default, live, and is not made again until the window changes something or the user opens it. A file that cannot be used keeps the last good settings and is never written over.
+- **The schema.** `settings.schema.json`, by hand, published from `main` at a frozen path. No copy in the app and no schema library; `SettingsSchemaTests` reads it from the repository and checks it against the `CodingKeys` and the written defaults.
+- **Opening it.** Every Settings pane's header has a button that opens the file in the editor of the main window that was key last (`AppEnvironment.openSettingsFile()`), or in a new one when none is open, as an external tab (see "Editor surface"). The editor shows the store's problem over that tab through `EditorModel.diagnostic`, which the composition root sets: the editor knows nothing about settings.
+
 ### A name that reaches disk cannot be renamed by a rename
 
 There is no SwiftData left, so the specific rule this section held — never rename a `@Model` class — no longer has anything to apply to. It is kept because the lesson outlived the technology, and because of how it was learned.
@@ -408,6 +423,7 @@ There is no SwiftData left, so the specific rule this section held — never ren
 
 The general form: **an identifier that is also a key on disk is data, and renaming it is a migration.** What is left in the codebase that this still binds:
 
+- The keys of `settings.json`, and the path of `settings.schema.json`, which every file's `$schema` names.
 - `PersistedWorkspaceUIState.persistenceKey`. The file tree's is still `"explorer.expanded"` after the feature was renamed to `FileTreeFeature`, because changing it would leave every saved blob unreachable and close every folder the user had open. The editor's is `"editor.openFile"`, an object with one field rather than a bare path — and that is what let tabs arrive as `files` and `active` beside the original `file`, which is still read and no longer written. The key kept the singular name it was born with, which is the rule working rather than the rule chafing.
 - `AppSnapshot.persistenceKey` and the file names derived from `WorkspaceSnapshot.persistenceKey(for:)`.
 - `WindowSnapshot`'s `paneWidths`, an object of `leading` and `trailing`, each absent until that pane has been dragged.
@@ -430,7 +446,13 @@ The bookmark's storage was an open question for a long time. It is settled: base
 ├── state.json                       # AppSnapshot: adopted repositories, index of windows
 ├── windows/<id>-<hash>.json         # WindowSnapshot: repositories listed, workspaces open and shown
 ├── workspaces/<name>-<hash>.json    # WorkspaceSnapshot: tabs, UI state
-└── history/<name>-<hash>.json       # SessionHistorySnapshot: every session a repository has had
+├── history/<name>-<hash>.json       # SessionHistorySnapshot: every session a repository has had
+├── agents-<hash>.json               # AgentsSnapshot: the agent used last (the rest is pre-settings.json, unused)
+├── naming-<hash>.json               # NamingSnapshot: pre-settings.json, unused
+└── settings-migration-<hash>.json   # whether those were moved into settings.json
+
+~/.config/herder/                    # or $XDG_CONFIG_HOME/herder/
+└── settings.json                    # UserSettings: the user's, not the app's; see "User settings"
 ```
 
 **The file name is not the id.** A `WorkspaceID` is an absolute path, which cannot be a file name: it contains separators, and a deep enough one runs past the 255-byte limit and fails the save. So the name is the last path component — readable, so the directory can be looked through by eye — plus six bytes of SHA-256 of the whole key, because two worktrees called `main` under different repositories would otherwise overwrite each other. **SHA-256 and not `hashValue`:** Swift's hashing is seeded per process, so a store built on it would look for every file under a name it had never written.
@@ -500,6 +522,7 @@ shows it.
 - **A stale buffer waits for the person.** The pane shows Reload (take the disk, lose the edits) or Keep Mine (stay dirty, and saving then replaces the disk). Neither is the default.
 - **Two dirty documents moved onto one path are both kept**, but only one is reachable: tabs are keyed by `PathKey`, so they share one. Both still count as unsaved and are listed by the prompts. Giving each its own tab means keying tabs by `BufferHandle`, which nothing has needed yet.
 - **An untitled tab is a `Document` with no file.** ⌘N and a double-click on the tab bar's empty space make one. Its key is `PathKey.untitled(_:in:)`, a path inside the workspace that no real path can equal, so it travels through the tab list, pins and the `Workspace`'s `EditorUIState` like any other; `EditorUIState.encode()` leaves it out, so it never reaches disk. Its first save asks `SaveLocationClient` for a place, refuses one outside the workspace, then re-keys the same document with `DocumentStore.relocate(_:to:)`, merging as a rename onto an open file does. An empty one is never dirty, so it is dropped on a workspace switch and ignored on quit; one with text is kept like any unsaved edit and listed by the prompts by name.
+- **An external tab is a file outside every workspace**, opened with `EditorModel.openExternal(_:)`; `settings.json` is the only caller. It belongs to the window, not the workspace: it stays through a switch, works with no workspace open, and is left out of `EditorUIState`, so a relaunch does not bring it back. It watches its own folder through the `FileWatcherClient`, so a write from anywhere, Settings included, reloads a clean buffer and marks a dirty one stale. It has no git gutter, no file-tree reveal, no diff base and no selection prompt, cannot be pinned, and its breadcrumb is home-relative (`HomeRelativePath`, in Core). The terminal's "open file" still hands an outside path to the system.
 - **The `DocumentStore` is per window, on `EditorModel`, not on `Workspace`.** A buffer belongs to the window that made it, so a store shared across windows would hold documents whose buffers only one of them has.
 
 ## Agents and terminal

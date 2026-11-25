@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/kurtschwarz/herder/main/apps/herder/settings.schema.json",
+  "title": "Herder settings",
+  "description": "Herder's user settings, at ~/.config/herder/settings.json or $XDG_CONFIG_HOME/herder/settings.json. Holds only what differs from the default; a missing key is the default. Secrets are never here: the Anthropic API key and the GitHub tokens are kept in the Keychain.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "Where this schema is published. Ignored by Herder, and put back when it writes the file.",
+      "type": "string"
+    },
+    "updates": {
+      "description": "Finding and installing new releases of Herder.",
+      "type": "object",
+      "properties": {
+        "check_automatically": {
+          "description": "Check for a new release once a day without being asked. Herder asks before installing anything.",
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "agents": {
+      "description": "The coding agents a session can be started with, beside the built-in ones.",
+      "type": "object",
+      "properties": {
+        "first_prompt_template": {
+          "description": "Wraps the text typed in a New order before the agent sees it. {prompt} stands for the text. Without it, the template goes first, then a blank line, then the text. Empty sends the text as typed.",
+          "type": "string",
+          "default": "",
+          "examples": ["/grill-me {prompt}"]
+        },
+        "custom": {
+          "description": "Your own agents, in the order menus list them. Each is a command run in your login shell, in the root of the worktree a session starts in.",
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/agent" }
+        }
+      }
+    },
+    "providers": {
+      "description": "The services Herder itself calls, as opposed to the agents it runs.",
+      "type": "object",
+      "properties": {
+        "anthropic": {
+          "description": "Where calls to Claude go, such as the one that names a New order. The API key is kept in the Keychain, never here.",
+          "type": "object",
+          "properties": {
+            "endpoint": {
+              "description": "An Anthropic-compatible base URL. The default is Meridian's local API, which needs no key.",
+              "type": "string",
+              "default": "http://127.0.0.1:3456",
+              "format": "uri"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "agent": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "description": "What the agent used last, saved tabs and the session history call this agent. Lowercase letters, digits and dashes; unique, and not a built-in agent's (claude-code, codex, opencode, pi). Changing it loses the agent's history.",
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "not": { "enum": ["claude-code", "codex", "opencode", "pi"] }
+        },
+        "name": {
+          "description": "What menus call the agent.",
+          "type": "string",
+          "default": ""
+        },
+        "command": {
+          "description": "The command line that starts a new session. {session} stands for the session's id.",
+          "type": "string",
+          "default": "",
+          "examples": ["aider --model sonnet"]
+        },
+        "plan_command": {
+          "description": "The command line that starts a new session in Plan mode, used instead of command. Without one, Plan runs command.",
+          "type": "string"
+        },
+        "prompt_argument": {
+          "description": "Added to the end of the command line to give a new session its first prompt. {prompt} stands for the prompt, quoted for the shell. Without one, the agent starts with no prompt.",
+          "type": "string",
+          "examples": ["{prompt}", "--prompt {prompt}"]
+        },
+        "prompt_needs_return": {
+          "description": "The agent only fills its input with the first prompt, so Herder sends Return once it shows.",
+          "type": "boolean",
+          "default": false
+        },
+        "resume_command": {
+          "description": "The command line that picks a session up again after its terminal was closed. {session} stands for the session's id. Without one, the session starts afresh.",
+          "type": "string"
+        },
+        "session_lookup": {
+          "description": "For an agent that names its own sessions: a command line that lists them, which Herder reads to learn the id of the session a tab started.",
+          "type": "string"
+        },
+        "environment": {
+          "description": "Variables set for the agent's terminal alone, over the app's own.",
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+        }
+      }
+    }
+  }
+}

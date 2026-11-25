@@ -80,6 +80,15 @@ public struct Agent: Codable, Sendable, Equatable, Hashable, Identifiable {
         self.environment = environment
     }
 
+    /// The same agent under another id.
+    public func withID(_ id: ID) -> Agent {
+        Agent(
+            id: id, name: name, command: command, planCommand: planCommand, promptArgument: promptArgument,
+            promptNeedsReturn: promptNeedsReturn, resumeCommand: resumeCommand, sessionLookup: sessionLookup,
+            environment: environment
+        )
+    }
+
     /// Whether the agent mints its own session ids, so Herder has to look
     /// them up before it can resume one.
     public var looksUpSessions: Bool {

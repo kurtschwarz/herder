@@ -11,12 +11,16 @@ public struct SettingsWindow: View {
 
     private let environment: AppEnvironment
 
+    @Environment(\.openWindow) private var openWindow
+
     public init(environment: AppEnvironment) {
         self.environment = environment
     }
 
     public var body: some View {
         SettingsView(
+            settings: environment.settings,
+            openSettingsFile: openSettingsFile,
             agents: environment.agents,
             naming: environment.naming,
             version: AppVersion(info: Bundle.main.infoDictionary ?? [:]),
@@ -38,6 +42,15 @@ public struct SettingsWindow: View {
             // inside grows into the title bar instead and fills the window.
             .frame(width: Theme.Size.settingsWindow.width, height: Theme.Size.settingsWindow.height)
             .preferredColorScheme(.dark)
+    }
+
+    /// In the main window used last, or in a new one when none is open. This
+    /// window stays open behind it.
+    private func openSettingsFile() {
+        Task {
+            guard await !environment.openSettingsFile() else { return }
+            openWindow(id: MainWindow.id)
+        }
     }
 }
 

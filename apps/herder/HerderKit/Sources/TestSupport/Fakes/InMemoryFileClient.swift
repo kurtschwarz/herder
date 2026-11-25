@@ -44,6 +44,12 @@ public final class InMemoryFileClient: FileClient {
         storage.withLock { $0[path] = contents }
     }
 
+    /// Takes a path off "disk" without going through `delete`, as another
+    /// program would.
+    public func removeFile(_ path: String) {
+        _ = storage.withLock { $0.removeValue(forKey: path) }
+    }
+
     /// Everything currently "on disk", for assertions.
     public var files: [String: String] {
         storage.withLock { $0 }

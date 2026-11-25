@@ -13,7 +13,8 @@ struct CodeTextView: NSViewRepresentable {
     let buffer: Buffer
 
     /// What the selection prompt reaches out to, which the buffer cannot see.
-    let prompt: SelectionPromptContext
+    /// `nil` for a buffer with no prompt.
+    let prompt: SelectionPromptContext?
 
     func makeNSView(context: Context) -> PaneHost {
         PaneHost()

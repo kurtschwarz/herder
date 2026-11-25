@@ -14,7 +14,7 @@ import Testing
     let clock = VirtualClockClient()
     let state = InMemoryStateStore()
     let pty = StubPTYClient()
-    let catalog = AgentCatalog(state: InMemoryStateStore())
+    let catalog = AgentCatalog(state: InMemoryStateStore(), settings: .inMemory())
     let sessions: AgentSessions
     let root = URL(filePath: "/code/api")
 

@@ -20,6 +20,7 @@ public enum Ph {
     public static var clipboardText: Image { icon("clipboard-text") }
     public static var dotsThree: Image { icon("dots-three") }
     public static var file: Image { icon("file") }
+    public static var fileCode: Image { icon("file-code") }
     public static var folderSimpleDuotone: Image { icon("folder-simple-duotone") }
     public static var folderSimplePlus: Image { icon("folder-simple-plus") }
     public static var gearSixFill: Image { icon("gear-six-fill") }

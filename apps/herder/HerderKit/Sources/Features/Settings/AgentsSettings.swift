@@ -99,12 +99,23 @@ private struct CustomAgentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.normal) {
-            TextField("Name", text: binding(\.name))
-                .textFieldStyle(.plain)
-                .foregroundStyle(Theme.Palette.text)
-                .padding(.horizontal, Theme.Spacing.normal)
-                .frame(width: 160, height: Theme.Size.control)
-                .fieldSurface()
+            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                TextField("Name", text: binding(\.name))
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(Theme.Palette.text)
+                    .padding(.horizontal, Theme.Spacing.normal)
+                    .frame(width: 160, height: Theme.Size.control)
+                    .fieldSurface()
+                // Made from the name it was added with, and kept through a
+                // rename: it is what settings.json and the history call it.
+                Text(agent.id)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .frame(width: 160, alignment: .leading)
+                    .padding(.horizontal, Theme.Spacing.normal)
+            }
 
             VStack(spacing: Theme.Spacing.tight) {
                 commandField("Command, e.g. aider --model sonnet", text: binding(\.command))

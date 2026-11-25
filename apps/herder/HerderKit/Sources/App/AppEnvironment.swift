@@ -41,6 +41,10 @@ public final class AppEnvironment {
     /// ``StateStore``.
     public let repositories: RepositoryStore
 
+    /// The user's settings, as `settings.json` holds them. Settings and the
+    /// file both edit it, and ``agents`` and ``naming`` read through it.
+    public let settings: UserSettingsStore
+
     /// The agents a session can be started with, and which was used last.
     /// App-wide: Settings edits it and every window starts sessions from it.
     public let agents: AgentCatalog
@@ -83,6 +87,16 @@ public final class AppEnvironment {
     @ObservationIgnored
     private var openWindows: [UUID: WindowEnvironment] = [:]
 
+    /// The main window that was key last, which is where Settings opens
+    /// `settings.json`.
+    @ObservationIgnored
+    private weak var lastKeyWindow: WindowEnvironment?
+
+    /// `settings.json` was asked for with no main window open, so the next
+    /// window to appear opens it.
+    @ObservationIgnored
+    private var opensSettingsFileInNextWindow = false
+
     /// The authoritative file and git state of the worktrees being watched.
     /// Held here rather than inside a feature because more than one pane reads
     /// it and features never import each other.
@@ -93,6 +107,7 @@ public final class AppEnvironment {
     private let git: any GitClient
     private let namer: any SessionNamer
     private let files: any FileClient
+    private let watcher: any FileWatcherClient
     private let folderPicker: any FolderPickerClient
     private let saveLocation: any SaveLocationClient
     private let highlighter: any SyntaxHighlighter
@@ -236,8 +251,13 @@ public final class AppEnvironment {
         )
         self.repositories = repositories
         self.windows = WindowStore(snapshots: snapshots, state: persistence.state)
-        self.agents = AgentCatalog(state: persistence.state)
-        self.naming = NamingSettings(state: persistence.state, vault: namingVault)
+        let settings = UserSettingsStore(file: persistence.settingsFile, clock: clock)
+        // The file is the source of truth for the toggle, and the updater
+        // is told.
+        settings.onChange = { [weak updater] in updater?.automaticallyChecksForUpdates = $0.checkForUpdatesAutomatically }
+        self.settings = settings
+        self.agents = AgentCatalog(state: persistence.state, settings: settings)
+        self.naming = NamingSettings(settings: settings, vault: namingVault)
         self.namer = namer ?? UnavailableSessionNamer()
         let sessions = AgentSessions(state: persistence.state, clock: clock)
         self.sessions = sessions
@@ -260,6 +280,7 @@ public final class AppEnvironment {
         )
         self.git = git
         self.files = files
+        self.watcher = watcher
         self.folderPicker = folderPicker
         self.saveLocation = saveLocation
         self.highlighter = highlighter
@@ -289,12 +310,19 @@ public final class AppEnvironment {
             processes: processes
         )
         panel.historyKey = { [weak repositoryList] in await repositoryList?.historyKey(of: $0) }
+        let editor = EditorModel(
+            store: worktrees, files: files, highlighter: highlighter, saveLocation: saveLocation, watcher: watcher
+        )
+        // The settings store's problem, over the settings file's tab. The
+        // editor knows nothing about settings.
+        let settingsKey = PathKey(settings.url)
+        editor.diagnostic = { [settings] key in key == settingsKey ? settings.problem : nil }
         return WindowEnvironment(
             id: id,
             repositories: list,
             repositoryList: repositoryList,
             fileTree: FileTreeModel(store: worktrees),
-            editor: EditorModel(store: worktrees, files: files, highlighter: highlighter, saveLocation: saveLocation),
+            editor: editor,
             terminal: TerminalModel(pty: pty, clock: clock, processes: processes, window: id),
             agentPanel: panel,
             worktrees: worktrees,
@@ -338,6 +366,11 @@ public final class AppEnvironment {
 
         let window = makeWindow(id: id, restoring: await windows.load(id))
         openWindows[id] = window
+        if lastKeyWindow == nil { lastKeyWindow = window }
+        if opensSettingsFileInNextWindow {
+            opensSettingsFileInNextWindow = false
+            window.editor.requestOpenExternal(settings.url)
+        }
         return window
     }
 
@@ -345,7 +378,29 @@ public final class AppEnvironment {
     func close(_ window: WindowEnvironment) async {
         liveWindows.remove(window.id)
         openWindows[window.id] = nil
+        if lastKeyWindow === window { lastKeyWindow = nil }
         await window.didClose()
+    }
+
+    /// `window` became key, so it is where Settings opens `settings.json`.
+    func noteKey(_ window: WindowEnvironment) {
+        lastKeyWindow = window
+    }
+
+    /// Opens `settings.json` as a tab in the main window that was key last,
+    /// making the file first if there is none, and raises that window.
+    ///
+    /// `false` when no main window is open: the caller opens one, which
+    /// shows the file once it appears. Only a view can open a window.
+    func openSettingsFile() async -> Bool {
+        await settings.createFileIfMissing()
+        guard let window = lastKeyWindow ?? openWindows.values.first else {
+            opensSettingsFileInNextWindow = true
+            return false
+        }
+        await window.editor.openExternal(settings.url)
+        window.raise()
+        return true
     }
 
     /// The files with unsaved edits in any window, for the quit prompt.
@@ -406,6 +461,11 @@ public final class AppEnvironment {
         // by the next launch: `AppDelegate` offers to move the app instead.
         if let opencode, location == .settled { await opencode.install() }
 
+        await settings.load(migratingFrom: state, updater: updater)
+        // Once here as well as on every change: `onChange` is not told when
+        // the file holds the default, and the updater may hold something else.
+        updater?.automaticallyChecksForUpdates = settings.settings.checkForUpdatesAutomatically
+        settings.startWatching()
         await agents.load()
         await naming.load()
         await repositories.load()
@@ -428,6 +488,7 @@ public final class AppEnvironment {
     public func stop() {
         for window in openWindows.values { window.agentPanel.terminateForQuit() }
         pullRequests?.stop()
+        settings.stopWatching()
         worktrees.stop()
         repositories.access.endAll()
     }
