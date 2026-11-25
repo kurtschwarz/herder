@@ -103,6 +103,23 @@ public final class EditorModel {
         }
     }
 
+    /// Whether every tab breaks long lines. Set like ``showWhitespace``.
+    @ObservationIgnored
+    public var wordWrap = false {
+        didSet {
+            for buffer in buffers.values { buffer.wordWrap = wordWrap }
+        }
+    }
+
+    /// How many characters a wrapped line holds, or `nil` for the window's
+    /// edge. Set like ``showWhitespace``.
+    @ObservationIgnored
+    public var wrapColumn: Int? {
+        didSet {
+            for buffer in buffers.values { buffer.wrapColumn = wrapColumn }
+        }
+    }
+
     /// Counts each read, so one that comes back after a newer one started is
     /// dropped instead of overwriting it.
     private var generation = 0
@@ -364,6 +381,8 @@ public final class EditorModel {
     private func makeBuffer(text: String) -> Buffer {
         let buffer = Buffer(text: text)
         buffer.showWhitespace = showWhitespace
+        buffer.wrapColumn = wrapColumn
+        buffer.wordWrap = wordWrap
         buffer.onEdit = { [weak self, weak buffer] in
             guard let buffer else { return }
             self?.bufferDidChange(buffer)

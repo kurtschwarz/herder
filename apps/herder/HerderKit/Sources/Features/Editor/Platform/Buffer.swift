@@ -57,6 +57,21 @@ final class Buffer: NSObject, NSTextViewDelegate {
         }
     }
 
+    /// Whether long lines break instead of scrolling sideways.
+    var wordWrap = false {
+        didSet {
+            if wordWrap != oldValue { applyWrap() }
+        }
+    }
+
+    /// How many characters of the code font a wrapped line holds, or `nil` for
+    /// the window's edge. Kept while ``wordWrap`` is off.
+    var wrapColumn: Int? {
+        didSet {
+            if wrapColumn != oldValue, wordWrap { applyWrap() }
+        }
+    }
+
     /// The ⌘L pill and the prompt it opens, with what was typed in it and not
     /// sent.
     private(set) lazy var selectionPrompt = SelectionPromptController { [unowned self] in storage.string }
@@ -243,11 +258,9 @@ final class Buffer: NSObject, NSTextViewDelegate {
         textView.isContinuousSpellCheckingEnabled = false
         textView.isGrammarCheckingEnabled = false
         textView.smartInsertDeleteEnabled = false
-        textView.isHorizontallyResizable = true
         textView.isVerticallyResizable = true
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = false
-        textView.textContainer?.containerSize = textView.maxSize
         textView.textContainerInset = NSSize(width: Theme.Spacing.normal, height: Theme.Spacing.normal)
 
         let scrollView = NSScrollView()
@@ -273,12 +286,89 @@ final class Buffer: NSObject, NSTextViewDelegate {
         self.textView = textView
         self.gutter = gutter
         let pane = CodePane(scrollView: scrollView, gutter: gutter, highlight: highlight)
+        applyWrap(keepingTop: false)
         pane.onLayout = { [weak self] in
+            self?.fitWrap()
             self?.scrollIfLaidOut()
             self?.selectionPrompt.layoutOverlays()
         }
         selectionPrompt.attach(to: pane, textView: textView)
         return pane
+    }
+
+    // MARK: - Wrapping
+
+    /// The width of one character of the code font.
+    private static let characterWidth = NSAttributedString(string: "0", attributes: SyntaxAttributes.base).size().width
+
+    /// Puts the view into the mode ``wordWrap`` asks for, with the first
+    /// visible line staying where it is.
+    private func applyWrap(keepingTop: Bool = true) {
+        guard let textView, let scrollView = textView.enclosingScrollView else { return }
+        let top = keepingTop ? firstVisibleOffset : nil
+        scrollView.hasHorizontalScroller = !wordWrap
+        textView.isHorizontallyResizable = !wordWrap
+        textView.autoresizingMask = wordWrap ? [.width] : []
+        if wordWrap {
+            fitWrap(keepingTop: false)
+        } else {
+            container.size = textView.maxSize
+            textView.sizeToFit()
+        }
+        restoreTop(top)
+    }
+
+    /// Sets the wrap width: the column, or the window's edge if that is
+    /// narrower. Called as the pane is laid out, which is when the window
+    /// resizing is known.
+    private func fitWrap(keepingTop: Bool = true) {
+        guard wordWrap, let textView, let scrollView = textView.enclosingScrollView else { return }
+        let available = scrollView.contentSize.width
+        guard available > 0 else { return }
+        var width = available - 2 * textView.textContainerInset.width
+        if let wrapColumn {
+            // A tenth of a character over, so that N characters fit despite
+            // the rounding of their advances, and N + 1 still do not.
+            let columns = (CGFloat(wrapColumn) + 0.1) * Self.characterWidth
+            width = min(width, columns + 2 * container.lineFragmentPadding)
+        }
+        width = max(width, 0)
+        guard container.size.width != width || textView.frame.width != available else { return }
+        let top = keepingTop ? firstVisibleOffset : nil
+        container.size = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        textView.setFrameSize(NSSize(width: available, height: textView.frame.height))
+        restoreTop(top)
+    }
+
+    /// The offset of the first character of the line at the top of the view,
+    /// as wrapped now.
+    var firstVisibleOffset: Int? {
+        guard let textView, let scrollView = textView.enclosingScrollView else { return nil }
+        let y = scrollView.documentVisibleRect.minY + scrollView.contentInsets.top - textView.textContainerOrigin.y
+        guard let fragment = layout.textLayoutFragment(for: CGPoint(x: 0, y: max(y, 0))) else { return nil }
+        let within = max(y, 0) - fragment.layoutFragmentFrame.minY
+        let line = fragment.textLineFragments.last { $0.typographicBounds.minY <= within }
+            ?? fragment.textLineFragments.first
+        let start = content.offset(from: content.documentRange.location, to: fragment.rangeInElement.location)
+        return start + (line?.characterRange.location ?? 0)
+    }
+
+    /// Scrolls so the line holding `offset` is at the top of the view.
+    private func restoreTop(_ offset: Int?) {
+        guard
+            let offset, let textView, let scrollView = textView.enclosingScrollView,
+            let target = content.location(content.documentRange.location, offsetBy: offset)
+        else { return }
+        layout.ensureLayout(for: NSTextRange(location: content.documentRange.location, end: target) ?? layout.documentRange)
+        var top: CGFloat?
+        layout.enumerateTextSegments(in: NSTextRange(location: target), type: .standard, options: []) { _, frame, _, _ in
+            top = frame.minY
+            return false
+        }
+        guard let top else { return }
+        let y = top + textView.textContainerOrigin.y - scrollView.contentInsets.top
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: max(y, -scrollView.contentInsets.top)))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     /// The view that takes the keyboard when this tab is shown.

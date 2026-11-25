@@ -35,6 +35,16 @@ public struct UserSettings: Sendable, Equatable {
     /// `editor.show_whitespace`.
     public var showWhitespace = ShowWhitespace.none
 
+    /// `editor.word_wrap`.
+    public var wordWrap = false
+
+    /// `editor.wrap_column`: how many characters a line holds before it wraps,
+    /// or `nil` for the window's edge. Kept while ``wordWrap`` is off.
+    public var wrapColumn: Int?
+
+    /// The fewest characters `editor.wrap_column` may ask for.
+    public static let minimumWrapColumn = 10
+
     /// `providers.anthropic.endpoint`, as typed: it may not be a URL.
     public var anthropicEndpoint = NamingConfiguration.defaultEndpoint
 
@@ -126,6 +136,8 @@ extension UserSettings: Codable {
 
     enum EditorKeys: String, CodingKey, CaseIterable {
         case showWhitespace = "show_whitespace"
+        case wordWrap = "word_wrap"
+        case wrapColumn = "wrap_column"
     }
 
     enum ProvidersKeys: String, CodingKey, CaseIterable {
@@ -197,6 +209,18 @@ extension UserSettings: Codable {
                     )
                 }
                 showWhitespace = mode
+            }
+            wordWrap = try editor.decodeIfPresent(Bool.self, forKey: .wordWrap) ?? wordWrap
+            if editor.contains(.wrapColumn) {
+                guard
+                    let column = try? editor.decode(Int.self, forKey: .wrapColumn),
+                    column >= Self.minimumWrapColumn
+                else {
+                    throw UserSettingsError(
+                        message: "editor.wrap_column must be a whole number of at least \(Self.minimumWrapColumn)."
+                    )
+                }
+                wrapColumn = column
             }
         }
 
@@ -303,6 +327,16 @@ extension UserSettings: Codable {
         if all || showWhitespace != defaults.showWhitespace {
             var editor = root.nestedContainer(keyedBy: EditorKeys.self, forKey: .editor)
             try editor.encode(showWhitespace.rawValue, forKey: .showWhitespace)
+        }
+
+        if all || wordWrap != defaults.wordWrap {
+            var editor = root.nestedContainer(keyedBy: EditorKeys.self, forKey: .editor)
+            try editor.encode(wordWrap, forKey: .wordWrap)
+        }
+
+        if let wrapColumn {
+            var editor = root.nestedContainer(keyedBy: EditorKeys.self, forKey: .editor)
+            try editor.encode(wrapColumn, forKey: .wrapColumn)
         }
 
         if all || anthropicEndpoint != defaults.anthropicEndpoint {

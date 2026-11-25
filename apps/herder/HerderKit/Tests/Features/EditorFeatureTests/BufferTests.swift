@@ -276,4 +276,170 @@ import Testing
 
         #expect(textView.needsDisplay == false)
     }
+
+    // MARK: - Wrapping
+
+    /// The visual lines of every paragraph laid out, as the text each holds.
+    private func lines(of textView: NSTextView) -> [[String]] {
+        var found: [[String]] = []
+        textView.textLayoutManager?.enumerateTextLayoutFragments(from: nil, options: [.ensuresLayout]) { fragment in
+            guard let paragraph = fragment.textElement as? NSTextParagraph else { return true }
+            let text = paragraph.attributedString.string as NSString
+            found.append(fragment.textLineFragments.map { text.substring(with: $0.characterRange) })
+            return true
+        }
+        return found
+    }
+
+    private func scroller(of textView: NSTextView) -> Bool {
+        textView.enclosingScrollView?.hasHorizontalScroller ?? false
+    }
+
+    private let sentence = String(repeating: "alpha beta gamma delta ", count: 40)
+
+    @Test func withWrapOffALongLineStaysOneLineAndScrollsSideways() {
+        let (_, textView) = drawn(sentence)
+
+        #expect(lines(of: textView) == [[sentence]])
+        #expect(scroller(of: textView))
+    }
+
+    @Test func withWrapOnAndNoColumnLinesBreakAtTheWindowEdge() {
+        let (buffer, textView) = drawn(sentence)
+
+        buffer.wordWrap = true
+        textView.layoutSubtreeIfNeeded()
+
+        let wrapped = lines(of: textView)
+        #expect(wrapped.count == 1)
+        #expect(wrapped[0].count > 1)
+        #expect(!scroller(of: textView))
+        #expect(textView.frame.width <= 800)
+        for line in wrapped[0] {
+            #expect(NSAttributedString(string: line, attributes: SyntaxAttributes.base).size().width <= 800)
+        }
+    }
+
+    @Test func linesBreakAtWordBoundaries() {
+        let (buffer, textView) = drawn(sentence)
+        buffer.wrapColumn = 30
+
+        buffer.wordWrap = true
+
+        for line in lines(of: textView)[0] {
+            #expect(line.first != " ")
+            #expect(line.hasSuffix(" "))
+        }
+    }
+
+    @Test(arguments: [10, 40, 80])
+    func aColumnBreaksAfterExactlyThatManyCharacters(_ column: Int) {
+        let (buffer, textView) = drawn(String(repeating: "x", count: 400))
+        buffer.wrapColumn = column
+
+        buffer.wordWrap = true
+
+        let wrapped = lines(of: textView)[0]
+        #expect(wrapped.count > 1)
+        #expect(wrapped.dropLast().allSatisfy { $0.count == column })
+    }
+
+    @Test func aColumnWiderThanTheWindowBreaksAtTheWindowEdge() {
+        let (buffer, textView) = drawn(String(repeating: "x", count: 4000))
+        buffer.wrapColumn = 10_000
+
+        buffer.wordWrap = true
+
+        let wrapped = lines(of: textView)[0]
+        #expect(wrapped.count > 1)
+        #expect(wrapped[0].count < 200)
+        #expect(!scroller(of: textView))
+    }
+
+    @Test func aColumnAloneDoesNotWrap() {
+        let (buffer, textView) = drawn(sentence)
+
+        buffer.wrapColumn = 40
+
+        #expect(lines(of: textView) == [[sentence]])
+        #expect(scroller(of: textView))
+    }
+
+    @Test func turningWrapOffRestoresSidewaysScrolling() {
+        let (buffer, textView) = drawn(sentence)
+        buffer.wrapColumn = 40
+        buffer.wordWrap = true
+
+        buffer.wordWrap = false
+
+        #expect(lines(of: textView) == [[sentence]])
+        #expect(scroller(of: textView))
+    }
+
+    @Test func changingTheColumnRewraps() {
+        let (buffer, textView) = drawn(String(repeating: "x", count: 400))
+        buffer.wordWrap = true
+        buffer.wrapColumn = 20
+        #expect(lines(of: textView)[0][0].count == 20)
+
+        buffer.wrapColumn = 50
+        #expect(lines(of: textView)[0][0].count == 50)
+
+        buffer.wrapColumn = nil
+        #expect(lines(of: textView)[0][0].count > 50)
+    }
+
+    @Test func eachParagraphIsOneFragmentHoweverManyLinesItWraps() {
+        let (buffer, textView) = drawn((0..<5).map { _ in sentence }.joined(separator: "\n"))
+
+        buffer.wordWrap = true
+
+        let wrapped = lines(of: textView)
+        #expect(wrapped.count == 5)
+        #expect(wrapped.allSatisfy { $0.count > 1 })
+    }
+
+    /// The first visible line, as the real line it belongs to.
+    private func topLine(of buffer: Buffer) -> Int? {
+        buffer.firstVisibleOffset.map { offset in
+            buffer.text.utf16.prefix(offset).filter { $0 == 0x0A }.count + 1
+        }
+    }
+
+    @Test(arguments: [true, false])
+    func theFirstVisibleLineStaysWhereItWasWhenWrapChanges(_ startsWrapped: Bool) {
+        let text = (1...200).map { "\($0) \(sentence)" }.joined(separator: "\n")
+        let (buffer, textView) = drawn(text)
+        buffer.wordWrap = startsWrapped
+        textView.layoutSubtreeIfNeeded()
+        let clip = textView.enclosingScrollView!.contentView
+        let paragraph = textView.textLayoutManager!.textLayoutFragment(
+            for: CGPoint(x: 0, y: textView.frame.height / 2)
+        )!
+        clip.scroll(to: NSPoint(x: 0, y: paragraph.layoutFragmentFrame.minY))
+        let before = topLine(of: buffer)
+
+        buffer.wordWrap = !startsWrapped
+
+        #expect(before != nil)
+        #expect(topLine(of: buffer) == before)
+    }
+
+    @Test func theFirstVisibleLineStaysWhereItWasWhenTheColumnChanges() {
+        let text = (1...200).map { "\($0) \(sentence)" }.joined(separator: "\n")
+        let (buffer, textView) = drawn(text)
+        buffer.wrapColumn = 60
+        buffer.wordWrap = true
+        textView.layoutSubtreeIfNeeded()
+        let clip = textView.enclosingScrollView!.contentView
+        let paragraph = textView.textLayoutManager!.textLayoutFragment(
+            for: CGPoint(x: 0, y: textView.frame.height / 2)
+        )!
+        clip.scroll(to: NSPoint(x: 0, y: paragraph.layoutFragmentFrame.minY))
+        let before = topLine(of: buffer)
+
+        buffer.wrapColumn = 25
+
+        #expect(topLine(of: buffer) == before)
+    }
 }

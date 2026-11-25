@@ -159,6 +159,58 @@ import Testing
         #expect(store.problem == "editor.show_whitespace \u{201C}selection\u{201D} is not one of none, trailing, all.")
     }
 
+    @Test func wordWrapAndItsColumnDecode() throws {
+        let decoded = try UserSettings.decode(#"{"editor":{"word_wrap":true,"wrap_column":80}}"#)
+
+        #expect(decoded.wordWrap)
+        #expect(decoded.wrapColumn == 80)
+    }
+
+    @Test func wordWrapIsOffAndTheColumnUnsetWhenTheKeysOrTheObjectAreMissing() throws {
+        for text in ["{}", #"{"editor":{}}"#] {
+            let decoded = try UserSettings.decode(text)
+            #expect(!decoded.wordWrap)
+            #expect(decoded.wrapColumn == nil)
+        }
+    }
+
+    @Test func wordWrapIsWrittenOnlyWhenOn() throws {
+        var settings = UserSettings()
+        #expect(!(try settings.encoded().contains("word_wrap")))
+
+        settings.wordWrap = true
+        let text = try settings.encoded()
+        #expect(text.contains(#""word_wrap" : true"#))
+        #expect(try UserSettings.decode(text).wordWrap)
+    }
+
+    @Test func theColumnIsWrittenOnlyWhenSetAndStaysWhileWrapIsOff() throws {
+        var settings = UserSettings()
+        #expect(!(try settings.encoded().contains("wrap_column")))
+
+        settings.wrapColumn = 100
+        let text = try settings.encoded()
+        #expect(text.contains(#""wrap_column" : 100"#))
+        #expect(!text.contains("word_wrap"))
+        let decoded = try UserSettings.decode(text)
+        #expect(decoded.wrapColumn == 100)
+        #expect(!decoded.wordWrap)
+    }
+
+    @Test(arguments: ["9", "0", "-80", "80.5", #""80""#, "true", "null"])
+    func aBadWrapColumnIsAProblem(_ value: String) async {
+        file.edit(#"{"editor":{"word_wrap":true,"wrap_column":\#(value)}}"#)
+
+        await store.load()
+
+        #expect(store.problem == "editor.wrap_column must be a whole number of at least 10.")
+        #expect(store.settings.wrapColumn == nil)
+    }
+
+    @Test func aColumnOfExactlyTenIsAccepted() throws {
+        #expect(try UserSettings.decode(#"{"editor":{"wrap_column":10}}"#).wrapColumn == 10)
+    }
+
     @Test func anExternalEditIsAppliedLive() async {
         await store.load()
         store.startWatching()

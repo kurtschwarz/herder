@@ -47,6 +47,16 @@
           "type": "string",
           "enum": ["none", "trailing", "all"],
           "default": "none"
+        },
+        "word_wrap": {
+          "description": "Break long lines at word boundaries instead of scrolling sideways. A word longer than the line breaks at a character.",
+          "type": "boolean",
+          "default": false
+        },
+        "wrap_column": {
+          "description": "How many characters of the code font fit on a line before it wraps. Without it, lines wrap at the window's edge. A line never gets wider than the window. Has no effect while word_wrap is off, and is kept for when it is turned on.",
+          "type": "integer",
+          "minimum": 10
         }
       }
     },
