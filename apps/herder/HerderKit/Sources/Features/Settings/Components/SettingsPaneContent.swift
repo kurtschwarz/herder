@@ -41,7 +41,9 @@ private struct SettingsPaneHeader: View {
                 Spacer(minLength: 0)
 
                 if let file {
-                    HoverIconButton(icon: Ph.fileCode, help: "Open settings.json", action: file.open)
+                    Button("Edit in settings.json", action: file.open)
+                        .buttonStyle(.secondary)
+                        .help("Open settings.json in the editor")
                 }
             }
             // The same strip as the sidebar's header, so the title sits level
