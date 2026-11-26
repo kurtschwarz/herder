@@ -9,11 +9,12 @@ import SwiftUI
 /// clicked. A text view is never guessed at. It also puts Shift-Return's
 /// newline at the caret, which a key handler over a `TextField` cannot.
 ///
-/// Grows to `maxLines`, then scrolls. Return calls `submit`; Shift-Return
+/// At least `minLines` high, grows to `maxLines`, then scrolls. Return calls `submit`; Shift-Return
 /// starts a new line.
 struct PromptTextView: NSViewRepresentable {
     @Binding var text: String
     var isEditable = true
+    var minLines = 2
     var maxLines = 4
     /// Changes when the view should take the keyboard.
     var focusRequest = 0
@@ -65,7 +66,7 @@ struct PromptTextView: NSViewRepresentable {
         }
     }
 
-    /// One line high when empty, then as tall as the text up to `maxLines`.
+    /// `minLines` high when empty, then as tall as the text up to `maxLines`.
     func sizeThatFits(_ proposal: ProposedViewSize, nsView scrollView: NSScrollView, context: Context) -> CGSize? {
         guard let width = proposal.width, width.isFinite,
               let textView = scrollView.documentView as? NSTextView,
@@ -75,7 +76,7 @@ struct PromptTextView: NSViewRepresentable {
         layout.ensureLayout(for: container)
         let line = layout.defaultLineHeight(for: Self.font)
         let used = layout.usedRect(for: container).height
-        let height = min(max(used, line), line * CGFloat(maxLines))
+        let height = min(max(used, line * CGFloat(minLines)), line * CGFloat(maxLines))
         return CGSize(width: width, height: ceil(height))
     }
 
