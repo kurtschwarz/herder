@@ -163,8 +163,12 @@ private struct IssueCard: View {
 
     private var tabs: some View {
         HStack(spacing: Theme.Spacing.normal) {
-            tab("Assigned to me", .assigned)
-            tab("All open", .open)
+            SegmentedToggle(
+                GitHubIssueTab.allCases,
+                selection: Binding(get: { model.tab }, set: { tab in Task { await model.show(tab) } }),
+                title: { $0 == .assigned ? "Assigned to me" : "All open" },
+                count: { model.count(for: $0) }
+            )
             Spacer(minLength: 0)
             Button {
                 Task { await model.refresh() }
@@ -181,36 +185,6 @@ private struct IssueCard: View {
             .disabled(model.isRefreshing || model.isStarting)
             .help(model.updatedText)
         }
-    }
-
-    private func tab(_ title: String, _ tab: GitHubIssueTab) -> some View {
-        let isSelected = model.tab == tab
-        return Button {
-            Task { await model.show(tab) }
-        } label: {
-            HStack(spacing: Theme.Spacing.tight + 2) {
-                Text(title)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                if let count = model.count(for: tab) {
-                    Text("\(count)")
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
-                        .foregroundStyle(Theme.Palette.secondaryText)
-                        .padding(.horizontal, Theme.Spacing.normal - 2)
-                        .padding(.vertical, 1)
-                        .background { Capsule().fill(Theme.Palette.control) }
-                }
-            }
-            .foregroundStyle(isSelected ? Theme.Palette.text : Theme.Palette.secondaryText)
-            .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-            .frame(minHeight: 26)
-            .background {
-                RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                    .fill(isSelected ? Theme.Palette.violet.opacity(0.15) : .clear)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .pointerStyle(.link)
     }
 
     /// ⌘1 and ⌘2, which the tabs have no visible key for.
