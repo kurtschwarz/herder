@@ -317,7 +317,7 @@ public final class AppEnvironment {
         // editor knows nothing about settings.
         let settingsKey = PathKey(settings.url)
         editor.diagnostic = { [settings] key in key == settingsKey ? settings.problem : nil }
-        // The same for the whitespace setting, which every window follows.
+        // The same for the whitespace and wrapping settings, which every window follows.
         Self.follow(settings, in: editor)
         return WindowEnvironment(
             id: id,
@@ -333,11 +333,13 @@ public final class AppEnvironment {
         )
     }
 
-    /// Keeps `editor` showing the whitespace the settings ask for, as they
-    /// change. Stops with the window: the editor is held weakly.
+    /// Keeps `editor` showing the whitespace and wrapping the settings ask for,
+    /// as they change. Stops with the window: the editor is held weakly.
     private static func follow(_ settings: UserSettingsStore, in editor: EditorModel) {
         withObservationTracking {
             editor.showWhitespace = settings.settings.showWhitespace
+            editor.wrapColumn = settings.settings.wrapColumn
+            editor.wordWrap = settings.settings.wordWrap
         } onChange: { [weak editor] in
             Task { @MainActor in
                 guard let editor else { return }

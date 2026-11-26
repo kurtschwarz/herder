@@ -73,7 +73,7 @@ import Testing
         }
         try compare(schema, encoded, at: "")
 
-        #expect(checked == 5)
+        #expect(checked == 6)
     }
 
     @Test func anAgentsIDFollowsTheSameRuleAsTheApp() throws {
@@ -96,6 +96,22 @@ import Testing
 
         #expect(property["enum"] as? [String] == ShowWhitespace.allCases.map(\.rawValue))
         #expect(property["default"] as? String == "none")
+    }
+
+    @Test func wordWrapIsABooleanOffByDefault() throws {
+        let property = try object(try properties(at: ["editor"])["word_wrap"])
+
+        #expect(property["type"] as? String == "boolean")
+        #expect(property["default"] as? Bool == false)
+    }
+
+    @Test func wrapColumnIsAnIntegerOfAtLeastTenWithNoDefault() throws {
+        let property = try object(try properties(at: ["editor"])["wrap_column"])
+
+        #expect(property["type"] as? String == "integer")
+        #expect(property["minimum"] as? Int == UserSettings.minimumWrapColumn)
+        #expect(property["maximum"] == nil)
+        #expect(property["default"] == nil)
     }
 
     @Test func itHoldsNoSecrets() throws {

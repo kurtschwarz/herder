@@ -105,6 +105,28 @@ final class SlowSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
         #expect(model.activeBuffer?.showWhitespace == .trailing)
     }
 
+    @Test func theWrapSettingsReachTheTabsOpenAndThoseOpenedLater() async throws {
+        _ = try await start(with: ["a.txt", "b.txt"])
+        await model.open(root.appending(path: "a.txt"))
+        #expect(model.activeBuffer?.wordWrap == false)
+        #expect(model.activeBuffer?.wrapColumn == nil)
+
+        model.wrapColumn = 80
+        model.wordWrap = true
+        #expect(model.activeBuffer?.wordWrap == true)
+        #expect(model.activeBuffer?.wrapColumn == 80)
+
+        await model.open(root.appending(path: "b.txt"))
+        #expect(model.activeBuffer?.wordWrap == true)
+        #expect(model.activeBuffer?.wrapColumn == 80)
+
+        model.wordWrap = false
+        model.wrapColumn = nil
+        await model.open(root.appending(path: "a.txt"))
+        #expect(model.activeBuffer?.wordWrap == false)
+        #expect(model.activeBuffer?.wrapColumn == nil)
+    }
+
     @Test func openingAFileShowsItsText() async throws {
         _ = try await start(with: ["a.txt"])
 

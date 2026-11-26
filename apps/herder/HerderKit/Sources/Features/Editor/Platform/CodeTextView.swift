@@ -4,7 +4,7 @@ import SwiftUI
 /// Shows one tab's ``Buffer``: an editable text view with a line-number gutter.
 ///
 /// TextKit 2 under an `NSScrollView`: contiguous selection, copy and find come
-/// with it. Lines do not wrap, so a gutter number is one per line.
+/// with it. A gutter number is one per line, wrapped or not.
 ///
 /// This only mounts. The text, the undo history and the scroll position belong
 /// to the buffer, so showing another tab is swapping which pane sits in here,

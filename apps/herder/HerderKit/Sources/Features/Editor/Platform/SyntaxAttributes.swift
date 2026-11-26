@@ -22,7 +22,18 @@ enum SyntaxAttributes {
     static let base: [NSAttributedString.Key: Any] = [
         .font: NSFont.monospacedSystemFont(ofSize: Theme.Size.code, weight: .regular),
         .foregroundColor: baseColour,
+        .paragraphStyle: paragraphStyle,
     ]
+
+    /// With no tab stops of its own, a paragraph has twelve, and a line of
+    /// more tabs than that wraps at the twelfth even where nothing wraps.
+    /// Without them, every tab is the next multiple of the interval.
+    private static let paragraphStyle: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.tabStops = []
+        style.defaultTabInterval = 28
+        return style
+    }()
 
     /// The colour for a kind.
     static func colour(for kind: SyntaxTokenKind) -> NSColor {
