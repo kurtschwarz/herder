@@ -85,6 +85,10 @@ public final class RepositoriesModel {
     /// said. Absent until it has.
     private(set) var gitHubRemotes: [UUID: Bool] = [:]
 
+    /// How many open issues of each repository are assigned to the user, as
+    /// herderd last heard from GitHub. Absent until the modal has asked.
+    private(set) var assignedIssueCounts: [UUID: Int] = [:]
+
     /// Whether a modal is covering the window.
     public var isModalPresented: Bool { adding != nil || newSession != nil || issueList != nil }
 
@@ -248,13 +252,21 @@ public final class RepositoriesModel {
         return gitHubRemotes[repository.id] != false
     }
 
-    /// Asks herderd whether `repository`'s `origin` is on GitHub, from
-    /// memory, so nothing goes to GitHub for it. An answer that cannot be had
-    /// leaves the button enabled: the modal explains what is wrong.
+    /// Asks herderd whether `repository`'s `origin` is on GitHub, and how many
+    /// of its issues are assigned to the user, from memory, so nothing goes to
+    /// GitHub for it. An answer that cannot be had leaves the button enabled:
+    /// the modal explains what is wrong.
     func probeGitHubRemote(of repository: Repository?) async {
         guard let issues, let repository, repository.isAvailable else { return }
-        guard let reply = try? await issues.list(at: repository.path, tab: .open, freshness: .cached) else { return }
+        guard let reply = try? await issues.list(at: repository.path, tab: .assigned, freshness: .cached) else {
+            return
+        }
         gitHubRemotes[repository.id] = reply.repository != nil
+        assignedIssueCounts[repository.id] = reply.assignedCount
+    }
+
+    func assignedIssueCount(in repository: Repository?) -> Int? {
+        repository.flatMap { assignedIssueCounts[$0.id] }
     }
 
     func beginIssues(in repository: Repository) {

@@ -593,11 +593,11 @@ import Testing
         let (model, client, _) = makeIssueModel()
         #expect(model.canStartFromIssue(in: repository))
 
-        client.answer(GitHubIssueList(repository: nil, status: .error("not a GitHub repository")), tab: .open, freshness: .cached)
+        client.answer(GitHubIssueList(repository: nil, status: .error("not a GitHub repository")), tab: .assigned, freshness: .cached)
         await model.probeGitHubRemote(of: repository)
         #expect(!model.canStartFromIssue(in: repository))
 
-        client.answer(GitHubIssueList(repository: "o/r", status: .ok), tab: .open, freshness: .cached)
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok), tab: .assigned, freshness: .cached)
         await model.probeGitHubRemote(of: repository)
         #expect(model.canStartFromIssue(in: repository))
         #expect(client.calls.allSatisfy { $0.freshness == .cached })
@@ -606,11 +606,28 @@ import Testing
     @Test func aProbeThatCannotBeAnsweredLeavesTheButtonEnabled() async throws {
         let repository = try await addRepository("/code/api")
         let (model, client, _) = makeIssueModel()
-        client.fail(tab: .open, freshness: .cached)
+        client.fail(tab: .assigned, freshness: .cached)
 
         await model.probeGitHubRemote(of: repository)
 
         #expect(model.canStartFromIssue(in: repository))
+    }
+
+    @Test func theButtonCountsTheIssuesAssignedToTheUserFromMemory() async throws {
+        let repository = try await addRepository("/code/api")
+        let (model, client, _) = makeIssueModel()
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok), tab: .assigned, freshness: .cached)
+        await model.probeGitHubRemote(of: repository)
+        #expect(model.assignedIssueCount(in: repository) == nil)
+
+        client.answer(
+            GitHubIssueList(repository: "o/r", status: .ok, fetchedAt: .now, assignedCount: 3, openCount: 9),
+            tab: .assigned, freshness: .cached
+        )
+        await model.probeGitHubRemote(of: repository)
+
+        #expect(model.assignedIssueCount(in: repository) == 3)
+        #expect(client.calls.allSatisfy { $0.freshness == .cached })
     }
 
     @Test func withoutADaemonThereIsNoFromIssue() async throws {

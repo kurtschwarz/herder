@@ -29,6 +29,7 @@ public enum Ph {
     public static var gitCommit: Image { icon("git-commit") }
     public static var gitDiff: Image { icon("git-diff") }
     public static var gitFork: Image { icon("git-fork") }
+    public static var githubLogo: Image { icon("github-logo") }
     public static var hammer: Image { icon("hammer") }
     public static var magnifyingGlass: Image { icon("magnifying-glass") }
     public static var notepad: Image { icon("notepad") }
