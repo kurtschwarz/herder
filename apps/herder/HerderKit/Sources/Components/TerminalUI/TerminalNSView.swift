@@ -399,10 +399,14 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         screen.send(bytes)
     }
 
-    /// The link under `point`, if the click it would be is a plain one: any
-    /// modifier means something else is being asked for.
-    private func link(at point: NSPoint, modifiers: NSEvent.ModifierFlags) -> PendingLink? {
-        guard modifiers.intersection([.shift, .control, .option, .command]).isEmpty else { return nil }
+    /// Whether the modifiers are Command on its own: with Shift, Option or
+    /// Control it is something else being asked for.
+    private func opensLinks(_ modifiers: NSEvent.ModifierFlags) -> Bool {
+        modifiers.intersection([.shift, .control, .option, .command]) == .command
+    }
+
+    /// The link under `point`.
+    private func link(at point: NSPoint) -> PendingLink? {
         let column = Int(((point.x - inset.width) / cellSize.width).rounded(.down))
         let row = Int(((point.y - inset.height) / cellSize.height).rounded(.down))
         // Not clamped, as `cell(at:)` is: the margin is not a link.
@@ -412,10 +416,15 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        // A plain click on a link is the link's, and opens it when the button
-        // comes up: after a drag it is a selection that started on a link.
-        pendingLink = event.clickCount == 1 ? link(at: convert(event.locationInWindow, from: nil), modifiers: event.modifierFlags) : nil
-        if pendingLink != nil, programOwnsMouse(event) { return }
+        // A Command-click on a link is the link's, and opens it when the button
+        // comes up: after a drag it is a selection that started on a link, so
+        // it begins one, and is not the program's even when it has the mouse.
+        pendingLink = event.clickCount == 1 && opensLinks(event.modifierFlags)
+            ? link(at: convert(event.locationInWindow, from: nil)) : nil
+        if pendingLink != nil, programOwnsMouse(event) {
+            anchor = cell(at: convert(event.locationInWindow, from: nil))
+            return
+        }
         if programOwnsMouse(event) {
             pressedButton = .left
             report(.press, .left, event)
@@ -485,20 +494,30 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         cursor(at: convert(event.locationInWindow, from: nil), modifiers: event.modifierFlags).set()
     }
 
+    /// The hand comes and goes with Command, without the mouse moving.
+    override func flagsChanged(with event: NSEvent) {
+        super.flagsChanged(with: event)
+        refreshCursor(modifiers: event.modifierFlags)
+    }
+
     /// Sets the pointer for where the mouse is now, for when the program
     /// changes its shape without the mouse having moved.
     func refreshCursor() {
+        refreshCursor(modifiers: NSEvent.modifierFlags)
+    }
+
+    private func refreshCursor(modifiers: NSEvent.ModifierFlags) {
         guard let window, window.isKeyWindow else { return }
         let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
         guard bounds.contains(point), window.contentView?.hitTest(window.mouseLocationOutsideOfEventStream) === self
         else { return }
-        cursor(at: point, modifiers: NSEvent.modifierFlags).set()
+        cursor(at: point, modifiers: modifiers).set()
     }
 
-    /// A hand over what a click would open, then what the program asked for
-    /// while it has the mouse, else the I-beam: a drag here selects text.
+    /// A hand over what Command-click would open, then what the program asked
+    /// for while it has the mouse, else the I-beam: a drag here selects text.
     private func cursor(at point: NSPoint, modifiers: NSEvent.ModifierFlags) -> NSCursor {
-        if link(at: point, modifiers: modifiers) != nil { return .pointingHand }
+        if opensLinks(modifiers), link(at: point) != nil { return .pointingHand }
         if emulator.isTrackingMouse, !modifiers.contains(.option) { return emulator.mouseShape.cursor }
         return .iBeam
     }
