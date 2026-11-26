@@ -407,7 +407,7 @@ private struct IssueUnavailable: View {
 private struct IssueRow: View {
     /// Tall enough for a title and a line under it, which is what the list's
     /// height is counted in.
-    static let height: CGFloat = 56
+    static let height: CGFloat = 48
 
     let issue: GitHubIssue
     let session: AgentSession?
@@ -419,12 +419,10 @@ private struct IssueRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
-            Text("#\(issue.number)")
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(Theme.Palette.tertiaryText)
-                .frame(minWidth: 40, alignment: .trailing)
+            OpenIssueMark()
+                .padding(.top, 2)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: Theme.Spacing.normal) {
                     Text(issue.title)
                         .font(.system(size: 13, weight: .semibold))
@@ -434,28 +432,27 @@ private struct IssueRow: View {
                     ForEach(issue.labels.prefix(3), id: \.self) { LabelPill(label: $0) }
                 }
                 HStack(spacing: Theme.Spacing.normal) {
+                    Text(details)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.Palette.tertiaryText)
+                        .lineLimit(1)
+                    if issue.commentCount > 0 {
+                        HStack(spacing: 3) {
+                            PhIcon(Ph.chatCenteredDots, size: 12)
+                            Text("\(issue.commentCount)").font(.system(size: 11).monospacedDigit())
+                        }
+                        .foregroundStyle(Theme.Palette.tertiaryText)
+                    }
                     if let session {
                         Text("in progress \u{00B7} \(session.name ?? session.title)")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Theme.Palette.violet)
                             .lineLimit(1)
                     }
-                    Text(details)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.Palette.tertiaryText)
-                        .lineLimit(1)
                 }
             }
 
-            Spacer(minLength: Theme.Spacing.normal)
-
-            if issue.commentCount > 0 {
-                HStack(spacing: 3) {
-                    PhIcon(Ph.chatCenteredDots, size: 12)
-                    Text("\(issue.commentCount)").font(.system(size: 11).monospacedDigit())
-                }
-                .foregroundStyle(Theme.Palette.tertiaryText)
-            }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
         .frame(maxWidth: .infinity, minHeight: Self.height - 2, alignment: .leading)
@@ -472,11 +469,22 @@ private struct IssueRow: View {
         .pointerStyle(.link)
     }
 
+    /// `#151 opened 1d by kurt`.
     private var details: String {
-        var parts: [String] = []
-        if let author = issue.author { parts.append("@\(author)") }
-        parts.append(RelativeAge.short(from: issue.updatedAt))
-        return parts.joined(separator: " \u{00B7} ")
+        var text = "#\(issue.number) opened \(RelativeAge.short(from: issue.createdAt))"
+        if let author = issue.author { text += " by \(author)" }
+        return text
+    }
+}
+
+/// GitHub's mark for an open issue: a green ring with a dot in it.
+private struct OpenIssueMark: View {
+    var body: some View {
+        ZStack {
+            Circle().strokeBorder(Theme.Palette.success, lineWidth: 1.5)
+            Circle().fill(Theme.Palette.success).frame(width: 4, height: 4)
+        }
+        .frame(width: 14, height: 14)
     }
 }
 
