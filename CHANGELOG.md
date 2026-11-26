@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.7.0](https://github.com/kurtschwarz/herder/compare/herder-v0.6.0...herder-v0.7.0) (2026-11-26)
+
+
+### Features
+
+* **editor:** configurable word wrap ([#141](https://github.com/kurtschwarz/herder/issues/141)) ([1248fdb](https://github.com/kurtschwarz/herder/commit/1248fdb015e79568bc601e11dc4acffec5dd39e8))
+* **editor:** show whitespace markers ([#139](https://github.com/kurtschwarz/herder/issues/139)) ([56944c1](https://github.com/kurtschwarz/herder/commit/56944c15324d4d5cdc57b62c95b21a1b78800ac4))
+* **herder:** edit settings as a live settings.json ([#137](https://github.com/kurtschwarz/herder/issues/137)) ([cba062e](https://github.com/kurtschwarz/herder/commit/cba062e06c1b81fdb95bde7f51fe61c55738739e))
+* start an agent from a GitHub issue (From issue) ([#145](https://github.com/kurtschwarz/herder/issues/145)) ([f02494d](https://github.com/kurtschwarz/herder/commit/f02494d9e6496ab09eef3a2c77fb9659eb0972ef)), closes [#144](https://github.com/kurtschwarz/herder/issues/144)
+* **terminal:** open links only on Cmd+click ([#143](https://github.com/kurtschwarz/herder/issues/143)) ([349ae9f](https://github.com/kurtschwarz/herder/commit/349ae9fdd72d5df2b09fa6790bfac0393eff7ef0)), closes [#142](https://github.com/kurtschwarz/herder/issues/142)
+
+
+### Bug Fixes
+
+* **deps:** lock file maintenance ([#130](https://github.com/kurtschwarz/herder/issues/130)) ([d04fbbb](https://github.com/kurtschwarz/herder/commit/d04fbbb720bdfa3ab2fc8ab3569f2c2131b0811d))
+* **deps:** lock file maintenance ([#132](https://github.com/kurtschwarz/herder/issues/132)) ([6aca05e](https://github.com/kurtschwarz/herder/commit/6aca05e9f46a1a5e7480606b340a609b677772de))
+* **deps:** lock file maintenance ([#135](https://github.com/kurtschwarz/herder/issues/135)) ([3e08835](https://github.com/kurtschwarz/herder/commit/3e08835e9d10a5f91b3a2087ab39a44369c579a8))
+* **deps:** update rust crate gix to 0.91.0 ([#134](https://github.com/kurtschwarz/herder/issues/134)) ([20283b3](https://github.com/kurtschwarz/herder/commit/20283b393ef64531b24ea8ad38b521f6367963b9))
+
 ## [0.6.0](https://github.com/kurtschwarz/herder/compare/herder-v0.5.0...herder-v0.6.0) (2026-11-20)
 
 
