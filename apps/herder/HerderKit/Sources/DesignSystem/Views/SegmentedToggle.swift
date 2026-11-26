@@ -32,14 +32,11 @@ public struct SegmentedToggle<Option: Hashable>: View {
                 segment(option)
             }
         }
-        .padding(2)
+        .padding(3)
+        .frame(height: Theme.Size.control)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .fill(Theme.Palette.field)
-                .overlay {
-                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                        .strokeBorder(Theme.Palette.hairline, lineWidth: 1)
-                }
+                .fill(Theme.Palette.control)
         }
         .fixedSize()
         .pointerStyle(.link)
@@ -70,24 +67,17 @@ public struct SegmentedToggle<Option: Hashable>: View {
                     .font(.system(size: 12, weight: .medium))
                 if let count = count(option) {
                     Text("\(count)")
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
-                        .foregroundStyle(Theme.Palette.secondaryText)
-                        .padding(.horizontal, Theme.Spacing.normal - 2)
-                        .padding(.vertical, 1)
-                        .background { Capsule().fill(Theme.Palette.control) }
+                        .font(.system(size: 12, weight: .medium).monospacedDigit())
+                        .foregroundStyle(isSelected ? Theme.Palette.secondaryText : Theme.Palette.tertiaryText)
                 }
             }
             .foregroundStyle(isSelected ? Theme.Palette.text : Theme.Palette.secondaryText)
             .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
-            .frame(minHeight: 24)
+            .frame(maxHeight: .infinity)
             .background {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: Theme.Radius.control - 2, style: .continuous)
-                        .fill(Theme.Palette.violet.opacity(0.18))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: Theme.Radius.control - 2, style: .continuous)
-                                .strokeBorder(Theme.Palette.violet.opacity(0.6), lineWidth: 1)
-                        }
+                    RoundedRectangle(cornerRadius: Theme.Radius.control - 3, style: .continuous)
+                        .fill(Theme.Palette.controlPressed)
                         .matchedGeometryEffect(id: "pill", in: pill)
                 }
             }
