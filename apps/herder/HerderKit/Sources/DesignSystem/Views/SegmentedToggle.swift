@@ -49,7 +49,7 @@ public struct SegmentedToggle<Option: Hashable>: View {
         } label: {
             HStack(spacing: Theme.Spacing.tight + 2) {
                 Text(title(option))
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 12, weight: .medium))
                 if let count = count(option) {
                     Text("\(count)")
                         .font(.system(size: 11, weight: .medium).monospacedDigit())
