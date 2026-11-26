@@ -105,6 +105,7 @@ public final class AppEnvironment {
     /// What each window's models are built from. The services are the app's;
     /// the models made from them are the window's. See ``makeWindow(id:)``.
     private let git: any GitClient
+    private let issues: (any GitHubIssuesClient)?
     private let namer: any SessionNamer
     private let files: any FileClient
     private let watcher: any FileWatcherClient
@@ -263,6 +264,7 @@ public final class AppEnvironment {
         self.sessions = sessions
         self.processes = RunningProcesses()
         self.daemon = daemon.map { DaemonConnection(client: $0) }
+        self.issues = daemon.map { DaemonGitHubIssuesClient(daemon: $0) }
         if let daemon, let githubAuth, let githubVault {
             let github = GitHubConnection(auth: githubAuth, vault: githubVault, daemon: daemon, clock: clock)
             self.github = github
@@ -302,7 +304,8 @@ public final class AppEnvironment {
     func makeWindow(id: UUID = UUID(), restoring snapshot: WindowSnapshot? = nil) -> WindowEnvironment {
         let list = WindowRepositories(store: repositories, members: snapshot?.repositories ?? [])
         let repositoryList = RepositoriesModel(
-            repositories: list, git: git, picker: folderPicker, namer: namer, naming: naming, agents: agents
+            repositories: list, git: git, picker: folderPicker, namer: namer, naming: naming, agents: agents,
+            issues: issues, sessions: sessions, github: github
         )
         let panel = AgentPanelModel(
             pty: pty, commands: commands, clock: clock, catalog: agents,

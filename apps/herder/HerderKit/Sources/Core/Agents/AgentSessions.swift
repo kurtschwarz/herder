@@ -285,6 +285,15 @@ public final class AgentSessions {
         scheduleSave(key)
     }
 
+    // MARK: - Issues
+
+    /// The session started from issue `number` in `repository` that has not
+    /// ended, the one begun first if there are several. What marks an issue
+    /// "in progress", and what picking it opens instead of starting again.
+    public func openSession(forIssue number: Int, in repository: PathKey) -> AgentSession? {
+        recorded(in: repository).first { !$0.isEnded && $0.issue?.number == number }
+    }
+
     // MARK: - Pull requests
 
     /// The branches worth asking GitHub about, for each repository whose

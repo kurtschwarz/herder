@@ -12,28 +12,30 @@ import Foundation
 /// environment key is in `DesignSystem`.
 @MainActor
 public struct StartAgentSessionAction {
-    private let handler: (WorkspaceID, Agent?, SessionMode, String?, String?) -> Void
+    private let handler: (WorkspaceID, Agent?, SessionMode, String?, String?, LinkedIssue?) -> Void
 
-    public init(_ handler: @escaping (WorkspaceID, Agent?, SessionMode, String?, String?) -> Void) {
+    public init(_ handler: @escaping (WorkspaceID, Agent?, SessionMode, String?, String?, LinkedIssue?) -> Void) {
         self.handler = handler
     }
 
     /// `agent` is `nil` for the one used last. `prompt` is the session's first
     /// message, for an agent that can be given one, and `name` is what the
-    /// session is called in the sidebar, in place of the agent's.
+    /// session is called in the sidebar, in place of the agent's. `issue` is
+    /// the GitHub issue it is started from, which the session remembers.
     public func callAsFunction(
         _ workspace: WorkspaceID,
         agent: Agent? = nil,
         mode: SessionMode = .build,
         prompt: String? = nil,
-        name: String? = nil
+        name: String? = nil,
+        issue: LinkedIssue? = nil
     ) {
-        handler(workspace, agent, mode, prompt, name)
+        handler(workspace, agent, mode, prompt, name, issue)
     }
 }
 
 extension StartAgentSessionAction {
     /// Does nothing, so a feature drawn without a window around it still
     /// builds.
-    public static let inert = StartAgentSessionAction { _, _, _, _, _ in }
+    public static let inert = StartAgentSessionAction { _, _, _, _, _, _ in }
 }

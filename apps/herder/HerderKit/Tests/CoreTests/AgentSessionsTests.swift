@@ -440,3 +440,52 @@ import TestSupport
         #expect(session.live == nil)
     }
 }
+
+@Suite(.timeLimit(.minutes(1))) @MainActor struct AgentSessionIssueTests {
+    let state = InMemoryStateStore()
+    let main = URL(filePath: "/code/api")
+    let launch = Date(timeIntervalSince1970: 1_000_000)
+    let issue = LinkedIssue(number: 144, title: "From issue", url: URL(string: "https://github.com/o/r/issues/144")!)
+
+    func session(issue: LinkedIssue?, ended: Bool = false) -> AgentSession {
+        AgentSession(
+            id: UUID(), agentID: "claude-code", agentName: "Claude Code", worktree: WorkspaceID(main), branch: "main",
+            title: "From issue", startedAt: launch, endedAt: ended ? launch.addingTimeInterval(5) : nil,
+            endReason: ended ? .closed : nil, issue: issue
+        )
+    }
+
+    @Test func theIssueIsWrittenDownWithTheSessionAndReadBack() async {
+        let sessions = AgentSessions(state: state, clock: VirtualClockClient(), launchedAt: launch)
+        let started = session(issue: issue)
+        await sessions.begin(started, in: PathKey(main))
+        await sessions.flushSaves()
+
+        let reloaded = AgentSessions(state: state, clock: VirtualClockClient(), launchedAt: launch)
+        await reloaded.load(PathKey(main))
+
+        #expect(reloaded.session(started.id)?.issue == issue)
+    }
+
+    @Test func aSessionWrittenBeforeIssuesHasNone() throws {
+        let old = #"{"id":"\#(UUID().uuidString)","agentID":"claude-code","worktree":"\#(main.path)","startedAt":0}"#
+
+        let decoded = try JSONDecoder().decode(AgentSession.self, from: Data(old.utf8))
+
+        #expect(decoded.issue == nil)
+    }
+
+    @Test func anIssueIsInProgressWhileItsSessionHasNotEnded() async {
+        let sessions = AgentSessions(state: state, clock: VirtualClockClient(), launchedAt: launch)
+        let open = session(issue: issue)
+        await sessions.begin(open, in: PathKey(main))
+
+        #expect(sessions.openSession(forIssue: 144, in: PathKey(main))?.id == open.id)
+        #expect(sessions.openSession(forIssue: 145, in: PathKey(main)) == nil)
+        #expect(sessions.openSession(forIssue: 144, in: PathKey(URL(filePath: "/code/other"))) == nil)
+
+        sessions.end(open.id, because: .closed)
+
+        #expect(sessions.openSession(forIssue: 144, in: PathKey(main)) == nil)
+    }
+}

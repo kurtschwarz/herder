@@ -567,4 +567,160 @@ import Testing
         model.beginNewSession(in: repository)
         #expect(model.newSessionMode == .build)
     }
+
+    // MARK: - From issue
+
+    func makeIssueModel(sessions: AgentSessions? = nil) -> (RepositoriesModel, StubGitHubIssuesClient, NewOrderModel) {
+        let client = StubGitHubIssuesClient()
+        let model = RepositoriesModel(
+            repositories: list, git: git, picker: picker, namer: StubSessionNamer(),
+            naming: NamingSettings(settings: .inMemory(), vault: InMemoryNamingKeyVault()),
+            agents: AgentCatalog(state: InMemoryStateStore(), settings: .inMemory()),
+            issues: client, sessions: sessions
+        )
+        return (model, client, model.order)
+    }
+
+    func issueDetail(_ number: Int = 144, title: String = "From issue") -> GitHubIssueDetail {
+        GitHubIssueDetail(
+            issue: GitHubIssue(number: number, url: URL(string: "https://github.com/o/r/issues/\(number)")!, title: title),
+            body: "Add it."
+        )
+    }
+
+    @Test func fromIssueIsOfferedUntilHerderdSaysTheOriginIsNotOnGitHub() async throws {
+        let repository = try await addRepository("/code/api")
+        let (model, client, _) = makeIssueModel()
+        #expect(model.canStartFromIssue(in: repository))
+
+        client.answer(GitHubIssueList(repository: nil, status: .error("not a GitHub repository")), tab: .open, freshness: .cached)
+        await model.probeGitHubRemote(of: repository)
+        #expect(!model.canStartFromIssue(in: repository))
+
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok), tab: .open, freshness: .cached)
+        await model.probeGitHubRemote(of: repository)
+        #expect(model.canStartFromIssue(in: repository))
+        #expect(client.calls.allSatisfy { $0.freshness == .cached })
+    }
+
+    @Test func aProbeThatCannotBeAnsweredLeavesTheButtonEnabled() async throws {
+        let repository = try await addRepository("/code/api")
+        let (model, client, _) = makeIssueModel()
+        client.fail(tab: .open, freshness: .cached)
+
+        await model.probeGitHubRemote(of: repository)
+
+        #expect(model.canStartFromIssue(in: repository))
+    }
+
+    @Test func withoutADaemonThereIsNoFromIssue() async throws {
+        let repository = try await addRepository("/code/api")
+
+        #expect(!model.canStartFromIssue(in: repository))
+        #expect(!model.canStartFromIssue(in: nil))
+    }
+
+    @Test func theModalIsAWindowModalLikeTheNewSessionOne() async throws {
+        let repository = try await addRepository("/code/api")
+        let (model, _, _) = makeIssueModel()
+
+        model.beginIssues(in: repository)
+
+        #expect(model.isModalPresented)
+        #expect(model.issueList?.workspaceName == "api")
+        model.beginAdding()
+        #expect(model.adding == nil)
+
+        model.cancelIssues()
+        #expect(!model.isModalPresented)
+    }
+
+    @Test func pickingAnIssueCutsItsWorktreeAndSaysWhereItsSessionStarts() async throws {
+        let repository = try await addRepository("/code/api")
+        git.seed(branches: ["main"], at: repository.url)
+        git.seed(fetchedBase: "origin/main", at: repository.url)
+        let (model, client, _) = makeIssueModel()
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok, issues: [issueDetail().issue], fetchedAt: .now, assignedCount: 1, openCount: 1), tab: .assigned, freshness: .cached)
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok, issues: [issueDetail().issue], fetchedAt: .now, assignedCount: 1, openCount: 1), tab: .assigned, freshness: .fresh)
+        client.answer(GitHubIssueDetailReply(status: .ok, detail: issueDetail()), number: 144)
+        model.beginIssues(in: repository)
+        await model.issueList?.load()
+
+        let result = await model.submitIssue()
+
+        guard case .start(let worktree, let started)? = result else {
+            Issue.record("expected a start, got \(String(describing: result))")
+            return
+        }
+        #expect(worktree == WorkspaceID(started.worktree))
+        #expect(started.issue?.number == 144)
+        #expect(started.title == "From issue")
+        #expect(git.addedWorktrees.map(\.newBranch) == ["issue/144-from-issue"])
+        #expect(model.issueList == nil)
+    }
+
+    @Test func aWorktreeThatCannotBeMadeLeavesTheModalUpWithWhy() async throws {
+        let repository = try await addRepository("/code/api")
+        git.seed(branches: ["main"], at: repository.url)
+        git.seed(fetchedBase: "origin/main", at: repository.url)
+        git.failAddingWorktrees(with: "fatal: boom")
+        let (model, client, _) = makeIssueModel()
+        let issue = issueDetail().issue
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok, issues: [issue], fetchedAt: .now, assignedCount: 1, openCount: 1), tab: .assigned, freshness: .fresh)
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok), tab: .assigned, freshness: .cached)
+        client.answer(GitHubIssueDetailReply(status: .ok, detail: issueDetail()), number: 144)
+        model.beginIssues(in: repository)
+        await model.issueList?.load()
+
+        #expect(await model.submitIssue() == nil)
+
+        #expect(model.issueList?.failure == "fatal: boom")
+        #expect(model.isModalPresented)
+    }
+
+    @Test func aFailedDetailFetchStartsNoWorktreeAtAll() async throws {
+        let repository = try await addRepository("/code/api")
+        git.seed(branches: ["main"], at: repository.url)
+        let (model, client, _) = makeIssueModel()
+        let issue = issueDetail().issue
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok, issues: [issue], fetchedAt: .now, assignedCount: 1, openCount: 1), tab: .assigned, freshness: .fresh)
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok), tab: .assigned, freshness: .cached)
+        client.failDetail(number: 144)
+        model.beginIssues(in: repository)
+        await model.issueList?.load()
+
+        #expect(await model.submitIssue() == nil)
+
+        #expect(git.addedWorktrees.isEmpty)
+        #expect(model.issueList?.failure == "herderd could not be reached.")
+    }
+
+    @Test func anIssueWithAnOpenSessionOpensThatSessionAndCutsNothing() async throws {
+        let repository = try await addRepository("/code/api")
+        let sessions = AgentSessions(state: InMemoryStateStore(), clock: VirtualClockClient())
+        let open = AgentSession(
+            id: UUID(), agentID: "claude-code", agentName: "Claude Code", worktree: WorkspaceID(repository.url),
+            title: "From issue", startedAt: .now,
+            issue: LinkedIssue(number: 144, title: "From issue", url: URL(string: "https://github.com/o/r/issues/144")!)
+        )
+        await sessions.begin(open, in: PathKey(repository.url))
+        let (model, client, _) = makeIssueModel(sessions: sessions)
+        let issue = issueDetail().issue
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok, issues: [issue], fetchedAt: .now, assignedCount: 1, openCount: 1), tab: .assigned, freshness: .fresh)
+        client.answer(GitHubIssueList(repository: "o/r", status: .ok), tab: .assigned, freshness: .cached)
+        model.beginIssues(in: repository)
+        await model.issueList?.load()
+        #expect(model.issueList?.session(for: issue)?.id == open.id)
+
+        let result = await model.submitIssue()
+
+        guard case .resume(let session)? = result else {
+            Issue.record("expected the open session, got \(String(describing: result))")
+            return
+        }
+        #expect(session.id == open.id)
+        #expect(git.addedWorktrees.isEmpty)
+        #expect(client.detailCalls.isEmpty)
+        #expect(model.issueList == nil)
+    }
 }

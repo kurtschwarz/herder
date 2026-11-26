@@ -72,6 +72,34 @@ import Testing
         #expect(model.sessions.sessions.map(\.id) == [id])
     }
 
+    @Test func aSessionStartedFromAnIssueIsWrittenDownWithIt() async throws {
+        let model = try await shown()
+        let issue = LinkedIssue(number: 144, title: "From issue", url: URL(string: "https://github.com/o/r/issues/144")!)
+
+        await model.startSession(mode: .plan, prompt: "#144 From issue", name: "From issue", issue: issue)
+        let id = try #require(model.activeTab?.id)
+        model.activeTab?.screen?.send(text: "hello\r")
+
+        try await eventually("it is written down") { sessions.recorded(in: repository).contains { $0.id == id } }
+        #expect(sessions.session(id)?.issue == issue)
+        #expect(sessions.openSession(forIssue: 144, in: repository)?.id == id)
+    }
+
+    @Test func aSessionStartedFromAnIssueInAnotherWorkspaceKeepsItWhileItWaits() async throws {
+        let model = try await shown()
+        let other = URL(filePath: "/code/api/issue-9")
+        let issue = LinkedIssue(number: 9, title: "Nine", url: URL(string: "https://github.com/o/r/issues/9")!)
+
+        model.requestSession(in: WorkspaceID(other), mode: .plan, prompt: "p", name: "Nine", issue: issue)
+        let registry = WorkspaceRegistry(files: files, git: git, watcher: watcher, clock: clock, state: state)
+        await model.show(try #require(await registry.open(WorkspaceID(other))))
+        let id = try #require(model.activeTab?.id)
+        model.activeTab?.screen?.send(text: "hello\r")
+
+        try await eventually("it is written down") { sessions.recorded(in: PathKey(other)).contains { $0.id == id } }
+        #expect(sessions.session(id)?.issue == issue)
+    }
+
     @Test func aTabThatNeverStartedIsListedButNotWrittenDown() async throws {
         let model = try await shown()
         pty.failSpawns(with: .spawnFailed(2))

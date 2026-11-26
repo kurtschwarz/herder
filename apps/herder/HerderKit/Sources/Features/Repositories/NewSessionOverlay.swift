@@ -244,7 +244,7 @@ private struct NewSessionCard: View {
 }
 
 /// A pill to pick one of several things: a workspace or an agent.
-private struct ChoiceChip<Leading: View>: View {
+struct ChoiceChip<Leading: View>: View {
     let title: String
     var isSelected = false
     @ViewBuilder let leading: Leading

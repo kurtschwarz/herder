@@ -114,6 +114,9 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
     /// session of that branch.
     public var pullRequest: LinkedPullRequest?
 
+    /// The GitHub issue it was started from, if it was.
+    public var issue: LinkedIssue?
+
     /// `nil` in the app-wide record, and set on the copy a window lists while
     /// it has the tab open.
     public var live: Live?
@@ -137,6 +140,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
         endedAt: Date? = nil,
         endReason: EndReason? = nil,
         pullRequest: LinkedPullRequest? = nil,
+        issue: LinkedIssue? = nil,
         live: Live? = nil
     ) {
         self.id = id
@@ -152,6 +156,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
         self.endedAt = endedAt
         self.endReason = endReason
         self.pullRequest = pullRequest
+        self.issue = issue
         self.live = live
     }
 
@@ -160,7 +165,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
     /// among them.
     private enum CodingKeys: String, CodingKey {
         case id, agentID, agentName, sessionID, worktree, branch, title, name
-        case startedAt, lastSeenAt, endedAt, endReason, pullRequest
+        case startedAt, lastSeenAt, endedAt, endReason, pullRequest, issue
     }
 
     public init(from decoder: any Decoder) throws {
@@ -179,6 +184,7 @@ public struct AgentSession: Codable, Sendable, Equatable, Identifiable {
         endReason = try container.decodeIfPresent(EndReason.self, forKey: .endReason)
         if endedAt != nil, endReason == nil { endReason = .unknown }
         pullRequest = try container.decodeIfPresent(LinkedPullRequest.self, forKey: .pullRequest)
+        issue = try container.decodeIfPresent(LinkedIssue.self, forKey: .issue)
         live = nil
     }
 

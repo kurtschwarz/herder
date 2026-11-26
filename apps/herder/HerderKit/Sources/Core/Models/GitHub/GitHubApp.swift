@@ -6,4 +6,15 @@ public enum GitHubApp {
     /// the one GitHub gives an App named `Herder`: see
     /// `docs/adr/0003-github-app-registration.md`.
     public static let installURL = URL(string: "https://github.com/apps/herder/installations/new")!
+
+    /// Where to review what the App may read on `owner`'s installation: the
+    /// user's own settings when `owner` is the signed-in `login`, the
+    /// organisation's otherwise.
+    public static func installationSettingsURL(owner: String, login: String?) -> URL {
+        if let login, login.caseInsensitiveCompare(owner) == .orderedSame {
+            return URL(string: "https://github.com/settings/installations")!
+        }
+        let escaped = owner.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? owner
+        return URL(string: "https://github.com/organizations/\(escaped)/settings/installations")!
+    }
 }

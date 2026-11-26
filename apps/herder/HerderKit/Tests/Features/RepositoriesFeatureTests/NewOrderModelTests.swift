@@ -202,4 +202,121 @@ import Testing
         model.text = "x"
         #expect(model.canSubmit)
     }
+
+    // MARK: - From an issue
+
+    func detail(
+        number: Int = 144, title: String = "Start an agent from a GitHub issue (\"From issue\")"
+    ) -> GitHubIssueDetail {
+        GitHubIssueDetail(
+            issue: GitHubIssue(
+                number: number, url: URL(string: "https://github.com/o/r/issues/\(number)")!, title: title
+            ),
+            body: "Add the button.",
+            comments: [.init(author: "ada", body: "Plan mode please.")]
+        )
+    }
+
+    @Test func anIssueGetsABranchNamedForItsNumberAndTitleCutFromTheFetchedDefaultBranch() async throws {
+        let started = try #require(await model.start(from: detail(), in: repository))
+
+        let branch = "issue/144-start-an-agent-from-a-github-issue-from"
+        #expect(git.addedWorktrees == [
+            .init(repository: repository, path: repository.appending(path: branch), newBranch: branch, base: "origin/main")
+        ])
+        #expect(started.worktree == repository.appending(path: branch))
+        #expect(model.failure == nil)
+        #expect(!model.isWorking)
+    }
+
+    @Test func theBranchNeverAsksTheNamer() async throws {
+        _ = await model.start(from: detail(), in: repository)
+
+        #expect(namer.prompts.isEmpty)
+        #expect(git.fetchedRepositories == [repository])
+    }
+
+    @Test func aBranchThatExistsGetsANumberOnTheEndLikeAnOrderBranch() async throws {
+        git.seed(branches: ["main", "issue/7-crash", "issue/7-crash-2"], at: repository)
+
+        _ = await model.start(from: detail(number: 7, title: "Crash"), in: repository)
+
+        #expect(git.addedWorktrees.map(\.newBranch) == ["issue/7-crash-3"])
+    }
+
+    @Test func theSessionIsNamedByTheIssueTitleCutToATabsWidth() async throws {
+        let started = try #require(await model.start(from: detail(), in: repository))
+
+        #expect(started.title == String(detail().issue.title.prefix(NewOrderModel.maxTitleLength)))
+        #expect(started.title.count == 40)
+    }
+
+    @Test func theIssueIsRememberedWithTheSession() async throws {
+        let started = try #require(await model.start(from: detail(number: 9, title: "Nine"), in: repository))
+
+        #expect(started.issue == LinkedIssue(number: 9, title: "Nine", url: URL(string: "https://github.com/o/r/issues/9")!))
+    }
+
+    @Test func thePromptIsTheIssueThroughTheUsersTemplate() async throws {
+        let templated = NewOrderModel(
+            git: git, namer: namer, naming: { NamingConfiguration(endpoint: URL(string: "http://x")!) },
+            promptTemplate: { "/grill-me {prompt}" }
+        )
+
+        let started = try #require(await templated.start(from: detail(number: 9, title: "Nine"), in: repository))
+
+        #expect(started.prompt == """
+            /grill-me #9 Nine
+
+            https://github.com/o/r/issues/9
+
+            Add the button.
+
+            Comments, oldest first:
+
+            @ada:
+            Plan mode please.
+            """)
+    }
+
+    @Test func anIssueWithoutATemplateIsTheIssueAsItIs() async throws {
+        let started = try #require(await model.start(from: detail(number: 9, title: "Nine"), in: repository))
+
+        #expect(started.prompt.hasPrefix("#9 Nine\n\nhttps://github.com/o/r/issues/9\n\nAdd the button."))
+    }
+
+    @Test func aFailedFetchStillCutsFromTheLocalDefaultBranch() async throws {
+        git.failFetching(with: "offline")
+
+        _ = try #require(await model.start(from: detail(), in: repository))
+
+        #expect(git.addedWorktrees.map(\.base) == ["main"])
+    }
+
+    @Test func aWorktreeThatCannotBeMadeStartsNothingAndShowsGitsWords() async throws {
+        git.failAddingWorktrees(with: "fatal: boom")
+
+        #expect(await model.start(from: detail(), in: repository) == nil)
+
+        #expect(model.failure == "fatal: boom")
+        #expect(!model.isWorking)
+    }
+
+    @Test func noDefaultBranchStartsNothing() async throws {
+        git.seed(fetchedBase: nil, at: repository)
+        git.seed(branches: ["trunk-only"], at: repository)
+
+        #expect(await model.start(from: detail(), in: repository) == nil)
+
+        #expect(model.failure != nil)
+        #expect(git.addedWorktrees.isEmpty)
+    }
+
+    @Test func whatWasTypedInTheCardIsLeftAlone() async throws {
+        model.text = "something else"
+
+        _ = await model.start(from: detail(), in: repository)
+
+        #expect(model.text == "something else")
+    }
 }

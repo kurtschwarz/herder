@@ -6,7 +6,7 @@ import Foundation
 public enum DaemonWire {
     /// The versions this build of the app speaks. Raise `supported.upperBound`
     /// when the app starts using a message the daemon gained in that version.
-    public static let supported = 4...5
+    public static let supported = 6...6
 
     /// A frame is a big-endian `UInt32` length and then that many bytes.
     public static let headerSize = 4
@@ -215,6 +215,113 @@ public enum DaemonWire {
 
     private static func message(_ fields: [String: Any]) -> Data {
         (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+    }
+
+    // MARK: - Issues
+
+    /// Asks for the open issues of the repository `path`'s `origin` names,
+    /// which ``issueList(fromReply:id:)`` reads the answer to.
+    public static func issueQuery(
+        id: Int, path: String, tab: GitHubIssueTab, freshness: GitHubIssueFreshness
+    ) -> Data {
+        message([
+            "type": "issue_query", "id": id, "path": path, "tab": tab.rawValue, "freshness": freshness.rawValue,
+        ])
+    }
+
+    /// Asks for one issue with its body and comments, which
+    /// ``issueDetail(fromReply:id:)`` reads the answer to.
+    public static func issueDetail(id: Int, path: String, number: Int) -> Data {
+        message(["type": "issue_detail", "id": id, "path": path, "number": number])
+    }
+
+    /// What an `issue_response` to request `id` says. `nil` for anything else,
+    /// including the answer to another request.
+    public static func issueList(fromReply payload: Data, id: Int) -> GitHubIssueList? {
+        guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              object["type"] as? String == "issue_response",
+              object["id"] as? Int == id,
+              let result = object["result"] as? [String: Any],
+              let status = (result["status"] as? [String: Any]).flatMap(issueStatus),
+              let records = result["issues"] as? [[String: Any]]
+        else { return nil }
+
+        var issues: [GitHubIssue] = []
+        for record in records {
+            guard let issue = githubIssue(fromRecord: record) else { return nil }
+            issues.append(issue)
+        }
+        return GitHubIssueList(
+            repository: result["repository"] as? String,
+            status: status,
+            issues: issues,
+            fetchedAt: (result["fetched_at"] as? Double).map { Date(timeIntervalSince1970: $0) },
+            assignedCount: result["assigned_count"] as? Int,
+            openCount: result["open_count"] as? Int
+        )
+    }
+
+    /// What an `issue_detail_response` to request `id` says. `nil` for
+    /// anything else.
+    public static func issueDetail(fromReply payload: Data, id: Int) -> GitHubIssueDetailReply? {
+        guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              object["type"] as? String == "issue_detail_response",
+              object["id"] as? Int == id,
+              let result = object["result"] as? [String: Any],
+              let status = (result["status"] as? [String: Any]).flatMap(issueStatus)
+        else { return nil }
+
+        guard let record = result["detail"] as? [String: Any] else {
+            return GitHubIssueDetailReply(status: status)
+        }
+        guard let issue = (record["issue"] as? [String: Any]).flatMap(githubIssue(fromRecord:)),
+              let body = record["body"] as? String,
+              let comments = record["comments"] as? [[String: Any]]
+        else { return nil }
+        var parsed: [GitHubIssueDetail.Comment] = []
+        for comment in comments {
+            guard let text = comment["body"] as? String else { return nil }
+            parsed.append(GitHubIssueDetail.Comment(
+                author: comment["author"] as? String,
+                body: text,
+                createdAt: (comment["created_at"] as? String).flatMap(timestamp) ?? .distantPast
+            ))
+        }
+        return GitHubIssueDetailReply(
+            status: status, detail: GitHubIssueDetail(issue: issue, body: body, comments: parsed)
+        )
+    }
+
+    private static func issueStatus(fromRecord record: [String: Any]) -> GitHubIssueStatus? {
+        switch record["state"] as? String {
+        case "ok": .ok
+        case "not_accessible": .notAccessible
+        case "unauthorized": .unauthorized
+        case "permission_missing": .permissionMissing
+        case "error": .error(record["message"] as? String ?? "GitHub could not be asked.")
+        default: nil
+        }
+    }
+
+    private static func githubIssue(fromRecord record: [String: Any]) -> GitHubIssue? {
+        guard let number = record["number"] as? Int,
+              let url = (record["url"] as? String).flatMap(URL.init(string:)),
+              let title = record["title"] as? String
+        else { return nil }
+        let labels = (record["labels"] as? [[String: Any]] ?? []).compactMap { label -> GitHubIssue.Label? in
+            guard let name = label["name"] as? String else { return nil }
+            return GitHubIssue.Label(name: name, color: label["color"] as? String ?? "")
+        }
+        return GitHubIssue(
+            number: number,
+            url: url,
+            title: title,
+            labels: labels,
+            author: record["author"] as? String,
+            createdAt: (record["created_at"] as? String).flatMap(timestamp) ?? .distantPast,
+            updatedAt: (record["updated_at"] as? String).flatMap(timestamp) ?? .distantPast,
+            commentCount: record["comments"] as? Int ?? 0
+        )
     }
 
     // MARK: - Git

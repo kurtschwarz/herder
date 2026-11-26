@@ -20,6 +20,8 @@ struct NewOrderCard: View {
 
     private var canPlan: Bool { order.canSubmit && repository != nil }
 
+    private var canStartFromIssue: Bool { model.canStartFromIssue(in: repository) && !order.isWorking }
+
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
     }
@@ -44,6 +46,7 @@ struct NewOrderCard: View {
         .padding(Theme.Spacing.normal + Theme.Spacing.tight)
         .background(Theme.Palette.fieldGroup, in: shape)
         .overlay { shape.strokeBorder(Theme.Palette.hairline, lineWidth: 1) }
+        .task(id: repository?.id) { await model.probeGitHubRemote(of: repository) }
         .padding(.horizontal, Theme.Spacing.windowPadding)
         .padding(.bottom, Theme.Spacing.normal)
     }
@@ -87,16 +90,16 @@ struct NewOrderCard: View {
 
     private var actions: some View {
         HStack(spacing: Theme.Spacing.normal) {
-            Button {} label: {
+            Button(action: openIssues) {
                 Text("From issue")
                     .font(.system(size: 12))
                     .lineLimit(1)
             }
             .buttonStyle(.plain)
             .foregroundStyle(Theme.Palette.secondaryText)
-            .disabled(true)
-            .opacity(0.5)
-            .help("Coming soon")
+            .disabled(!canStartFromIssue)
+            .opacity(canStartFromIssue ? 1 : 0.5)
+            .help(canStartFromIssue ? "Start from a GitHub issue\u{2026}" : "Not a GitHub repository")
 
             Spacer(minLength: 0)
 
@@ -124,6 +127,11 @@ struct NewOrderCard: View {
                 result.worktree, mode: .plan, prompt: result.started.prompt, name: result.started.title
             )
         }
+    }
+
+    private func openIssues() {
+        guard let repository else { return }
+        model.beginIssues(in: repository)
     }
 
     private func openModal() {
