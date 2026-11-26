@@ -459,8 +459,10 @@ private struct IssueRow: View {
         }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
-        .onTapGesture(count: 2, perform: start)
+        // Side by side, so a single click selects at once instead of waiting
+        // to see whether a second one follows.
         .onTapGesture(perform: select)
+        .simultaneousGesture(TapGesture(count: 2).onEnded(start))
         .pointerStyle(.link)
     }
 
