@@ -38,6 +38,7 @@ public struct SegmentedToggle<Option: Hashable>: View {
                 }
         }
         .fixedSize()
+        .pointerStyle(.link)
     }
 
     private func segment(_ option: Option) -> some View {
@@ -75,7 +76,6 @@ public struct SegmentedToggle<Option: Hashable>: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .pointerStyle(.link)
     }
 }
 
