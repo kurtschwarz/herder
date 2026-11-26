@@ -99,7 +99,6 @@ private struct IssueCard: View {
         .padding(Theme.Spacing.section)
         .frame(width: Theme.Size.wideModalWidth)
         .modalSurface()
-        .background { tabShortcuts }
         .task(id: ObjectIdentifier(model)) {
             isSearchFocused = true
             await model.load()
@@ -167,7 +166,8 @@ private struct IssueCard: View {
                 GitHubIssueTab.allCases,
                 selection: Binding(get: { model.tab }, set: { tab in Task { await model.show(tab) } }),
                 title: { $0 == .assigned ? "Assigned to me" : "All open" },
-                count: { model.count(for: $0) }
+                count: { model.count(for: $0) },
+                hasNumberShortcuts: true
             )
             Spacer(minLength: 0)
             Button {
@@ -185,19 +185,6 @@ private struct IssueCard: View {
             .disabled(model.isRefreshing || model.isStarting)
             .help(model.updatedText)
         }
-    }
-
-    /// ⌘1 and ⌘2, which the tabs have no visible key for.
-    private var tabShortcuts: some View {
-        HStack {
-            Button("") { Task { await model.show(.assigned) } }
-                .keyboardShortcut("1", modifiers: .command)
-            Button("") { Task { await model.show(.open) } }
-                .keyboardShortcut("2", modifiers: .command)
-        }
-        .opacity(0)
-        .frame(width: 0, height: 0)
-        .accessibilityHidden(true)
     }
 
     // MARK: - Content

@@ -1,12 +1,14 @@
 import SwiftUI
 
 /// A switch between a few options, one always on: a recessed track with a
-/// pill that slides to the chosen one. Each option may carry a count.
+/// pill that slides to the chosen one. Each option may carry a count, and the
+/// first nine can answer to ⌘1 to ⌘9.
 public struct SegmentedToggle<Option: Hashable>: View {
     private let options: [Option]
     private let selection: Binding<Option>
     private let title: (Option) -> String
     private let count: (Option) -> Int?
+    private let hasNumberShortcuts: Bool
 
     @Namespace private var pill
 
@@ -14,12 +16,14 @@ public struct SegmentedToggle<Option: Hashable>: View {
         _ options: [Option],
         selection: Binding<Option>,
         title: @escaping (Option) -> String,
-        count: @escaping (Option) -> Int? = { _ in nil }
+        count: @escaping (Option) -> Int? = { _ in nil },
+        hasNumberShortcuts: Bool = false
     ) {
         self.options = options
         self.selection = selection
         self.title = title
         self.count = count
+        self.hasNumberShortcuts = hasNumberShortcuts
     }
 
     public var body: some View {
@@ -39,6 +43,20 @@ public struct SegmentedToggle<Option: Hashable>: View {
         }
         .fixedSize()
         .pointerStyle(.link)
+        .background { if hasNumberShortcuts { shortcuts } }
+    }
+
+    /// Out of sight: the segments have no visible key to show.
+    private var shortcuts: some View {
+        HStack {
+            ForEach(Array(options.prefix(9).enumerated()), id: \.offset) { index, option in
+                Button("") { selection.wrappedValue = option }
+                    .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
+            }
+        }
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
     }
 
     private func segment(_ option: Option) -> some View {
