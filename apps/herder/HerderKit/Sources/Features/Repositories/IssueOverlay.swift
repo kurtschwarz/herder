@@ -72,6 +72,10 @@ private struct IssueCard: View {
     /// Rows in view before the list scrolls.
     private static let visibleRows: CGFloat = 6
 
+    /// How tall the list is, and whatever shows in its place, so the modal
+    /// keeps its height while issues load or a search narrows them.
+    static let contentHeight = visibleRows * IssueRow.height
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.loose) {
             header
@@ -221,7 +225,8 @@ private struct IssueCard: View {
                 .font(.callout)
                 .foregroundStyle(Theme.Palette.tertiaryText)
         }
-        .frame(maxWidth: .infinity, minHeight: IssueRow.height * 2)
+        .frame(maxWidth: .infinity)
+        .frame(height: Self.contentHeight)
         .fieldGroupSurface()
     }
 
@@ -247,7 +252,7 @@ private struct IssueCard: View {
                 .padding(Theme.Spacing.normal)
             }
             .scrollIndicators(.hidden)
-            .frame(maxHeight: Self.visibleRows * IssueRow.height)
+            .frame(height: Self.contentHeight)
             .fieldGroupSurface()
             .onChange(of: model.selected?.number) { _, number in
                 guard let number else { return }
@@ -332,7 +337,8 @@ private struct IssueUnavailable: View {
             }
         }
         .padding(Theme.Spacing.loose)
-        .frame(maxWidth: .infinity, minHeight: IssueRow.height * 2, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: IssueCard.contentHeight)
         .fieldGroupSurface()
     }
 
