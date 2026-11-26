@@ -12,9 +12,9 @@ public enum Theme {
         public static let section: CGFloat = 24
 
         /// Inset between the window edge and the panes floating inside it.
-        public static let windowPadding: CGFloat = 10
+        public static let windowPadding: CGFloat = 8
         /// Gap between adjacent panes.
-        public nonisolated static let paneGap: CGFloat = 10
+        public nonisolated static let paneGap: CGFloat = 8
         /// Horizontal inset for content inside a pane.
         public static let paneInset: CGFloat = 16
     }
