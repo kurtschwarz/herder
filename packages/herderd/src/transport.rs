@@ -112,6 +112,8 @@ pub fn peer_is_owner(stream: &UnixStream) -> io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::frame::{read_frame, write_frame};
+    use crate::protocol::{ClientMessage, DaemonMessage, MAX_PROTOCOL, MIN_PROTOCOL};
     use std::sync::mpsc;
 
     fn scratch(name: &str) -> std::path::PathBuf {
@@ -145,13 +147,34 @@ mod tests {
     const GRACE: Duration = Duration::from_millis(150);
 
     fn serve_in_background(path: &Path) -> mpsc::Receiver<io::Result<()>> {
+        serve_in_background_with(path, GRACE)
+    }
+
+    fn serve_in_background_with(path: &Path, grace: Duration) -> mpsc::Receiver<io::Result<()>> {
         let listener = bind(path).unwrap();
         let path = path.to_path_buf();
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
-            let _ = sender.send(serve_until_idle(listener, &path, GRACE));
+            let _ = sender.send(serve_until_idle(listener, &path, grace));
         });
         receiver
+    }
+
+    /// Connects and waits for `welcome`. `connect` returns once the kernel has
+    /// queued the connection, before the daemon has counted it; a session only
+    /// answers once it has.
+    fn connect_and_greet(path: &Path) -> UnixStream {
+        let mut client = UnixStream::connect(path).unwrap();
+        client.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let hello = ClientMessage::Hello {
+            min_protocol: MIN_PROTOCOL,
+            max_protocol: MAX_PROTOCOL,
+            client: "test".into(),
+        };
+        write_frame(&mut client, &serde_json::to_vec(&hello).unwrap()).unwrap();
+        let reply = read_frame(&mut client).unwrap().expect("counted before the daemon closed");
+        assert!(matches!(serde_json::from_slice(&reply).unwrap(), DaemonMessage::Welcome { .. }));
+        client
     }
 
     #[test]
@@ -168,7 +191,7 @@ mod tests {
     fn a_connected_client_keeps_it_running_until_it_leaves() {
         let path = scratch("held");
         let done = serve_in_background(&path);
-        let client = UnixStream::connect(&path).unwrap();
+        let client = connect_and_greet(&path);
 
         assert!(done.recv_timeout(GRACE * 4).is_err());
         assert!(path.exists());
@@ -180,11 +203,14 @@ mod tests {
 
     #[test]
     fn a_client_arriving_during_the_countdown_cancels_it() {
+        // Longer than `GRACE`: the accept thread must count the client before
+        // the countdown ends, and a busy machine can be slow to schedule it.
+        let grace = Duration::from_millis(600);
         let path = scratch("cancel");
-        let done = serve_in_background(&path);
-        thread::sleep(GRACE / 2);
-        let client = UnixStream::connect(&path).unwrap();
-        assert!(done.recv_timeout(GRACE * 4).is_err());
+        let done = serve_in_background_with(&path, grace);
+        thread::sleep(Duration::from_millis(100));
+        let client = connect_and_greet(&path);
+        assert!(done.recv_timeout(grace * 2).is_err());
 
         drop(client);
         done.recv_timeout(Duration::from_secs(5)).expect("exits once it is idle again").unwrap();
