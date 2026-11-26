@@ -75,8 +75,10 @@ private struct IssueCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.loose) {
             header
-            search
-            tabs
+            HStack(spacing: Theme.Spacing.normal) {
+                search
+                tabs
+            }
             content
             if let line = model.refreshError ?? model.failure {
                 Text(line)
@@ -133,7 +135,7 @@ private struct IssueCard: View {
             TextField(
                 "Search",
                 text: Binding(get: { model.query }, set: { model.query = $0 }),
-                prompt: Text("Search, or paste #123 or an issue link")
+                prompt: Text("Search, #123 or a link")
                     .foregroundStyle(Theme.Palette.tertiaryText)
             )
             .textFieldStyle(.plain)
@@ -156,6 +158,7 @@ private struct IssueCard: View {
         .frame(minHeight: Theme.Size.control)
         .fieldSurface()
         .disabled(model.isStarting)
+        .help("Search, or paste #123 or an issue link")
     }
 
     // MARK: - Tabs
@@ -169,7 +172,6 @@ private struct IssueCard: View {
                 count: { model.count(for: $0) },
                 hasNumberShortcuts: true
             )
-            Spacer(minLength: 0)
             Button {
                 Task { await model.refresh() }
             } label: {
