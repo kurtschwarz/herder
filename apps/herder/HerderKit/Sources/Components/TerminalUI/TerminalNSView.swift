@@ -483,6 +483,8 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
 
     override func mouseMoved(with event: NSEvent) {
         updateCursor(for: event)
+        // A hover over what Command-click would open is not the program's.
+        if opensLinks(event.modifierFlags), link(at: convert(event.locationInWindow, from: nil)) != nil { return }
         if programOwnsMouse(event) { report(.motion, nil, event) }
     }
 
@@ -491,7 +493,9 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     }
 
     private func updateCursor(for event: NSEvent) {
-        cursor(at: convert(event.locationInWindow, from: nil), modifiers: event.modifierFlags).set()
+        // The keyboard as it is now, not the event's: a cursor-update event
+        // does not carry the modifiers, so Command read from it flickers.
+        cursor(at: convert(event.locationInWindow, from: nil), modifiers: NSEvent.modifierFlags).set()
     }
 
     /// The hand comes and goes with Command, without the mouse moving.
