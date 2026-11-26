@@ -98,6 +98,7 @@ struct NewOrderCard: View {
             .buttonStyle(.plain)
             .foregroundStyle(Theme.Palette.secondaryText)
             .disabled(!canStartFromIssue)
+            .pointerStyle(canStartFromIssue ? .link : nil)
             .opacity(canStartFromIssue ? 1 : 0.5)
             .help(canStartFromIssue ? "Start from a GitHub issue\u{2026}" : "Not a GitHub repository")
 
