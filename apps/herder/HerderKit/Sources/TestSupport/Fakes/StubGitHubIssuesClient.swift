@@ -23,7 +23,8 @@ public final class StubGitHubIssuesClient: GitHubIssuesClient {
         var details: [Int: Result<GitHubIssueDetailReply, StubGitHubIssuesError>] = [:]
         var calls: [Call] = []
         var detailCalls: [Int] = []
-        var delay: Duration?
+        var held: Set<GitHubIssueFreshness> = []
+        var waiters: [CheckedContinuation<Void, Never>] = []
     }
 
     private let state = Mutex(State())
@@ -56,20 +57,39 @@ public final class StubGitHubIssuesClient: GitHubIssuesClient {
         state.withLock { $0.details[number] = .failure(.unreachable) }
     }
 
-    /// Holds every answer back this long, so a test can see what a request in
-    /// flight looks like.
-    public func delay(_ duration: Duration?) {
-        state.withLock { $0.delay = duration }
+    /// Holds list requests of `freshness` back until ``release()``, so a test
+    /// can see what a request in flight looks like.
+    public func hold(_ freshness: GitHubIssueFreshness) {
+        state.withLock { _ = $0.held.insert(freshness) }
     }
+
+    /// Lets every held request answer, and stops holding.
+    public func release() {
+        let waiters = state.withLock { state in
+            state.held = []
+            defer { state.waiters = [] }
+            return state.waiters
+        }
+        for waiter in waiters { waiter.resume() }
+    }
+
+    /// How many requests are being held.
+    public var waiting: Int { state.withLock { $0.waiters.count } }
 
     public func list(
         at path: String, tab: GitHubIssueTab, freshness: GitHubIssueFreshness
     ) async throws -> GitHubIssueList {
-        let (result, delay) = state.withLock { state -> (Result<GitHubIssueList, StubGitHubIssuesError>?, Duration?) in
-            state.calls.append(Call(path: path, tab: tab, freshness: freshness))
-            return (state.lists[Self.key(tab, freshness)], state.delay)
+        state.withLock { $0.calls.append(Call(path: path, tab: tab, freshness: freshness)) }
+        await withCheckedContinuation { (waiter: CheckedContinuation<Void, Never>) in
+            let isHeld = state.withLock { state in
+                guard state.held.contains(freshness) else { return false }
+                state.waiters.append(waiter)
+                return true
+            }
+            if !isHeld { waiter.resume() }
         }
-        if let delay { try await Task.sleep(for: delay) }
+        // Read after the hold, so a test may change the answer meanwhile.
+        let result = state.withLock { $0.lists[Self.key(tab, freshness)] }
         guard let result else { throw StubGitHubIssuesError.unreachable }
         return try result.get()
     }

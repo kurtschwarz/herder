@@ -79,19 +79,26 @@ import Testing
         #expect(model.issues.map(\.title) == ["New", "An issue"])
     }
 
+    /// Waits for the stub to be holding `count` requests.
+    func untilHeld(_ count: Int = 1) async throws {
+        while client.waiting < count { try await Task.sleep(for: .milliseconds(1)) }
+    }
+
     @Test func aCachedAnswerShowsWhileTheFreshOneIsStillOnItsWay() async throws {
         client.answer(list([issue(1)]), tab: .assigned, freshness: .cached)
         client.answer(list([issue(1), issue(2)]), tab: .assigned, freshness: .fresh)
-        client.delay(.milliseconds(50))
+        client.hold(.fresh)
 
         let loading = Task { await model.load() }
-        try await Task.sleep(for: .milliseconds(20))
+        try await untilHeld()
+        while model.isLoading { await Task.yield() }
         #expect(model.isRefreshing)
-        #expect(model.isLoading)
+        #expect(model.issues.map(\.number) == [1])
 
+        client.release()
         await loading.value
         #expect(!model.isRefreshing)
-        #expect(!model.isLoading)
+        #expect(model.issues.map(\.number) == [1, 2])
     }
 
     @Test func nothingAssignedOpensOnAllOpen() async {
@@ -166,12 +173,13 @@ import Testing
     @Test func theRefreshButtonSpinsWhileARequestIsInFlight() async throws {
         seedBothTabs()
         await model.load()
-        client.delay(.milliseconds(50))
+        client.hold(.fresh)
 
         let refreshing = Task { await model.refresh() }
-        try await Task.sleep(for: .milliseconds(20))
+        try await untilHeld()
         #expect(model.isRefreshing)
 
+        client.release()
         await refreshing.value
         #expect(!model.isRefreshing)
     }
@@ -179,12 +187,13 @@ import Testing
     @Test func pressingRefreshWhileOneIsInFlightAsksNothingMore() async throws {
         seedBothTabs()
         await model.load()
-        client.delay(.milliseconds(50))
+        client.hold(.fresh)
         let before = client.calls.count
 
         let refreshing = Task { await model.refresh() }
-        try await Task.sleep(for: .milliseconds(20))
+        try await untilHeld()
         await model.refresh()
+        client.release()
         await refreshing.value
 
         #expect(client.calls.count == before + 1)
