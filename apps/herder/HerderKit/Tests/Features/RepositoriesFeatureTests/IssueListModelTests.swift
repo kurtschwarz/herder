@@ -373,6 +373,34 @@ import Testing
         #expect(model.visibleIssues.isEmpty)
     }
 
+    @Test func aNumberThatIsNoIssueSaysSo() async {
+        await seedFour()
+        client.answer(GitHubIssueDetailReply(status: .ok, detail: nil), number: 404)
+
+        model.query = "#404"
+        for _ in 0..<50 where model.isLookingUp { try? await Task.sleep(for: .milliseconds(10)) }
+
+        #expect(model.lookupMiss == 404)
+        model.query = "minimap"
+        #expect(model.lookupMiss == nil)
+    }
+
+    @Test func aRefreshMayTryToMendARefusedTokenAgain() async {
+        let client = client
+        let refusals = signInRefusals
+        let model = IssueListModel(
+            workspaceName: "api", path: "/code/api", client: client, openSession: { _ in nil },
+            signInRefused: { refusals.count += 1 }
+        )
+        client.answer(GitHubIssueList(repository: "o/r", status: .unauthorized), tab: .assigned, freshness: .fresh)
+        client.answer(nothingCached(), tab: .assigned, freshness: .cached)
+        await model.load()
+
+        await model.refresh()
+
+        #expect(refusals.count == 2)
+    }
+
     @Test func aLinkToAnotherRepositoryIsNotJumpedTo() async {
         await seedFour()
 

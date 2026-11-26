@@ -65,6 +65,10 @@ final class IssueListModel {
     private(set) var isStarting = false
     private(set) var isLookingUp = false
 
+    /// The number of an issue looked up and not found, which includes a pull
+    /// request's: there is nothing to show for it.
+    private(set) var lookupMiss: Int?
+
     /// `owner/name`, once herderd has said.
     private(set) var repository: String?
 
@@ -119,6 +123,7 @@ final class IssueListModel {
     /// Asks GitHub again for the tab on show, and only that.
     func refresh() async {
         refreshError = nil
+        retriedSignIn = false
         await fetch(tab, .fresh)
     }
 
@@ -278,6 +283,7 @@ final class IssueListModel {
     private func queryChanged() {
         lookup?.cancel()
         lookup = nil
+        lookupMiss = nil
         guard let reference = IssueReference(parsing: query), reference.matches(repository) else {
             isLookingUp = false
             return
@@ -294,7 +300,11 @@ final class IssueListModel {
     private func lookUp(_ number: Int) async {
         defer { if !Task.isCancelled { isLookingUp = false } }
         guard let reply = try? await client.detail(at: path, number: number), !Task.isCancelled else { return }
-        if reply.status == .ok, let issue = reply.detail?.issue { lookedUp = issue }
+        if reply.status == .ok, let issue = reply.detail?.issue {
+            lookedUp = issue
+        } else if reply.status == .ok {
+            lookupMiss = number
+        }
     }
 
     // MARK: - Starting

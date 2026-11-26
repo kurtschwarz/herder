@@ -1,6 +1,5 @@
 import Core
 import Foundation
-import Synchronization
 
 /// `GitHubIssuesClient` that asks herderd, which holds the token and makes the
 /// requests. See ADR 0005.
@@ -10,7 +9,7 @@ public struct DaemonGitHubIssuesClient: GitHubIssuesClient {
     }
 
     private let daemon: any DaemonClient
-    private let nextID = Counter()
+    private let nextID = RequestCounter()
 
     public init(daemon: any DaemonClient) {
         self.daemon = daemon
@@ -32,16 +31,5 @@ public struct DaemonGitHubIssuesClient: GitHubIssuesClient {
         let reply = try await daemon.request(DaemonWire.issueDetail(id: id, path: path, number: number))
         guard let detail = DaemonWire.issueDetail(fromReply: reply, id: id) else { throw Failure.unrecognisedReply }
         return detail
-    }
-}
-
-private final class Counter: Sendable {
-    private let value = Mutex(0)
-
-    func next() -> Int {
-        value.withLock {
-            $0 += 1
-            return $0
-        }
     }
 }

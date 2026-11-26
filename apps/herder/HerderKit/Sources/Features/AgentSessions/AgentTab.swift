@@ -135,6 +135,10 @@ final class AgentTab: Identifiable {
         self.id = id
         self.firstPrompt = firstPrompt
         self.issue = issue
+        // An issue is the person's own request, given to the agent as its first
+        // message, so a session started from one is worth remembering at once.
+        // This is what lets the issue be marked in progress before they type.
+        self.hasConversed = issue != nil && firstPrompt != nil
         self.agent = agent
         self.number = number
         self.mode = mode

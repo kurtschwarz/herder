@@ -85,6 +85,25 @@ import Testing
         #expect(sessions.openSession(forIssue: 144, in: repository)?.id == id)
     }
 
+    @Test func aSessionStartedFromAnIssueIsInProgressBeforeAnythingIsTyped() async throws {
+        let model = try await shown()
+        let issue = LinkedIssue(number: 144, title: "From issue", url: URL(string: "https://github.com/o/r/issues/144")!)
+
+        await model.startSession(mode: .plan, prompt: "#144 From issue", name: "From issue", issue: issue)
+
+        let id = try #require(model.activeTab?.id)
+        try await eventually("it is written down") { sessions.openSession(forIssue: 144, in: repository)?.id == id }
+    }
+
+    @Test func aSessionStartedWithAPromptButNoIssueWaitsForTheFirstReturn() async throws {
+        let model = try await shown()
+
+        await model.startSession(mode: .plan, prompt: "add a minimap")
+        await sessions.flushSaves()
+
+        #expect(sessions.recorded(in: repository).isEmpty)
+    }
+
     @Test func aSessionStartedFromAnIssueInAnotherWorkspaceKeepsItWhileItWaits() async throws {
         let model = try await shown()
         let other = URL(filePath: "/code/api/issue-9")

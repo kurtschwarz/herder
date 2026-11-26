@@ -1,6 +1,5 @@
 import Core
 import Foundation
-import Synchronization
 
 /// `GitClient` that asks herderd, bound to the one host it runs on. See ADR 0002.
 ///
@@ -9,7 +8,7 @@ import Synchronization
 /// throws `GitClientError.commandFailed("herderd is not running")`.
 public struct DaemonGitClient: GitClient {
     private let daemon: any DaemonClient
-    private let nextID = Counter()
+    private let nextID = RequestCounter()
 
     public init(daemon: any DaemonClient) {
         self.daemon = daemon
@@ -144,16 +143,5 @@ public struct DaemonGitClient: GitClient {
             throw GitClientError.commandFailed("herderd is not running")
         }
         return try DaemonWire.gitResult(fromReply: reply, id: id)
-    }
-}
-
-private final class Counter: Sendable {
-    private let value = Mutex(0)
-
-    func next() -> Int {
-        value.withLock {
-            $0 += 1
-            return $0
-        }
     }
 }

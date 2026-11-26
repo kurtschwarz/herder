@@ -243,6 +243,7 @@ private struct IssueCard: View {
 
     private var emptyMessage: String {
         if !model.query.isEmpty {
+            if let missed = model.lookupMiss { return "There is no issue #\(missed) in \(model.repository ?? model.workspaceName)." }
             return IssueReference(parsing: model.query) != nil && model.isLookingUp
                 ? "Looking for that issue\u{2026}" : "No issues match."
         }

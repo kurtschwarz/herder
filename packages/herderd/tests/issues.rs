@@ -260,6 +260,25 @@ fn an_installation_without_the_issues_permission_says_so() {
 }
 
 #[test]
+fn another_kind_of_refusal_is_an_error_in_its_own_words() {
+    let fixture = Fixture::new();
+    let repo = fixture.repository_with_origin("repo", "git@github.com:o/r.git");
+    let body = r#"{"data":{"repository":{"assigned":null,"open":null}},"errors":[{"type":"FORBIDDEN","message":"Resource protected by organization SAML enforcement."}]}"#;
+    let server = stub(vec![(200, VIEWER.into()), (200, body.into())]);
+
+    let found = connected(&server.endpoint).issues(
+        repo.to_str().unwrap(),
+        IssueTab::Open,
+        IssueFreshness::Fresh,
+    );
+
+    match found.status {
+        IssueRepoStatus::Error { message } => assert!(message.contains("SAML"), "{message}"),
+        other => panic!("unexpected: {other:?}"),
+    }
+}
+
+#[test]
 fn a_refused_token_is_unauthorized_and_so_is_none() {
     let fixture = Fixture::new();
     let repo = fixture.repository_with_origin("repo", "git@github.com:o/r.git");

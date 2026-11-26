@@ -162,7 +162,7 @@ impl GitHub {
             .replace("$last", &COMMENTS.to_string());
         let variables = json!({ "o": target.owner, "n": target.name, "number": number });
         let data = match self.graphql::<DetailData>(&token, &query, variables) {
-            Ok(data) => data,
+            Ok((data, _)) => data,
             Err(status) => return reply(status, None),
         };
         match data.repository {
@@ -232,15 +232,16 @@ impl GitHub {
             if tab == IssueTab::Open { nodes } else { "" },
         );
         let variables = json!({ "o": target.owner, "n": target.name, "login": login });
-        let data = match self.graphql::<ListData>(token, &query, variables) {
-            Ok(data) => data,
+        let (data, first_error) = match self.graphql::<ListData>(token, &query, variables) {
+            Ok(answered) => answered,
             Err(status) => return Fetched::Status(status),
         };
         let Some(repository) = data.repository else {
             return Fetched::Status(IssueRepoStatus::NotAccessible);
         };
         let (Some(assigned), Some(open)) = (repository.assigned, repository.open) else {
-            let message = "GitHub's answer had no issues".into();
+            // Said by GitHub, with the token scrubbed out.
+            let message = first_error.unwrap_or_else(|| "GitHub's answer had no issues".into());
             return Fetched::Status(error_status(token, message));
         };
         let (assigned_count, open_count) = (assigned.total, open.total);
@@ -262,7 +263,7 @@ impl GitHub {
         token: &Secret,
         query: &str,
         variables: Value,
-    ) -> Result<T, IssueRepoStatus> {
+    ) -> Result<(T, Option<String>), IssueRepoStatus> {
         let response = self
             .agent
             .post(&self.endpoint)
@@ -302,18 +303,19 @@ impl GitHub {
         }
         // A repository the App is installed on, whose installation has not
         // approved issues, is refused rather than hidden.
+        // Other refusals, such as an organisation's SAML enforcement, are
+        // errors with their own words.
         let forbidden = errors.iter().any(|error| {
-            error.kind.as_deref() == Some("FORBIDDEN")
-                || error
-                    .message
-                    .contains("Resource not accessible by integration")
+            error
+                .message
+                .contains("Resource not accessible by integration")
         });
         let missing_repository = errors.iter().any(|error| {
             error.kind.as_deref() == Some("NOT_FOUND")
                 && error.path.as_ref().is_some_and(|path| path.len() <= 1)
         });
         match reply.data {
-            Some(data) if !forbidden => Ok(data),
+            Some(data) if !forbidden => Ok((data, errors.into_iter().next().map(|e| e.message))),
             _ if forbidden => Err(IssueRepoStatus::PermissionMissing),
             // A repository the user cannot see is null beside a NOT_FOUND
             // error, in a response that is otherwise fine.
