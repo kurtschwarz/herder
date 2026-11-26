@@ -300,6 +300,8 @@ private struct IssueUnavailable: View {
     let github: GitHubConnection?
     let retry: () -> Void
 
+    @Environment(\.openURL) private var openURL
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.normal + Theme.Spacing.tight) {
             switch unavailable {
@@ -308,19 +310,17 @@ private struct IssueUnavailable: View {
 
             case .notInstalled(let name):
                 message("The Herder GitHub App isn\u{2019}t installed on \(name).")
-                HStack(spacing: Theme.Spacing.loose) {
-                    Link("Install the app", destination: GitHubApp.installURL)
-                        .foregroundStyle(Theme.Palette.accent)
+                HStack(spacing: Theme.Spacing.normal) {
+                    open("Install the app", GitHubApp.installURL)
                     again
                 }
 
             case .permissionMissing(let name):
                 message("Herder needs permission to read issues on \(name).")
-                HStack(spacing: Theme.Spacing.loose) {
-                    Link("Review the installation", destination: GitHubApp.installationSettingsURL(
+                HStack(spacing: Theme.Spacing.normal) {
+                    open("Review the installation", GitHubApp.installationSettingsURL(
                         owner: name.split(separator: "/").first.map(String.init) ?? name, login: login
                     ))
-                    .foregroundStyle(Theme.Palette.accent)
                     again
                 }
 
@@ -340,9 +340,13 @@ private struct IssueUnavailable: View {
 
     private var again: some View {
         Button("Check again", action: retry)
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.Palette.secondaryText)
-            .pointerStyle(.link)
+            .buttonStyle(.secondary)
+    }
+
+    /// The one thing to do about it, on GitHub.
+    private func open(_ title: String, _ url: URL) -> some View {
+        Button(title) { openURL(url) }
+            .buttonStyle(.primary)
     }
 
     private func message(_ text: String) -> some View {
@@ -362,12 +366,10 @@ private struct IssueUnavailable: View {
                     .font(.system(size: 24, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Theme.Palette.text)
                     .textSelection(.enabled)
-                HStack(spacing: Theme.Spacing.loose) {
-                    Link("Open github.com/login/device", destination: code.verificationURL)
-                        .foregroundStyle(Theme.Palette.accent)
+                HStack(spacing: Theme.Spacing.normal) {
+                    open("Open github.com/login/device", code.verificationURL)
                     Button("Cancel") { github.cancelSignIn() }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Theme.Palette.secondaryText)
+                        .buttonStyle(.secondary)
                 }
             case .checking:
                 message("Checking your GitHub sign-in\u{2026}")
