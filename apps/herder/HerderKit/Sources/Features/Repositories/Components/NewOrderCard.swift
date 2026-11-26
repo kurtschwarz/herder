@@ -20,6 +20,8 @@ struct NewOrderCard: View {
 
     private var canPlan: Bool { order.canSubmit && repository != nil }
 
+    private var canStartFromIssue: Bool { model.canStartFromIssue(in: repository) && !order.isWorking }
+
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
     }
@@ -44,6 +46,10 @@ struct NewOrderCard: View {
         .padding(Theme.Spacing.normal + Theme.Spacing.tight)
         .background(Theme.Palette.fieldGroup, in: shape)
         .overlay { shape.strokeBorder(Theme.Palette.hairline, lineWidth: 1) }
+        // Again when the modal closes, which may have learnt a new count.
+        .task(id: ProbeKey(repository: repository?.id, isModalOpen: model.issueList != nil)) {
+            await model.probeGitHubRemote(of: repository)
+        }
         .padding(.horizontal, Theme.Spacing.windowPadding)
         .padding(.bottom, Theme.Spacing.normal)
     }
@@ -87,16 +93,20 @@ struct NewOrderCard: View {
 
     private var actions: some View {
         HStack(spacing: Theme.Spacing.normal) {
-            Button {} label: {
-                Text("From issue")
-                    .font(.system(size: 12))
-                    .lineLimit(1)
+            Button(action: openIssues) {
+                HStack(spacing: Theme.Spacing.tight + 2) {
+                    PhIcon(Ph.githubLogo, size: 13)
+                    Text("From issue").lineLimit(1).fixedSize()
+                    if let count = model.assignedIssueCount(in: repository), count > 0 {
+                        Text("\(count)")
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.Palette.tertiaryText)
+                    }
+                }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.Palette.secondaryText)
-            .disabled(true)
-            .opacity(0.5)
-            .help("Coming soon")
+            .buttonStyle(OutlinedButtonStyle())
+            .disabled(!canStartFromIssue)
+            .help(canStartFromIssue ? "Start from a GitHub issue\u{2026}" : "Not a GitHub repository")
 
             Spacer(minLength: 0)
 
@@ -126,9 +136,38 @@ struct NewOrderCard: View {
         }
     }
 
+    private func openIssues() {
+        guard let repository else { return }
+        model.beginIssues(in: repository)
+    }
+
     private func openModal() {
         guard let repository else { return }
         model.beginNewSession(in: repository, active: active?.id.url, mode: .build)
+    }
+}
+
+private struct ProbeKey: Equatable {
+    var repository: UUID?
+    var isModalOpen: Bool
+}
+
+/// A quiet plate with a hairline, at the size of ``PlanButtonStyle``.
+private struct OutlinedButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Theme.Palette.secondaryText)
+            .padding(.horizontal, Theme.Spacing.normal + Theme.Spacing.tight)
+            .frame(minHeight: Theme.Size.control - 6)
+            .background(configuration.isPressed ? Theme.Palette.controlPressed : Theme.Palette.control, in: shape)
+            .overlay { shape.strokeBorder(Theme.Palette.hairline, lineWidth: 1) }
+            .contentShape(shape)
+            .pointerStyle(isEnabled ? .link : nil)
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }
 

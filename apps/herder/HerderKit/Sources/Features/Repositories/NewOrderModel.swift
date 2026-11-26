@@ -24,6 +24,8 @@ final class NewOrderModel {
         /// The typed text in the user's template, which is the agent's first
         /// message.
         var prompt: String
+        /// The issue it was started from, if it was.
+        var issue: LinkedIssue?
     }
 
     /// The longest a title taken from the prompt runs. About what a tab shows.
@@ -98,6 +100,63 @@ final class NewOrderModel {
         async let fetched = fetchedBase(in: repository)
         let (sessionName, fetchedBase) = await (name, fetched)
 
+        let template = promptTemplate()
+        let started = await cutWorktree(in: repository, fetchedBase: fetchedBase) { branches in
+            var generator = SystemRandomNumberGenerator()
+            return if let sessionName {
+                OrderBranchName.make(
+                    type: sessionName.type, slug: sessionName.slug, existing: branches, using: &generator
+                )
+            } else {
+                OrderBranchName.fallback(existing: branches, using: &generator)
+            }
+        } started: { location in
+            Started(
+                worktree: location,
+                title: sessionName.map(\.title).flatMap(Self.nonBlank).map { String($0.prefix(Self.maxTitleLength)) }
+                    ?? Self.title(from: prompt),
+                prompt: FirstPromptTemplate.apply(template, to: prompt)
+            )
+        }
+        if started != nil { text = "" }
+        return started
+    }
+
+    /// Makes the worktree for an issue, on `issue/<number>-<slug>` cut from
+    /// the fetched default branch, and says where its session starts. The
+    /// branch is named here from the title, with no call to a model. On `nil`
+    /// `failure` says why.
+    func start(from detail: GitHubIssueDetail, in repository: URL) async -> Started? {
+        guard !isWorking else { return nil }
+        isWorking = true
+        failure = nil
+        defer { isWorking = false }
+
+        let issue = detail.issue
+        let fetchedBase = await fetchedBase(in: repository)
+        let template = promptTemplate()
+        return await cutWorktree(in: repository, fetchedBase: fetchedBase) { branches in
+            OrderBranchName.issue(number: issue.number, title: issue.title, existing: branches)
+        } started: { location in
+            Started(
+                worktree: location,
+                title: Self.nonBlank(issue.title).map { String($0.prefix(Self.maxTitleLength)) }
+                    ?? "#\(issue.number)",
+                prompt: FirstPromptTemplate.apply(template, to: IssuePrompt.text(for: detail)),
+                issue: issue.link
+            )
+        }
+    }
+
+    /// The step both ways in share: reads the repository, picks a branch name
+    /// among the ones that exist, and cuts the worktree from the default
+    /// branch. `nil` with `failure` set when any of it fails.
+    private func cutWorktree(
+        in repository: URL,
+        fetchedBase: String?,
+        branch name: (Set<String>) -> String,
+        started: (URL) -> Started
+    ) async -> Started? {
         do {
             let kind = try await git.repositoryKind(at: repository)
             let branches = Set(try await git.branches(at: repository))
@@ -107,14 +166,7 @@ final class NewOrderModel {
                 failure = "Couldn't find a default branch to start from."
                 return nil
             }
-            var generator = SystemRandomNumberGenerator()
-            let branch = if let sessionName {
-                OrderBranchName.make(
-                    type: sessionName.type, slug: sessionName.slug, existing: branches, using: &generator
-                )
-            } else {
-                OrderBranchName.fallback(existing: branches, using: &generator)
-            }
+            let branch = name(branches)
             guard let location = GitWorktreeLocation.path(forBranch: branch, inRepository: repository, kind: kind)
             else {
                 failure = "A worktree can't be made in this repository."
@@ -122,13 +174,7 @@ final class NewOrderModel {
             }
 
             try await git.addWorktree(in: repository, at: location, newBranch: branch, from: base)
-            text = ""
-            return Started(
-                worktree: location,
-                title: sessionName.map(\.title).flatMap(Self.nonBlank).map { String($0.prefix(Self.maxTitleLength)) }
-                    ?? Self.title(from: prompt),
-                prompt: FirstPromptTemplate.apply(promptTemplate(), to: prompt)
-            )
+            return started(location)
         } catch GitClientError.commandFailed(let message) {
             failure = message
         } catch {

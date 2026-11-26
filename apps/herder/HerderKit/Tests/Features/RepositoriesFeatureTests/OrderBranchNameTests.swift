@@ -73,3 +73,27 @@ struct SeededGenerator: RandomNumberGenerator {
         return z ^ (z >> 31)
     }
 }
+
+@Suite struct IssueBranchNameTests {
+    @Test func theNumberAndTheTitleAsWords() {
+        #expect(OrderBranchName.issue(number: 144, title: "Fix the Crash on Save!", existing: [])
+            == "issue/144-fix-the-crash-on-save")
+    }
+
+    @Test func theSlugIsCutToAboutFortyCharactersWithoutATrailingDash() {
+        let branch = OrderBranchName.issue(
+            number: 5, title: "Start an agent from a GitHub issue (From issue)", existing: []
+        )
+
+        #expect(branch == "issue/5-start-an-agent-from-a-github-issue-from")
+        #expect(branch.dropFirst("issue/5-".count).count <= 40)
+    }
+
+    @Test func aTitleWithNothingUsableIsJustTheNumber() {
+        #expect(OrderBranchName.issue(number: 8, title: "\u{1F525}\u{1F525}", existing: []) == "issue/8")
+    }
+
+    @Test func aBranchThatExistsGetsANumberOnTheEnd() {
+        #expect(OrderBranchName.issue(number: 3, title: "Crash", existing: ["issue/3-crash"]) == "issue/3-crash-2")
+    }
+}

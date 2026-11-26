@@ -15,9 +15,10 @@ use serde::{Deserialize, Serialize};
 /// serving.
 pub const MIN_PROTOCOL: u32 = 2;
 /// The newest protocol version this build speaks. 3 added the GitHub token, 4
-/// added pull request queries and 5 added the `fetch` git operation. Nothing in
-/// any of them changes a message of 2, so an app that speaks 2 is still served.
-pub const MAX_PROTOCOL: u32 = 5;
+/// added pull request queries, 5 added the `fetch` git operation and 6 added
+/// issue queries. Nothing in any of them changes a message of 2, so an app that
+/// speaks 2 is still served.
+pub const MAX_PROTOCOL: u32 = 6;
 
 /// A credential. Its `Debug` never shows the value, so a message that carries
 /// one can be logged, printed in a panic or put in an error without leaking it.
@@ -92,6 +93,129 @@ pub enum ClientMessage {
     /// a [`DaemonMessage::PullRequestResponse`]. Added in protocol 4.
     #[serde(rename = "pull_request_query")]
     PullRequestQuery { id: u64, repos: Vec<PullRequestRepo> },
+    /// Asks for the open issues of the repository `path`'s `origin` names.
+    /// The answer is a [`DaemonMessage::IssueResponse`]. Added in protocol 6.
+    #[serde(rename = "issue_query")]
+    IssueQuery {
+        id: u64,
+        path: String,
+        tab: IssueTab,
+        freshness: IssueFreshness,
+    },
+    /// Asks for one issue with its body and comments, fresh from GitHub and
+    /// never from memory. The answer is a [`DaemonMessage::IssueDetailResponse`].
+    /// Added in protocol 6.
+    #[serde(rename = "issue_detail")]
+    IssueDetail { id: u64, path: String, number: u64 },
+}
+
+/// Which list of open issues to read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueTab {
+    /// Assigned to the signed-in user.
+    Assigned,
+    /// Every open issue.
+    Open,
+}
+
+/// Whether an issue query may be answered from the daemon's memory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueFreshness {
+    /// Only from memory. Nothing is asked of GitHub, and when nothing is held
+    /// the answer has no `fetched_at`.
+    Cached,
+    /// Always from GitHub, and what it says is remembered.
+    Fresh,
+}
+
+/// What asking GitHub about a repository's issues came to. Never quotes the
+/// token.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum IssueRepoStatus {
+    Ok,
+    /// The GitHub App is not installed on the repository, or the signed-in
+    /// user cannot see it.
+    NotAccessible,
+    /// GitHub refused the token, or the daemon holds none.
+    Unauthorized,
+    /// The App is installed, but the installation has not approved reading
+    /// issues.
+    PermissionMissing,
+    Error {
+        message: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IssueLabel {
+    pub name: String,
+    /// Hex, without the `#`.
+    pub color: String,
+}
+
+/// An issue, as far as a row in a list needs it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Issue {
+    pub number: u64,
+    pub url: String,
+    pub title: String,
+    pub labels: Vec<IssueLabel>,
+    /// `None` for an account that has been deleted.
+    pub author: Option<String>,
+    /// ISO 8601, as GitHub gives it.
+    pub created_at: String,
+    pub updated_at: String,
+    pub comments: u64,
+}
+
+/// The answer to an [`ClientMessage::IssueQuery`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct IssueList {
+    /// `owner/name`, as `origin` names it. `None` when it is not on github.com.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub repository: Option<String>,
+    pub status: IssueRepoStatus,
+    /// Most recently updated first, and no more than 50.
+    pub issues: Vec<Issue>,
+    /// Seconds since the Unix epoch at which GitHub said so. `None` when
+    /// there is nothing to show: a `cached` query that found nothing held.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub fetched_at: Option<f64>,
+    /// How many open issues are assigned to the user, and how many are open,
+    /// as of `fetched_at`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub assigned_count: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub open_count: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IssueComment {
+    pub author: Option<String>,
+    pub body: String,
+    pub created_at: String,
+}
+
+/// An issue with what an agent needs to start from it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IssueDetails {
+    pub issue: Issue,
+    pub body: String,
+    /// The 50 most recent comments, oldest first.
+    pub comments: Vec<IssueComment>,
+}
+
+/// The answer to an [`ClientMessage::IssueDetail`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IssueDetailReply {
+    pub status: IssueRepoStatus,
+    /// `None` when the repository has no such issue, which includes a number
+    /// that is a pull request.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub detail: Option<IssueDetails>,
 }
 
 /// A repository to ask about, and the branches of it to look for pull
@@ -492,6 +616,12 @@ pub enum DaemonMessage {
     /// again: it grows while GitHub cannot be reached.
     #[serde(rename = "pull_request_response")]
     PullRequestResponse { id: u64, repos: Vec<RepoPullRequests>, next_poll_seconds: u64 },
+    /// The outcome of a [`ClientMessage::IssueQuery`], with the same `id`.
+    #[serde(rename = "issue_response")]
+    IssueResponse { id: u64, result: IssueList },
+    /// The outcome of a [`ClientMessage::IssueDetail`], with the same `id`.
+    #[serde(rename = "issue_detail_response")]
+    IssueDetailResponse { id: u64, result: IssueDetailReply },
 }
 
 /// The highest version both sides speak, if there is one.
@@ -609,6 +739,59 @@ mod tests {
                 r#"{"number":3,"url":"u","title":"t","state":"merged","is_draft":false,"#,
                 r#""merged_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}}]}],"#,
                 r#""next_poll_seconds":60}"#
+            )
+        );
+    }
+
+    #[test]
+    fn the_issue_messages_are_tagged_json() {
+        let query = ClientMessage::IssueQuery {
+            id: 3,
+            path: "/r".into(),
+            tab: IssueTab::Assigned,
+            freshness: IssueFreshness::Cached,
+        };
+        let json = serde_json::to_string(&query).unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"issue_query","id":3,"path":"/r","tab":"assigned","freshness":"cached"}"#
+        );
+        assert_eq!(serde_json::from_str::<ClientMessage>(&json).unwrap(), query);
+
+        let detail = ClientMessage::IssueDetail {
+            id: 4,
+            path: "/r".into(),
+            number: 12,
+        };
+        let json = serde_json::to_string(&detail).unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"issue_detail","id":4,"path":"/r","number":12}"#
+        );
+        assert_eq!(
+            serde_json::from_str::<ClientMessage>(&json).unwrap(),
+            detail
+        );
+    }
+
+    #[test]
+    fn an_issue_response_names_the_status() {
+        let reply = DaemonMessage::IssueResponse {
+            id: 3,
+            result: IssueList {
+                repository: Some("o/r".into()),
+                status: IssueRepoStatus::PermissionMissing,
+                issues: Vec::new(),
+                fetched_at: None,
+                assigned_count: None,
+                open_count: None,
+            },
+        };
+        assert_eq!(
+            serde_json::to_string(&reply).unwrap(),
+            concat!(
+                r#"{"type":"issue_response","id":3,"result":{"repository":"o/r","#,
+                r#""status":{"state":"permission_missing"},"issues":[]}}"#
             )
         );
     }

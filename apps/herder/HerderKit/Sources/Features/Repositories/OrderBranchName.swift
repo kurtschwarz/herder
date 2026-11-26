@@ -20,7 +20,7 @@ enum OrderBranchName {
 
     /// `slug` as lowercase ASCII words joined by dashes, at most ``maxWords``
     /// of them. Empty when there is nothing usable in it.
-    static func cleanSlug(_ slug: String) -> String {
+    static func cleanSlug(_ slug: String, limit: Int = maxWords) -> String {
         let folded = slug.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil).lowercased()
         var words: [String] = []
         var current = ""
@@ -33,7 +33,7 @@ enum OrderBranchName {
             }
         }
         if !current.isEmpty { words.append(current) }
-        return words.prefix(maxWords).joined(separator: "-")
+        return words.prefix(limit).joined(separator: "-")
     }
 
     /// The branch for `slug`, which falls back to ``fallback(existing:using:)``
@@ -56,6 +56,19 @@ enum OrderBranchName {
         let cleaned = cleanSlug(slug)
         guard !cleaned.isEmpty else { return fallback(existing: existing, using: &generator) }
         return unused("\(type.rawValue)/\(cleaned)", among: existing)
+    }
+
+    /// The longest an issue branch's slug runs, in characters.
+    static let maxIssueSlugLength = 40
+
+    /// `issue/<number>-<slug>`, the slug made from the issue's title on this
+    /// machine and cut to ``maxIssueSlugLength``, with a number on the end
+    /// when that branch exists. Without a usable title, just `issue/<number>`.
+    static func issue(number: Int, title: String, existing: Set<String>) -> String {
+        let words = cleanSlug(title, limit: .max)
+        var slug = String(words.prefix(maxIssueSlugLength))
+        while slug.hasSuffix("-") { slug.removeLast() }
+        return unused(slug.isEmpty ? "issue/\(number)" : "issue/\(number)-\(slug)", among: existing)
     }
 
     /// `chore/<adjective>-<noun>`, for when the naming call gave nothing.

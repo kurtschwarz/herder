@@ -10,6 +10,7 @@ import SwiftUI
 /// and add a property for it. A name with no weight is the regular one.
 public enum Ph {
     public static var archive: Image { icon("archive") }
+    public static var arrowClockwise: Image { icon("arrow-clockwise") }
     public static var arrowsInLineVertical: Image { icon("arrows-in-line-vertical") }
     public static var caretDown: Image { icon("caret-down") }
     public static var caretDownBold: Image { icon("caret-down-bold") }
@@ -28,6 +29,7 @@ public enum Ph {
     public static var gitCommit: Image { icon("git-commit") }
     public static var gitDiff: Image { icon("git-diff") }
     public static var gitFork: Image { icon("git-fork") }
+    public static var githubLogo: Image { icon("github-logo") }
     public static var hammer: Image { icon("hammer") }
     public static var magnifyingGlass: Image { icon("magnifying-glass") }
     public static var notepad: Image { icon("notepad") }

@@ -47,7 +47,7 @@ Tracking issue: #112. A session's branch is looked up on GitHub, and the pull re
 - **Which branches are watched** (`AgentSessions.watchedBranches()`): those of sessions that have not ended, and of ended sessions whose linked pull request is still open; not a detached checkout, whose recorded branch is a short commit; not the default branch, once herderd has said which it is; and not a branch whose pull request is merged or closed. Only repositories whose history has been loaded are covered, which is the ones the sidebar lists.
 - **What a pull request is attached to.** The pull request is found by branch, and written to every session in that repository whose `branch` matches, ended or not. A branch that has no pull request leaves a session's link as it was.
 - **Saved data.** `AgentSession.pullRequest` is optional, read with `decodeIfPresent`, and saved in the session history file. It holds `number`, `url`, `title`, `state`, `isDraft`, `mergedAt` and `updatedAt`. A state this build does not know decodes as `unknown`, as `EndReason` does. There is one field: a reopened pull request updates it in place and a newer one replaces it.
-- **Repositories the App cannot reach.** If the GitHub App is not installed on a repository, GitHub answers with `null` for it, and Settings lists it as "not accessible" with an "Install app" link (`GitHubApp.installURL`, which assumes the App's slug is `herder`).
+- **Repositories the App cannot reach.** If the GitHub App is not installed on a repository, GitHub answers with `null` for it, and Settings lists it as "not accessible" with an "Install app" link (`GitHubApp.installURL`, which uses the App's slug, `herder-app`).
 
 ### Limitations
 

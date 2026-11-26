@@ -182,6 +182,12 @@ private struct WindowView: View {
                 .environment(window.agentPanel.sessions)
                 .modifier(WindowActions(window: window, agents: environment.agents))
         }
+        .overlay {
+            IssueOverlay(model: window.repositoryList)
+                .environment(window.activeWorkspace)
+                .environment(window.agentPanel.sessions)
+                .modifier(WindowActions(window: window, agents: environment.agents))
+        }
         // Where ⌘O finds the window it should open the modal in.
         .focusedSceneValue(\.beginAddingRepository) { window.beginAddingRepository() }
         .modifier(TabCommandValues(editor: window.editor, terminal: window.terminal, agents: window.agentPanel))
@@ -305,7 +311,7 @@ private struct WindowActions: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.openWorkspace, OpenWorkspaceAction { window.activate($0) })
-            .environment(\.startAgentSession, StartAgentSessionAction { window.startAgentSession(in: $0, agent: $1, mode: $2, prompt: $3, name: $4) })
+            .environment(\.startAgentSession, StartAgentSessionAction { window.startAgentSession(in: $0, agent: $1, mode: $2, prompt: $3, name: $4, issue: $5) })
             .environment(\.showAgentSession, ShowAgentSessionAction { window.showAgentSession($0, takingFocus: $1) })
             .environment(\.resumeAgentSession, ResumeAgentSessionAction { window.resumeAgentSession($0, in: $1) })
             .environment(\.renameAgentSession, RenameAgentSessionAction { window.agentPanel.rename($0.id, to: $1) })

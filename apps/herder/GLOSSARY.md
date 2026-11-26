@@ -68,6 +68,10 @@ _Avoid_: quick start, launcher.
 The one request a New order makes to an Anthropic-compatible endpoint (Meridian by default) for a type (`feat`, `fix` or `chore`), a kebab-case slug and a title. Everything is named before the worktree exists, so nothing is renamed or moved afterwards. If it fails or takes about 4 seconds, the branch is `chore/<adjective>-<noun>` and the session is named from the start of the prompt.
 _Avoid_: auto-name, rename.
 
+**From issue**:
+The New order card's other way to start: it opens the Implement an issue modal, listing the open issues of the card's workspace. Picking one cuts a worktree on `issue/<number>-<slug>`, named on this machine with no naming call, and starts the chosen agent in plan mode with the issue's title, link, body and latest comments as its first message. The session remembers the issue, and an issue with a session that has not ended is "in progress": picking it opens that session.
+_Avoid_: import issue, issue picker.
+
 ## GitHub
 
 **GitHub connection**:

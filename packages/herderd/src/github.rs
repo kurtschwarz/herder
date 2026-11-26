@@ -4,13 +4,14 @@
 //! memory and never writes it anywhere. Nothing here returns the token or puts
 //! it in an error: a message that could quote it is built from fixed words.
 //!
-//! It also asks which pull requests a set of branches have: see
-//! [`pull_requests`].
+//! It also asks which pull requests a set of branches have, see
+//! [`pull_requests`], and which issues a repository has open, see [`issues`].
 //!
 //! This is the only module that makes a network request. It is blocking, so
 //! the caller runs it on a worker, and it takes the GraphQL endpoint as a
 //! parameter so a test can point it at a stub.
 
+mod issues;
 mod pull_requests;
 
 use crate::protocol::{GitHubCheck, Secret};
@@ -29,6 +30,7 @@ pub struct GitHub {
     token: Mutex<Option<Secret>>,
     agent: ureq::Agent,
     pull_requests: Mutex<pull_requests::State>,
+    issues: Mutex<issues::State>,
 }
 
 impl GitHub {
@@ -45,6 +47,7 @@ impl GitHub {
             token: Mutex::new(None),
             agent,
             pull_requests: Mutex::default(),
+            issues: Mutex::default(),
         }
     }
 
@@ -57,12 +60,18 @@ impl GitHub {
 
     pub fn set_token(&self, token: Secret) {
         if let Ok(mut held) = self.token.lock() {
+            // Another token may be another account, so what was remembered
+            // for the last one is not shown to this one.
+            if held.as_ref() != Some(&token) {
+                self.issue_state().clear();
+            }
             *held = Some(token);
         }
     }
 
     pub fn clear_token(&self) {
         if let Ok(mut held) = self.token.lock() {
+            self.issue_state().clear();
             *held = None;
         }
     }

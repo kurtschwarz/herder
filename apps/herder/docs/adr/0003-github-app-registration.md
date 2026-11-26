@@ -29,6 +29,7 @@ GitHub ▸ Settings ▸ Developer settings ▸ GitHub Apps ▸ New GitHub App.
 Repository permissions only; leave Organization and Account permissions at No access.
 
 - [ ] **Pull requests:** Read-only.
+- [ ] **Issues:** Read-only. Added for "From issue" ([0005](0005-github-issues-permission.md)). Installations that already exist have to approve the new permission before Herder can read their issues.
 - [ ] **Metadata:** Read-only. GitHub selects this one itself.
 - [ ] No events subscribed.
 

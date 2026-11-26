@@ -26,9 +26,22 @@ public final class RepositoriesModel {
         case unreadable
     }
 
+    /// What picking an issue in the "From issue" modal came to.
+    enum IssueStart {
+        /// A session for the issue is open already.
+        case resume(AgentSession)
+        /// A worktree was made for it, and its session starts there.
+        case start(worktree: WorkspaceID, started: NewOrderModel.Started)
+    }
+
     private let list: WindowRepositories
     private let git: any GitClient
     private let picker: any FolderPickerClient
+    private let issues: (any GitHubIssuesClient)?
+    private let sessions: AgentSessions?
+
+    /// The app's GitHub sign-in, which the "From issue" modal offers to start.
+    let github: GitHubConnection?
 
     /// The New order card's state.
     let order: NewOrderModel
@@ -62,8 +75,22 @@ public final class RepositoriesModel {
     /// What the new-session modal's session will be for.
     private(set) var newSessionMode: SessionMode = .build
 
+    /// The "From issue" modal's state while it is up, `nil` otherwise.
+    private(set) var issueList: IssueListModel?
+
+    /// The repository the "From issue" modal is open for.
+    private(set) var issueRepository: Repository?
+
+    /// Whether each repository's `origin` is on GitHub, as far as herderd has
+    /// said. Absent until it has.
+    private(set) var gitHubRemotes: [UUID: Bool] = [:]
+
+    /// How many open issues of each repository are assigned to the user, as
+    /// herderd last heard from GitHub. Absent until the modal has asked.
+    private(set) var assignedIssueCounts: [UUID: Int] = [:]
+
     /// Whether a modal is covering the window.
-    public var isModalPresented: Bool { adding != nil || newSession != nil }
+    public var isModalPresented: Bool { adding != nil || newSession != nil || issueList != nil }
 
     public init(
         repositories: WindowRepositories,
@@ -71,11 +98,17 @@ public final class RepositoriesModel {
         picker: any FolderPickerClient,
         namer: any SessionNamer,
         naming: NamingSettings,
-        agents: AgentCatalog
+        agents: AgentCatalog,
+        issues: (any GitHubIssuesClient)? = nil,
+        sessions: AgentSessions? = nil,
+        github: GitHubConnection? = nil
     ) {
         self.list = repositories
         self.git = git
         self.picker = picker
+        self.issues = issues
+        self.sessions = sessions
+        self.github = github
         self.order = NewOrderModel(
             git: git, namer: namer, naming: { naming.configuration },
             promptTemplate: { agents.firstPromptTemplate }
@@ -208,6 +241,78 @@ public final class RepositoriesModel {
         if !list.isShown(repository) { list.setShown(repository, true) }
         await refresh(repository)
         return (WorkspaceID(started.worktree), started)
+    }
+
+    // MARK: - From issue
+
+    /// Whether "From issue" can work for `repository`: `false` only when
+    /// herderd has said its `origin` is not on GitHub.
+    func canStartFromIssue(in repository: Repository?) -> Bool {
+        guard issues != nil, let repository else { return false }
+        return gitHubRemotes[repository.id] != false
+    }
+
+    /// Asks herderd whether `repository`'s `origin` is on GitHub, and how many
+    /// of its issues are assigned to the user, from memory, so nothing goes to
+    /// GitHub for it. An answer that cannot be had leaves the button enabled:
+    /// the modal explains what is wrong.
+    func probeGitHubRemote(of repository: Repository?) async {
+        guard let issues, let repository, repository.isAvailable else { return }
+        guard let reply = try? await issues.list(at: repository.path, tab: .assigned, freshness: .cached) else {
+            return
+        }
+        gitHubRemotes[repository.id] = reply.repository != nil
+        assignedIssueCounts[repository.id] = reply.assignedCount
+    }
+
+    func assignedIssueCount(in repository: Repository?) -> Int? {
+        repository.flatMap { assignedIssueCounts[$0.id] }
+    }
+
+    func beginIssues(in repository: Repository) {
+        guard !isModalPresented, repository.isAvailable, let issues else { return }
+        let key = PathKey(repository.url)
+        issueRepository = repository
+        let sessions = sessions
+        let github = github
+        issueList = IssueListModel(
+            workspaceName: repository.name,
+            path: repository.path,
+            client: issues,
+            openSession: { number in sessions?.openSession(forIssue: number, in: key) },
+            signInRefused: { await github?.recheck() }
+        )
+        // What is written down is read when a repository is listed; this may
+        // be asked about one that has not been.
+        if let sessions { Task { await sessions.load(key) } }
+    }
+
+    func cancelIssues() {
+        issueList = nil
+        issueRepository = nil
+    }
+
+    /// Reads the selected issue in full and, for one with no session open,
+    /// makes its worktree. Closes the modal when there is something to start
+    /// or show. A failure leaves the modal up with the reason.
+    func submitIssue() async -> IssueStart? {
+        guard let issueList, let repository = issueRepository, let outcome = await issueList.prepare() else {
+            return nil
+        }
+        switch outcome {
+        case .resume(let session):
+            cancelIssues()
+            return .resume(session)
+        case .start(let detail):
+            guard let started = await order.start(from: detail, in: URL(filePath: repository.path)) else {
+                issueList.fail(order.failure)
+                return nil
+            }
+            cancelIssues()
+            if !list.isShown(repository) { list.setShown(repository, true) }
+            await refresh(repository)
+            return .start(worktree: WorkspaceID(started.worktree), started: started)
+        }
     }
 
     public func beginAdding() {

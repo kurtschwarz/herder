@@ -89,7 +89,9 @@ public final class AgentPanelModel {
     /// A session to start once its worktree is the one showing, with the
     /// agent asked for, or `nil` for the one used last. See
     /// ``requestSession(in:agent:)``.
-    private var pending: (workspace: WorkspaceID, agent: Agent?, mode: SessionMode, prompt: String?, name: String?)?
+    private var pending: (
+        workspace: WorkspaceID, agent: Agent?, mode: SessionMode, prompt: String?, name: String?, issue: LinkedIssue?
+    )?
 
     /// Changes when the panel should take the keyboard.
     public private(set) var focusRequest = 0
@@ -183,7 +185,10 @@ public final class AgentPanelModel {
         let resuming = pendingResume
         pendingResume = nil
         if let requested, requested.workspace == workspace.id {
-            await startSession(requested.agent, mode: requested.mode, prompt: requested.prompt, name: requested.name)
+            await startSession(
+                requested.agent, mode: requested.mode, prompt: requested.prompt, name: requested.name,
+                issue: requested.issue
+            )
         } else if let resuming, resuming.target == workspace.id {
             await resume(resuming.session, in: resuming.target)
         } else {
@@ -208,7 +213,7 @@ public final class AgentPanelModel {
         let tabs = state.tabs.map {
             AgentTab(
                 id: $0.id, agent: $0.agent, number: $0.number, mode: $0.mode ?? .build, name: $0.name,
-                restored: true, sessionID: $0.session, startedAt: $0.started
+                restored: true, sessionID: $0.session, startedAt: $0.started, issue: $0.issue
             )
         }
         for tab in tabs {
@@ -268,12 +273,13 @@ public final class AgentPanelModel {
         agent: Agent? = nil,
         mode: SessionMode = .build,
         prompt: String? = nil,
-        name: String? = nil
+        name: String? = nil,
+        issue: LinkedIssue? = nil
     ) {
         if workspace?.id == id {
-            Task { await startSession(agent, mode: mode, prompt: prompt, name: name) }
+            Task { await startSession(agent, mode: mode, prompt: prompt, name: name, issue: issue) }
         } else {
-            pending = (id, agent, mode, prompt, name)
+            pending = (id, agent, mode, prompt, name, issue)
         }
     }
 
@@ -284,11 +290,14 @@ public final class AgentPanelModel {
     ///
     /// `prompt` is the session's first message, for an agent that can be given
     /// one, and `name` is what the tab is called until the person renames it.
+    /// `issue` is the GitHub issue the session is for, which is written down
+    /// with it.
     public func startSession(
         _ agent: Agent? = nil,
         mode: SessionMode = .build,
         prompt: String? = nil,
-        name: String? = nil
+        name: String? = nil,
+        issue: LinkedIssue? = nil
     ) async {
         guard let workspace else { return }
         let agent = agent ?? catalog.lastUsed
@@ -296,7 +305,8 @@ public final class AgentPanelModel {
         catalog.markUsed(agent)
 
         let tab = AgentTab(
-            agent: agent, number: nextNumber(of: agent, in: workspace.id), mode: mode, name: name, firstPrompt: prompt
+            agent: agent, number: nextNumber(of: agent, in: workspace.id), mode: mode, name: name, firstPrompt: prompt,
+            issue: issue
         )
         await open(tab, in: workspace)
     }
@@ -389,7 +399,8 @@ public final class AgentPanelModel {
             branch: branch,
             title: subject(of: tab),
             name: tab.customName,
-            startedAt: started
+            startedAt: started,
+            issue: tab.issue
         )
         Task { [store = sessions.store, historyKey] in
             await store.begin(session, in: await historyKey(session.worktree) ?? session.worktree.root)
@@ -650,7 +661,7 @@ public final class AgentPanelModel {
         let tabs = (tabsByWorkspace[id] ?? []).map {
             AgentPanelUIState.Tab(
                 id: $0.id, agent: $0.agent, number: $0.number, mode: $0.mode, name: $0.customName,
-                session: $0.sessionID, started: $0.startedAt
+                session: $0.sessionID, started: $0.startedAt, issue: $0.issue
             )
         }
         let active = activeByWorkspace[id]

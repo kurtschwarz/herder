@@ -29,23 +29,23 @@ import Testing
 
         #expect(body.count == length)
         #expect(String(decoding: body, as: UTF8.self)
-            == #"{"client":"Herder 1.0","max_protocol":5,"min_protocol":4,"type":"hello"}"#)
+            == #"{"client":"Herder 1.0","max_protocol":6,"min_protocol":6,"type":"hello"}"#)
     }
 
     @Test func aWelcomeIsConnected() {
         let status = DaemonWire.status(fromReply: json(
-            #"{"type":"welcome","protocol":4,"daemon_version":"0.1.0","host":"local"}"#
+            #"{"type":"welcome","protocol":6,"daemon_version":"0.1.0","host":"local"}"#
         ))
 
-        #expect(status == .connected(DaemonInfo(daemonVersion: "0.1.0", protocolVersion: 4, host: "local")))
+        #expect(status == .connected(DaemonInfo(daemonVersion: "0.1.0", protocolVersion: 6, host: "local")))
     }
 
     @Test func anIncompatibleReplyKeepsBothRangesToShow() {
         let status = DaemonWire.status(fromReply: json(
-            #"{"type":"incompatible","min_protocol":4,"max_protocol":6,"daemon_version":"2.0.0"}"#
+            #"{"type":"incompatible","min_protocol":7,"max_protocol":9,"daemon_version":"2.0.0"}"#
         ))
 
-        #expect(status == .incompatible(daemonVersion: "2.0.0", supports: 4...6, app: DaemonWire.supported))
+        #expect(status == .incompatible(daemonVersion: "2.0.0", supports: 7...9, app: DaemonWire.supported))
     }
 
     @Test func aWelcomeToAVersionTheAppDoesNotSpeakIsNotConnected() {
@@ -131,6 +131,104 @@ import Testing
             Issue.record("expected an error for \(reply)")
             return
         }
+    }
+
+    // MARK: - Issues
+
+    @Test func anIssueQueryIsFlatJSON() {
+        #expect(String(
+            decoding: DaemonWire.issueQuery(id: 3, path: "/r", tab: .assigned, freshness: .cached), as: UTF8.self
+        ) == #"{"freshness":"cached","id":3,"path":"/r","tab":"assigned","type":"issue_query"}"#)
+        #expect(String(
+            decoding: DaemonWire.issueQuery(id: 4, path: "/r", tab: .open, freshness: .fresh), as: UTF8.self
+        ) == #"{"freshness":"fresh","id":4,"path":"/r","tab":"open","type":"issue_query"}"#)
+        #expect(String(decoding: DaemonWire.issueDetail(id: 5, path: "/r", number: 12), as: UTF8.self)
+            == #"{"id":5,"number":12,"path":"/r","type":"issue_detail"}"#)
+    }
+
+    private static let issueRecord = #"{"number":7,"url":"https://github.com/o/r/issues/7","title":"Seven","labels":[{"name":"bug","color":"d73a4a"}],"author":"ada","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T03:04:05Z","comments":3}"#
+
+    @Test func anIssueListReadsBackWithItsCountsAndTime() throws {
+        let list = try #require(DaemonWire.issueList(fromReply: json(
+            #"{"type":"issue_response","id":3,"result":{"repository":"o/r","status":{"state":"ok"},"issues":["#
+                + Self.issueRecord
+                + #"],"fetched_at":1000.5,"assigned_count":1,"open_count":9}}"#
+        ), id: 3))
+
+        #expect(list.repository == "o/r")
+        #expect(list.status == .ok)
+        #expect(list.fetchedAt == Date(timeIntervalSince1970: 1000.5))
+        #expect((list.assignedCount, list.openCount) == (1, 9))
+        let issue = try #require(list.issues.first)
+        #expect(issue.number == 7)
+        #expect(issue.title == "Seven")
+        #expect(issue.url == URL(string: "https://github.com/o/r/issues/7"))
+        #expect(issue.labels == [GitHubIssue.Label(name: "bug", color: "d73a4a")])
+        #expect(issue.author == "ada")
+        #expect(issue.commentCount == 3)
+        #expect(issue.updatedAt == Date(timeIntervalSince1970: 1_767_323_045))
+    }
+
+    @Test(arguments: [
+        (#"{"state":"ok"}"#, GitHubIssueStatus.ok),
+        (#"{"state":"not_accessible"}"#, .notAccessible),
+        (#"{"state":"unauthorized"}"#, .unauthorized),
+        (#"{"state":"permission_missing"}"#, .permissionMissing),
+        (#"{"state":"error","message":"boom"}"#, .error("boom")),
+    ])
+    func everyIssueStatusReadsBack(status: String, expected: GitHubIssueStatus) {
+        let list = DaemonWire.issueList(fromReply: json(
+            #"{"type":"issue_response","id":3,"result":{"status":"# + status + #","issues":[]}}"#
+        ), id: 3)
+
+        #expect(list?.status == expected)
+        #expect(list?.repository == nil)
+        #expect(list?.fetchedAt == nil)
+    }
+
+    @Test(arguments: [
+        "not json",
+        #"{"type":"issue_response","id":9,"result":{"status":{"state":"ok"},"issues":[]}}"#,
+        #"{"type":"issue_response","id":3,"result":{"status":{"state":"mystery"},"issues":[]}}"#,
+        #"{"type":"issue_response","id":3,"result":{"status":{"state":"ok"}}}"#,
+        #"{"type":"issue_response","id":3,"result":{"status":{"state":"ok"},"issues":[{"number":1}]}}"#,
+        #"{"type":"pull_request_response","id":3,"repos":[],"next_poll_seconds":60}"#,
+    ])
+    func anIssueReplyThatIsNotTheAnswerIsNil(reply: String) {
+        #expect(DaemonWire.issueList(fromReply: json(reply), id: 3) == nil)
+    }
+
+    @Test func anIssueDetailReadsBackWithItsComments() throws {
+        let reply = try #require(DaemonWire.issueDetail(fromReply: json(
+            #"{"type":"issue_detail_response","id":5,"result":{"status":{"state":"ok"},"detail":{"issue":"#
+                + Self.issueRecord
+                + #","body":"Do it.","comments":[{"author":"bob","body":"first","created_at":"2026-01-03T00:00:00Z"},{"author":null,"body":"second","created_at":"2026-01-04T00:00:00Z"}]}}}"#
+        ), id: 5))
+
+        #expect(reply.status == .ok)
+        let detail = try #require(reply.detail)
+        #expect(detail.issue.number == 7)
+        #expect(detail.body == "Do it.")
+        #expect(detail.comments.map(\.author) == ["bob", nil])
+        #expect(detail.comments.map(\.body) == ["first", "second"])
+    }
+
+    @Test func aMissingIssueIsAnOkReplyWithNoDetail() throws {
+        let reply = try #require(DaemonWire.issueDetail(fromReply: json(
+            #"{"type":"issue_detail_response","id":5,"result":{"status":{"state":"ok"}}}"#
+        ), id: 5))
+
+        #expect(reply == GitHubIssueDetailReply(status: .ok, detail: nil))
+    }
+
+    @Test(arguments: [
+        "not json",
+        #"{"type":"issue_detail_response","id":6,"result":{"status":{"state":"ok"}}}"#,
+        #"{"type":"issue_detail_response","id":5,"result":{"status":{"state":"ok"},"detail":{"body":"x"}}}"#,
+        #"{"type":"issue_response","id":5,"result":{"status":{"state":"ok"},"issues":[]}}"#,
+    ])
+    func anIssueDetailReplyThatIsNotTheAnswerIsNil(reply: String) {
+        #expect(DaemonWire.issueDetail(fromReply: json(reply), id: 5) == nil)
     }
 
     // MARK: - Git

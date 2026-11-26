@@ -54,6 +54,11 @@ final class AgentTab: Identifiable {
     /// had it.
     let firstPrompt: String?
 
+    /// The GitHub issue it was started from, if it was. Kept across launches
+    /// until the session is written down, which happens once the person has
+    /// said something to it.
+    let issue: LinkedIssue?
+
     private(set) var phase: Phase
 
     /// Whether its agent has been started before, here or before a relaunch:
@@ -124,10 +129,16 @@ final class AgentTab: Identifiable {
         restored: Bool = false,
         sessionID: String? = nil,
         startedAt: Date? = nil,
-        firstPrompt: String? = nil
+        firstPrompt: String? = nil,
+        issue: LinkedIssue? = nil
     ) {
         self.id = id
         self.firstPrompt = firstPrompt
+        self.issue = issue
+        // An issue is the person's own request, given to the agent as its first
+        // message, so a session started from one is worth remembering at once.
+        // This is what lets the issue be marked in progress before they type.
+        self.hasConversed = issue != nil && firstPrompt != nil
         self.agent = agent
         self.number = number
         self.mode = mode

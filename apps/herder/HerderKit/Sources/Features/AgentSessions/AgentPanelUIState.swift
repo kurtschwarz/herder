@@ -28,6 +28,9 @@ final class AgentPanelUIState: PersistedWorkspaceUIState {
         /// The agent's own id for the session, once looked up.
         var session: String?
         var started: Date?
+        /// The GitHub issue it was started from, if it was. Absent in a tab
+        /// saved before there were any.
+        var issue: LinkedIssue?
     }
 
     var tabs: [Tab] = []
