@@ -493,9 +493,18 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     }
 
     private func updateCursor(for event: NSEvent) {
+        // The tracking area reports moves under anything drawn over the
+        // terminal, such as a modal: its pointer is not the terminal's to set.
+        guard isUnderMouse(at: event.locationInWindow) else { return }
         // The keyboard as it is now, not the event's: a cursor-update event
         // does not carry the modifiers, so Command read from it flickers.
         cursor(at: convert(event.locationInWindow, from: nil), modifiers: NSEvent.modifierFlags).set()
+    }
+
+    /// Whether the terminal is what the mouse is over at `location`, in the
+    /// window's coordinates, and not something on top of it.
+    private func isUnderMouse(at location: NSPoint) -> Bool {
+        window?.contentView?.hitTest(location) === self
     }
 
     /// The hand comes and goes with Command, without the mouse moving.
@@ -513,8 +522,7 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     private func refreshCursor(modifiers: NSEvent.ModifierFlags) {
         guard let window, window.isKeyWindow else { return }
         let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
-        guard bounds.contains(point), window.contentView?.hitTest(window.mouseLocationOutsideOfEventStream) === self
-        else { return }
+        guard bounds.contains(point), isUnderMouse(at: window.mouseLocationOutsideOfEventStream) else { return }
         cursor(at: point, modifiers: modifiers).set()
     }
 
