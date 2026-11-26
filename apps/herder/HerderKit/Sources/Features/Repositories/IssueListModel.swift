@@ -120,8 +120,10 @@ final class IssueListModel {
         if !userChoseTab, tab == .assigned, assignedCount == 0 { await switchTo(.open) }
     }
 
-    /// Asks GitHub again for the tab on show, and only that.
+    /// Asks GitHub again for the tab on show, and only that. Does nothing
+    /// while a request to GitHub is already in flight.
     func refresh() async {
+        guard !isRefreshing else { return }
         refreshError = nil
         retriedSignIn = false
         await fetch(tab, .fresh)

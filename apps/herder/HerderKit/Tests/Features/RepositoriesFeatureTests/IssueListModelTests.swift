@@ -176,6 +176,20 @@ import Testing
         #expect(!model.isRefreshing)
     }
 
+    @Test func pressingRefreshWhileOneIsInFlightAsksNothingMore() async throws {
+        seedBothTabs()
+        await model.load()
+        client.delay(.milliseconds(50))
+        let before = client.calls.count
+
+        let refreshing = Task { await model.refresh() }
+        try await Task.sleep(for: .milliseconds(20))
+        await model.refresh()
+        await refreshing.value
+
+        #expect(client.calls.count == before + 1)
+    }
+
     @Test func theTooltipSaysHowLongAgoGitHubWasAsked() async {
         seedBothTabs()
         await model.load()

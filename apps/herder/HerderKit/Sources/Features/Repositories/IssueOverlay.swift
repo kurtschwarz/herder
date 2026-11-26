@@ -170,7 +170,9 @@ private struct IssueCard: View {
                 hasNumberShortcuts: true
             )
             Spacer(minLength: 0)
-            HerderKit.Button(.icon(size: 24), action: { Task { await model.refresh() } }) {
+            Button {
+                Task { await model.refresh() }
+            } label: {
                 PhIcon(Ph.arrowClockwise, size: 14)
                     .rotationEffect(.degrees(model.isRefreshing ? 360 : 0))
                     .animation(
@@ -179,7 +181,9 @@ private struct IssueCard: View {
                         value: model.isRefreshing
                     )
             }
-            .disabled(model.isRefreshing || model.isStarting)
+            .buttonStyle(.icon(size: 24))
+            // Not disabled while spinning, so it keeps its hand: a press then does nothing.
+            .disabled(model.isStarting)
             .help(model.updatedText)
         }
     }

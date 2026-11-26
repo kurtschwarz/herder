@@ -16,6 +16,7 @@ public struct PrimaryButtonStyle: ButtonStyle {
                 Theme.Palette.violet.opacity(configuration.isPressed ? 0.8 : 1),
                 in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
             )
+            .pointerStyle(isEnabled ? .link : nil)
             .opacity(isEnabled ? 1 : 0.4)
     }
 }
@@ -38,6 +39,7 @@ public struct SecondaryButtonStyle: ButtonStyle {
                 in: shape
             )
             .overlay { shape.strokeBorder(Theme.Palette.hairline, lineWidth: 1) }
+            .pointerStyle(isEnabled ? .link : nil)
             .opacity(isEnabled ? 1 : 0.4)
     }
 }
