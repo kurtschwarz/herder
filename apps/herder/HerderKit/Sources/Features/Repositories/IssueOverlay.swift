@@ -170,9 +170,7 @@ private struct IssueCard: View {
                 hasNumberShortcuts: true
             )
             Spacer(minLength: 0)
-            Button {
-                Task { await model.refresh() }
-            } label: {
+            AppButton(.icon(size: 24), action: { Task { await model.refresh() } }) {
                 PhIcon(Ph.arrowClockwise, size: 14)
                     .rotationEffect(.degrees(model.isRefreshing ? 360 : 0))
                     .animation(
@@ -181,7 +179,6 @@ private struct IssueCard: View {
                         value: model.isRefreshing
                     )
             }
-            .buttonStyle(.icon(size: 24))
             .disabled(model.isRefreshing || model.isStarting)
             .help(model.updatedText)
         }
