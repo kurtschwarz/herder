@@ -170,7 +170,7 @@ private struct IssueCard: View {
                 hasNumberShortcuts: true
             )
             Spacer(minLength: 0)
-            AppButton(.icon(size: 24), action: { Task { await model.refresh() } }) {
+            HerderKit.Button(.icon(size: 24), action: { Task { await model.refresh() } }) {
                 PhIcon(Ph.arrowClockwise, size: 14)
                     .rotationEffect(.degrees(model.isRefreshing ? 360 : 0))
                     .animation(
