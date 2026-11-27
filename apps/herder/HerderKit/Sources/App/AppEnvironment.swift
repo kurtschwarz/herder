@@ -8,6 +8,7 @@ import RepositoriesFeature
 import Services
 import TaskManagerFeature
 import TerminalFeature
+import TerminalUI
 
 /// Composition root.
 ///
@@ -357,8 +358,8 @@ public final class AppEnvironment {
     /// ask for to the tabs they open next.
     private static func follow(_ settings: UserSettingsStore, in terminal: TerminalModel, and panel: AgentPanelModel) {
         withObservationTracking {
-            terminal.scrollbackLines = settings.settings.shellScrollbackLines
-            panel.scrollbackLines = settings.settings.agentScrollbackLines
+            terminal.configuration = TerminalConfiguration(scrollbackLines: settings.settings.shellScrollbackLines)
+            panel.configuration = TerminalConfiguration(scrollbackLines: settings.settings.agentScrollbackLines)
         } onChange: { [weak terminal, weak panel] in
             Task { @MainActor in
                 guard let terminal, let panel else { return }

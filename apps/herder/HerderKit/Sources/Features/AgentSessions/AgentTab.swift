@@ -155,14 +155,14 @@ final class AgentTab: Identifiable {
     }
 
     /// Starts the terminal UI, replacing a stopped one.
-    func attach(using pty: any PTYClient, spec: PTYSpec, scrollbackLines: Int = TerminalScreen.scrollbackLines) async {
+    func attach(using pty: any PTYClient, spec: PTYSpec, configuration: TerminalConfiguration = .default) async {
         phase = .starting
         terminate()
 
         do {
             let session = try await pty.spawn(spec)
             process = session
-            let screen = TerminalScreen(session: session, size: spec.size, workingDirectory: spec.workingDirectory, scrollbackLines: scrollbackLines)
+            let screen = TerminalScreen(session: session, size: spec.size, workingDirectory: spec.workingDirectory, configuration: configuration)
             screen.onSubmit = { [weak self] in self?.converse() }
             screen.onOpenFile = { [weak self] url, line, column in self?.onOpenFile?(url, line, column) }
             self.screen = screen

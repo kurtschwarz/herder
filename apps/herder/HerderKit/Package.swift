@@ -168,7 +168,7 @@ let package = Package(
             dependencies: [
                 "Core", "Services", "DesignSystem", "TestSupport",
                 "RepositoriesFeature", "FileTreeFeature", "EditorFeature", "DiffBaseFeature", "TerminalFeature",
-                "AgentSessionsFeature", "SettingsFeature", "TaskManagerFeature",
+                "AgentSessionsFeature", "SettingsFeature", "TaskManagerFeature", "TerminalUI",
             ],
             path: "Sources/App",
             swiftSettings: ui

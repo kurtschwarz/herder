@@ -10,9 +10,6 @@ import Observation
 /// terminal for an agent session is the same object.
 @Observable
 public final class TerminalScreen {
-    /// Scrollback kept, in lines, unless the caller asks for another amount.
-    public static let scrollbackLines = 10_000
-
     /// Counts bells. A tab that watches it can flash when it changes.
     public private(set) var bellCount = 0
 
@@ -85,12 +82,12 @@ public final class TerminalScreen {
         session: any PTYSession,
         size: PTYSize,
         workingDirectory: URL? = nil,
-        scrollbackLines: Int = TerminalScreen.scrollbackLines
+        configuration: TerminalConfiguration = .default
     ) {
         self.session = session
         self.size = size
         emulator = TerminalEmulator(
-            columns: Int(size.columns), rows: Int(size.rows), scrollbackLines: scrollbackLines
+            columns: Int(size.columns), rows: Int(size.rows), scrollbackLines: configuration.scrollbackLines
         )
         emulator.workingDirectory = workingDirectory
 

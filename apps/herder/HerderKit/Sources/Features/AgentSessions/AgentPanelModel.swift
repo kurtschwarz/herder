@@ -96,9 +96,9 @@ public final class AgentPanelModel {
     /// Changes when the panel should take the keyboard.
     public private(set) var focusRequest = 0
 
-    /// Lines of history a terminal started from now on keeps. Set from the
+    /// What a terminal started from now on is made with. Set from the
     /// settings; a terminal already running keeps what it was made with.
-    public var scrollbackLines = UserSettings.defaultAgentScrollbackLines
+    public var configuration = TerminalConfiguration(scrollbackLines: UserSettings.defaultAgentScrollbackLines)
 
     public init(
         pty: any PTYClient,
@@ -529,7 +529,7 @@ public final class AgentPanelModel {
             size: PTYSize(columns: 100, rows: 30)
         )
         spec.pidVariable = AgentMark.variable
-        await tab.attach(using: pty, spec: spec, scrollbackLines: scrollbackLines)
+        await tab.attach(using: pty, spec: spec, configuration: configuration)
         enter(tab, in: workspace)
         recordStart(of: tab, in: workspace)
         if let firstPrompt, tab.agent.promptNeedsReturn == true {
