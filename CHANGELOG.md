@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.1](https://github.com/kurtschwarz/herder/compare/herder-v0.7.0...herder-v0.7.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **design-system:** draw Phosphor icons as vectors, not 512x512 rasters ([#151](https://github.com/kurtschwarz/herder/issues/151)) ([b49590e](https://github.com/kurtschwarz/herder/commit/b49590e80116188d40ffae5d532dbed5ad7e2da8)), closes [#150](https://github.com/kurtschwarz/herder/issues/150)
+* **terminal:** use 8-bit backing store for terminal views ([#153](https://github.com/kurtschwarz/herder/issues/153)) ([3e28f6e](https://github.com/kurtschwarz/herder/commit/3e28f6e1ec15e1a9096360575b1bb5fc1804a9cc)), closes [#149](https://github.com/kurtschwarz/herder/issues/149)
+
 ## [0.7.0](https://github.com/kurtschwarz/herder/compare/herder-v0.6.0...herder-v0.7.0) (2026-11-26)
 
 
