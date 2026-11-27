@@ -295,6 +295,7 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        screen.visibilityChanged()
         NotificationCenter.default.removeObserver(self)
         guard let window else { return }
         for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {

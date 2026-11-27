@@ -74,6 +74,7 @@ public final class TerminalScreen {
     @ObservationIgnored private var refreshing: Task<Void, Never>?
     @ObservationIgnored private var resizing: Task<Void, Never>?
     @ObservationIgnored private var compressing: Task<Void, Never>?
+    @ObservationIgnored private var compressingHidden: Task<Void, Never>?
     @ObservationIgnored private var refreshPending = false
     @ObservationIgnored private var size: PTYSize
 
@@ -136,6 +137,7 @@ public final class TerminalScreen {
         refreshing?.cancel()
         resizing?.cancel()
         compressing?.cancel()
+        compressingHidden?.cancel()
     }
 
     // MARK: Output
@@ -173,10 +175,34 @@ public final class TerminalScreen {
                     seen = activity
                     continue
                 }
-                while !Task.isCancelled, emulator.compressStep() { await Task.yield() }
+                await compressAll()
                 compressing = nil
                 return
             }
+        }
+    }
+
+    /// Compresses until there is nothing left to, a step at a time so that
+    /// what arrives in between is still drawn.
+    private func compressAll() async {
+        while !Task.isCancelled, emulator.compressStep() { await Task.yield() }
+    }
+
+    /// How long a terminal that has left the screen waits before it is
+    /// compressed, so that flipping between two tabs does not compress each
+    /// in turn.
+    static let hiddenCompressionDelay = Duration.seconds(1)
+
+    /// The view came into a window or left one. Called by the view; the answer
+    /// is read from ``view``, which may by now be another one.
+    func visibilityChanged() {
+        compressingHidden?.cancel()
+        compressingHidden = nil
+        guard view?.window == nil else { return }
+        compressingHidden = Task { [weak self] in
+            try? await Task.sleep(for: Self.hiddenCompressionDelay)
+            guard !Task.isCancelled else { return }
+            await self?.compressAll()
         }
     }
 
@@ -194,6 +220,9 @@ public final class TerminalScreen {
         // finished, or failed at, is still news.
         statusRecords.removeAll { $0.state == .working || $0.state == .blocked }
         hasEnded = true
+        // Nothing more will be written, so what is held can be packed at once.
+        compressingHidden?.cancel()
+        compressingHidden = Task { [weak self] in await self?.compressAll() }
     }
 
     /// A report replaces its record whole, so what it leaves out is gone.
