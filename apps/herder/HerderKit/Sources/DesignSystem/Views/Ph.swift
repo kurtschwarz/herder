@@ -8,6 +8,11 @@ import SwiftUI
 /// `Sources/PhosphorSwift/Resources/Assets.xcassets/SVG/` at tag `2.1.0` of
 /// https://github.com/phosphor-icons/swift, where every icon here came from,
 /// and add a property for it. A name with no weight is the regular one.
+///
+/// Each `Contents.json` must carry `"preserves-vector-representation": true`
+/// beside `template-rendering-intent`. The SVGs have a 256 pt viewBox and no
+/// size, so without it CoreUI rasterises every icon at 512×512 px (512 KB)
+/// before it is shrunk to about 16 pt.
 public enum Ph {
     public static var archive: Image { icon("archive") }
     public static var arrowClockwise: Image { icon("arrow-clockwise") }
