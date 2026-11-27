@@ -51,6 +51,8 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
         self.inset = inset
         super.init(frame: .zero)
         wantsLayer = true
+        // Without this AppKit picks half-float (8 bytes a pixel) for the backing store.
+        layer?.contentsFormat = .RGBA8Uint
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         screen.view = self
         // Pasteboard and drag: a file dropped on a terminal types its path.
