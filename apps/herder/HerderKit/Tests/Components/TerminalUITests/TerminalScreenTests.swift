@@ -29,6 +29,18 @@ import Testing
         try await eventually("the text") { firstLine(of: screen) == "hello" }
     }
 
+    /// An agent that redraws a spinner refreshes the screen for as long as it
+    /// runs. Each refresh holding on to its task would grow without end.
+    @Test func refreshesAndResizesDoNotPileUp() async throws {
+        let (screen, session) = make()
+        for index in 0..<20 {
+            session.emit("\(index)")
+            try await eventually("the refresh") { firstLine(of: screen).hasSuffix("\(index)") }
+            screen.resize(columns: 40 + index % 2 + 1, rows: 10, cellWidth: 8, cellHeight: 16)
+        }
+        #expect(screen.tasks.count == 2)
+    }
+
     @Test func whatIsTypedGoesToTheProcess() async throws {
         let (screen, session) = make()
         screen.send(text: "ls\r")
