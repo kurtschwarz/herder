@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/kurtschwarz/herder/compare/herder-v0.7.1...herder-v0.8.0) (2026-11-27)
+
+
+### Features
+
+* **terminal:** keep all scrollback when the limit is 0, compress it while idle ([#162](https://github.com/kurtschwarz/herder/issues/162)) ([58e6f38](https://github.com/kurtschwarz/herder/commit/58e6f38835820c8de33ce419498eff89c1ce9570))
+* **terminal:** make scrollback a setting, smaller for agent tabs ([#160](https://github.com/kurtschwarz/herder/issues/160)) ([58eff9b](https://github.com/kurtschwarz/herder/commit/58eff9b8a42c0e2c61c1681a92ac2ac5d4c65419))
+
 ## [0.7.1](https://github.com/kurtschwarz/herder/compare/herder-v0.7.0...herder-v0.7.1) (2026-11-27)
 
 
