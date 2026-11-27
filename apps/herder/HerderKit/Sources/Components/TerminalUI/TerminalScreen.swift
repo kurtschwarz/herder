@@ -73,6 +73,8 @@ public final class TerminalScreen {
     @ObservationIgnored private(set) var tasks: [Task<Void, Never>] = []
     @ObservationIgnored private var refreshing: Task<Void, Never>?
     @ObservationIgnored private var resizing: Task<Void, Never>?
+    @ObservationIgnored private var compressing: Task<Void, Never>?
+    @ObservationIgnored private var compressingHidden: Task<Void, Never>?
     @ObservationIgnored private var refreshPending = false
     @ObservationIgnored private var size: PTYSize
 
@@ -119,6 +121,7 @@ public final class TerminalScreen {
                 outputCount += 1
                 emulator.write(chunk)
                 scheduleRefresh()
+                scheduleCompression()
                 // A flood arrives as fast as it is asked for, so without this
                 // the loop would hold the main actor until it stopped, and
                 // the window could not draw it or take the ^C that ends it.
@@ -133,6 +136,8 @@ public final class TerminalScreen {
         for task in tasks { task.cancel() }
         refreshing?.cancel()
         resizing?.cancel()
+        compressing?.cancel()
+        compressingHidden?.cancel()
     }
 
     // MARK: Output
@@ -150,6 +155,57 @@ public final class TerminalScreen {
         }
     }
 
+    /// How long a terminal sits unchanged before its history is compressed.
+    static let compressionDelay = Duration.seconds(5)
+
+    /// Compresses history once the terminal has been quiet for
+    /// ``compressionDelay``, so that a lot of it, or none being thrown away,
+    /// costs little while nobody is looking. Reading it back decompresses it.
+    ///
+    /// One task at a time that waits for quiet, rather than one per chunk.
+    private func scheduleCompression() {
+        guard compressing == nil else { return }
+        compressing = Task { [weak self] in
+            var seen: UInt64?
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.compressionDelay)
+                guard let self else { return }
+                let activity = emulator.compressionActivity
+                guard activity == seen else {
+                    seen = activity
+                    continue
+                }
+                await compressAll()
+                compressing = nil
+                return
+            }
+        }
+    }
+
+    /// Compresses until there is nothing left to, a step at a time so that
+    /// what arrives in between is still drawn.
+    private func compressAll() async {
+        while !Task.isCancelled, emulator.compressStep() { await Task.yield() }
+    }
+
+    /// How long a terminal that has left the screen waits before it is
+    /// compressed, so that flipping between two tabs does not compress each
+    /// in turn.
+    static let hiddenCompressionDelay = Duration.seconds(1)
+
+    /// The view came into a window or left one. Called by the view; the answer
+    /// is read from ``view``, which may by now be another one.
+    func visibilityChanged() {
+        compressingHidden?.cancel()
+        compressingHidden = nil
+        guard view?.window == nil else { return }
+        compressingHidden = Task { [weak self] in
+            try? await Task.sleep(for: Self.hiddenCompressionDelay)
+            guard !Task.isCancelled else { return }
+            await self?.compressAll()
+        }
+    }
+
     func refresh() {
         refreshPending = false
         let shape = emulator.mouseShape
@@ -164,6 +220,9 @@ public final class TerminalScreen {
         // finished, or failed at, is still news.
         statusRecords.removeAll { $0.state == .working || $0.state == .blocked }
         hasEnded = true
+        // Nothing more will be written, so what is held can be packed at once.
+        compressingHidden?.cancel()
+        compressingHidden = Task { [weak self] in await self?.compressAll() }
     }
 
     /// A report replaces its record whole, so what it leaves out is gone.

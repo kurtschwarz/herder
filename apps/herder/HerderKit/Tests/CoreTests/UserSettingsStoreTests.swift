@@ -227,6 +227,12 @@ import Testing
         #expect(try UserSettings.decode(try decoded.encoded()) == decoded)
     }
 
+    @Test func zeroScrollbackIsAcceptedAndMeansUnlimited() throws {
+        let decoded = try UserSettings.decode(#"{"terminal":{"scrollback_lines":0}}"#)
+        #expect(decoded.shellScrollbackLines == 0)
+        #expect(try UserSettings.decode(try decoded.encoded()).shellScrollbackLines == 0)
+    }
+
     @Test(arguments: ["-1", "1.5", #""10""#, "null"])
     func aBadScrollbackIsAProblem(_ value: String) async {
         file.edit(#"{"terminal":{"agent_scrollback_lines":\#(value)}}"#)
