@@ -60,6 +60,22 @@ final class TerminalNSView: NSView, NSUserInterfaceValidations {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    /// A plain layer, not AppKit's own. AppKit draws its own into a sublayer
+    /// that ignores `contentsFormat` and keeps three half-float buffers, 8
+    /// bytes a pixel: about 40 MB for a tall terminal. This one keeps 8-bit
+    /// buffers, but leaves its scale to the view.
+    override func makeBackingLayer() -> CALayer {
+        let layer = CALayer()
+        layer.contentsFormat = .RGBA8Uint
+        return layer
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        layer?.contentsScale = window?.backingScaleFactor ?? 2
+        needsDisplay = true
+    }
+
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
     override var mouseDownCanMoveWindow: Bool { false }

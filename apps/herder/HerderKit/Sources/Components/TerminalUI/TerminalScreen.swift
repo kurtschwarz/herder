@@ -73,7 +73,9 @@ public final class TerminalScreen {
     @ObservationIgnored weak var view: TerminalNSView?
 
     @ObservationIgnored private let input: AsyncStream<Data>.Continuation
-    @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+    @ObservationIgnored private(set) var tasks: [Task<Void, Never>] = []
+    @ObservationIgnored private var refreshing: Task<Void, Never>?
+    @ObservationIgnored private var resizing: Task<Void, Never>?
     @ObservationIgnored private var refreshPending = false
     @ObservationIgnored private var size: PTYSize
 
@@ -127,6 +129,8 @@ public final class TerminalScreen {
     deinit {
         input.finish()
         for task in tasks { task.cancel() }
+        refreshing?.cancel()
+        resizing?.cancel()
     }
 
     // MARK: Output
@@ -136,10 +140,12 @@ public final class TerminalScreen {
     private func scheduleRefresh() {
         guard !refreshPending else { return }
         refreshPending = true
-        tasks.append(Task { [weak self] in
+        // Held one at a time: an agent's spinner refreshes for as long as it
+        // runs, and a handle kept for each would never be let go.
+        refreshing = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(8))
             self?.refresh()
-        })
+        }
     }
 
     func refresh() {
@@ -244,7 +250,11 @@ public final class TerminalScreen {
         emulator.resize(columns: columns, rows: rows, cellWidth: cellWidth, cellHeight: cellHeight)
         size = PTYSize(columns: UInt16(columns), rows: UInt16(rows))
         let size = size
-        tasks.append(Task { [session] in await session.resize(size) })
+        // Each waits for the one before, so the process hears the sizes in order.
+        resizing = Task { [session, previous = resizing] in
+            await previous?.value
+            await session.resize(size)
+        }
         refresh()
     }
 
