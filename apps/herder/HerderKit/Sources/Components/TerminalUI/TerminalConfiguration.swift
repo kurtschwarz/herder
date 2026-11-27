@@ -5,7 +5,7 @@ import Foundation
 ///
 /// Fixed for the terminal's life. A change reaches the terminals made after it.
 public struct TerminalConfiguration: Sendable, Equatable {
-    /// Lines of history kept above the screen.
+    /// Lines of history kept above the screen. 0 keeps all of it.
     public var scrollbackLines: Int
 
     public init(scrollbackLines: Int = 10_000) {

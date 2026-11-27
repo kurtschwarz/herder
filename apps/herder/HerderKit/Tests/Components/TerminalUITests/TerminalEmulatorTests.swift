@@ -157,6 +157,34 @@ import Testing
         #expect(line(terminal, 4) == "line30")
     }
 
+    @Test func zeroLinesOfScrollbackKeepsEverything() {
+        let limited = emulator(rows: 5)
+        let unlimited = TerminalEmulator(columns: 20, rows: 5, scrollbackLines: 0)
+        let output = (1...5_000).map { "line\($0)" }.joined(separator: "\r\n")
+        feed(limited, output)
+        feed(unlimited, output)
+
+        #expect(unlimited.scroll.total == 5_000)
+        #expect(limited.scroll.total < unlimited.scroll.total)
+
+        unlimited.scroll(by: -10_000)
+        unlimited.update()
+        #expect(line(unlimited, 0) == "line1")
+    }
+
+    @Test func compressedHistoryReadsBackTheSame() {
+        let terminal = TerminalEmulator(columns: 20, rows: 5, scrollbackLines: 0)
+        feed(terminal, (1...5_000).map { "line\($0)" }.joined(separator: "\r\n"))
+
+        var steps = 0
+        while terminal.compressStep(), steps < 10_000 { steps += 1 }
+        #expect(steps < 10_000)
+
+        terminal.scroll(by: -10_000)
+        terminal.update()
+        #expect(line(terminal, 0) == "line1")
+    }
+
     // MARK: Selection
 
     @Test func aWordIsSelectedWhole() {

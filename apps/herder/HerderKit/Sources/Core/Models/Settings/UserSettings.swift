@@ -45,7 +45,8 @@ public struct UserSettings: Sendable, Equatable {
     /// The fewest characters `editor.wrap_column` may ask for.
     public static let minimumWrapColumn = 10
 
-    /// `terminal.scrollback_lines`: lines of history a shell tab keeps.
+    /// `terminal.scrollback_lines`: lines of history a shell tab keeps, or 0
+    /// for all of it.
     public var shellScrollbackLines = defaultShellScrollbackLines
 
     /// `terminal.agent_scrollback_lines`: lines of history an agent tab keeps.

@@ -73,6 +73,7 @@ public final class TerminalScreen {
     @ObservationIgnored private(set) var tasks: [Task<Void, Never>] = []
     @ObservationIgnored private var refreshing: Task<Void, Never>?
     @ObservationIgnored private var resizing: Task<Void, Never>?
+    @ObservationIgnored private var compressing: Task<Void, Never>?
     @ObservationIgnored private var refreshPending = false
     @ObservationIgnored private var size: PTYSize
 
@@ -119,6 +120,7 @@ public final class TerminalScreen {
                 outputCount += 1
                 emulator.write(chunk)
                 scheduleRefresh()
+                scheduleCompression()
                 // A flood arrives as fast as it is asked for, so without this
                 // the loop would hold the main actor until it stopped, and
                 // the window could not draw it or take the ^C that ends it.
@@ -133,6 +135,7 @@ public final class TerminalScreen {
         for task in tasks { task.cancel() }
         refreshing?.cancel()
         resizing?.cancel()
+        compressing?.cancel()
     }
 
     // MARK: Output
@@ -147,6 +150,33 @@ public final class TerminalScreen {
         refreshing = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(8))
             self?.refresh()
+        }
+    }
+
+    /// How long a terminal sits unchanged before its history is compressed.
+    static let compressionDelay = Duration.seconds(5)
+
+    /// Compresses history once the terminal has been quiet for
+    /// ``compressionDelay``, so that a lot of it, or none being thrown away,
+    /// costs little while nobody is looking. Reading it back decompresses it.
+    ///
+    /// One task at a time that waits for quiet, rather than one per chunk.
+    private func scheduleCompression() {
+        guard compressing == nil else { return }
+        compressing = Task { [weak self] in
+            var seen: UInt64?
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.compressionDelay)
+                guard let self else { return }
+                let activity = emulator.compressionActivity
+                guard activity == seen else {
+                    seen = activity
+                    continue
+                }
+                while !Task.isCancelled, emulator.compressStep() { await Task.yield() }
+                compressing = nil
+                return
+            }
         }
     }
 

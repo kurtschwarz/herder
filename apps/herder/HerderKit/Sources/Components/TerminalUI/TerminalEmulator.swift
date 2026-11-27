@@ -106,6 +106,7 @@ final class TerminalEmulator {
     /// Set when a full reset has left the library with the last shape asked for.
     private var needsShapeReset = false
 
+    /// `scrollbackLines` of 0 keeps all of it.
     init(columns: Int, rows: Int, scrollbackLines: Int) {
         self.columns = columns
         self.rows = rows
@@ -156,8 +157,15 @@ final class TerminalEmulator {
         // and not a pointer to it.
         ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, Unmanaged.passUnretained(self).toOpaque())
 
-        var lines = scrollbackLines
-        ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &lines)
+        if scrollbackLines > 0 {
+            var lines = scrollbackLines
+            ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &lines)
+        } else {
+            // No pointer takes a limit away. The library has a limit in bytes
+            // of its own, which would otherwise end "all of it" early.
+            ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, nil)
+            ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, nil)
+        }
 
         var foreground = rgb(Theme.Terminal.foreground)
         ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &foreground)
@@ -691,6 +699,22 @@ final class TerminalEmulator {
     }
 
     // MARK: Scrollback
+
+    /// Changes whenever something happens that compression cares about. Only
+    /// equality means anything.
+    var compressionActivity: UInt64 {
+        var activity: UInt64 = 0
+        ghostty_terminal_compression_activity(terminal, &activity)
+        return activity
+    }
+
+    /// One bounded step of compressing history that is not on screen. True
+    /// while more steps remain, so a caller can stop for a breath between them.
+    func compressStep() -> Bool {
+        var result = GHOSTTY_TERMINAL_COMPRESSION_RESULT_UNSUPPORTED
+        ghostty_terminal_compress(terminal, GHOSTTY_TERMINAL_COMPRESSION_MODE_INCREMENTAL, &result)
+        return result == GHOSTTY_TERMINAL_COMPRESSION_RESULT_PENDING
+    }
 
     var scroll: Scroll {
         var scrollbar = GhosttyTerminalScrollbar()
