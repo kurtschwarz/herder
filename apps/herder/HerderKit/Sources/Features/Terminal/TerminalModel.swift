@@ -73,6 +73,10 @@ public final class TerminalModel {
         minimumEditor: Theme.Size.minEditorHeight
     )
 
+    /// Lines of history a new tab keeps. Set from the settings; a tab already
+    /// open keeps what it was made with.
+    public var scrollbackLines = TerminalScreen.scrollbackLines
+
     public init(
         pty: any PTYClient,
         clock: any ClockClient,
@@ -194,7 +198,7 @@ public final class TerminalModel {
         )
         do {
             let session = try await pty.spawn(spec)
-            let tab = TerminalTab(session: session, size: spec.size, directory: id.url)
+            let tab = TerminalTab(session: session, size: spec.size, directory: id.url, scrollbackLines: scrollbackLines)
             tab.onExit = { [weak self] tab, code in self?.shellExited(tab, code: code, in: id) }
             tab.screen.onOpenFile = { [weak self] url, line, column in self?.onOpenFile?(url, line, column) }
             tab.start(clock: clock)

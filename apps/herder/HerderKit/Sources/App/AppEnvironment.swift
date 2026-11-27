@@ -322,13 +322,15 @@ public final class AppEnvironment {
         editor.diagnostic = { [settings] key in key == settingsKey ? settings.problem : nil }
         // The same for the whitespace and wrapping settings, which every window follows.
         Self.follow(settings, in: editor)
+        let terminal = TerminalModel(pty: pty, clock: clock, processes: processes, window: id)
+        Self.follow(settings, in: terminal, and: panel)
         return WindowEnvironment(
             id: id,
             repositories: list,
             repositoryList: repositoryList,
             fileTree: FileTreeModel(store: worktrees),
             editor: editor,
-            terminal: TerminalModel(pty: pty, clock: clock, processes: processes, window: id),
+            terminal: terminal,
             agentPanel: panel,
             worktrees: worktrees,
             windows: windows,
@@ -347,6 +349,20 @@ public final class AppEnvironment {
             Task { @MainActor in
                 guard let editor else { return }
                 follow(settings, in: editor)
+            }
+        }
+    }
+
+    /// Keeps the terminal and agent models handing the scrollback the settings
+    /// ask for to the tabs they open next.
+    private static func follow(_ settings: UserSettingsStore, in terminal: TerminalModel, and panel: AgentPanelModel) {
+        withObservationTracking {
+            terminal.scrollbackLines = settings.settings.shellScrollbackLines
+            panel.scrollbackLines = settings.settings.agentScrollbackLines
+        } onChange: { [weak terminal, weak panel] in
+            Task { @MainActor in
+                guard let terminal, let panel else { return }
+                follow(settings, in: terminal, and: panel)
             }
         }
     }

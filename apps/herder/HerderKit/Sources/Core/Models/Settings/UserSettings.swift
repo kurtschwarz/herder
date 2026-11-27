@@ -45,6 +45,16 @@ public struct UserSettings: Sendable, Equatable {
     /// The fewest characters `editor.wrap_column` may ask for.
     public static let minimumWrapColumn = 10
 
+    /// `terminal.scrollback_lines`: lines of history a shell tab keeps.
+    public var shellScrollbackLines = defaultShellScrollbackLines
+
+    /// `terminal.agent_scrollback_lines`: lines of history an agent tab keeps.
+    /// Fewer than a shell's, because agent tools keep their own history.
+    public var agentScrollbackLines = defaultAgentScrollbackLines
+
+    public static let defaultShellScrollbackLines = 10_000
+    public static let defaultAgentScrollbackLines = 2_000
+
     /// `providers.anthropic.endpoint`, as typed: it may not be a URL.
     public var anthropicEndpoint = NamingConfiguration.defaultEndpoint
 
@@ -122,6 +132,7 @@ extension UserSettings: Codable {
         case updates
         case agents
         case editor
+        case terminal
         case providers
     }
 
@@ -138,6 +149,11 @@ extension UserSettings: Codable {
         case showWhitespace = "show_whitespace"
         case wordWrap = "word_wrap"
         case wrapColumn = "wrap_column"
+    }
+
+    enum TerminalKeys: String, CodingKey, CaseIterable {
+        case scrollbackLines = "scrollback_lines"
+        case agentScrollbackLines = "agent_scrollback_lines"
     }
 
     enum ProvidersKeys: String, CodingKey, CaseIterable {
@@ -224,6 +240,15 @@ extension UserSettings: Codable {
             }
         }
 
+        if root.contains(.terminal) {
+            let terminal = try root.nestedContainer(keyedBy: TerminalKeys.self, forKey: .terminal)
+            shellScrollbackLines = try Self.decodeScrollback(terminal, .scrollbackLines, as: "terminal.scrollback_lines")
+                ?? shellScrollbackLines
+            agentScrollbackLines = try Self.decodeScrollback(
+                terminal, .agentScrollbackLines, as: "terminal.agent_scrollback_lines"
+            ) ?? agentScrollbackLines
+        }
+
         if root.contains(.providers) {
             let providers = try root.nestedContainer(keyedBy: ProvidersKeys.self, forKey: .providers)
             if providers.contains(.anthropic) {
@@ -231,6 +256,16 @@ extension UserSettings: Codable {
                 anthropicEndpoint = try anthropic.decodeIfPresent(String.self, forKey: .endpoint) ?? anthropicEndpoint
             }
         }
+    }
+
+    private static func decodeScrollback(
+        _ container: KeyedDecodingContainer<TerminalKeys>, _ key: TerminalKeys, as place: String
+    ) throws -> Int? {
+        guard container.contains(key) else { return nil }
+        guard let lines = try? container.decode(Int.self, forKey: key), lines >= 0 else {
+            throw UserSettingsError(message: "\(place) must be a whole number of at least 0.")
+        }
+        return lines
     }
 
     /// An entry with a `type` starts from that preset: what the entry leaves
@@ -337,6 +372,16 @@ extension UserSettings: Codable {
         if let wrapColumn {
             var editor = root.nestedContainer(keyedBy: EditorKeys.self, forKey: .editor)
             try editor.encode(wrapColumn, forKey: .wrapColumn)
+        }
+
+        if all || shellScrollbackLines != defaults.shellScrollbackLines {
+            var terminal = root.nestedContainer(keyedBy: TerminalKeys.self, forKey: .terminal)
+            try terminal.encode(shellScrollbackLines, forKey: .scrollbackLines)
+        }
+
+        if all || agentScrollbackLines != defaults.agentScrollbackLines {
+            var terminal = root.nestedContainer(keyedBy: TerminalKeys.self, forKey: .terminal)
+            try terminal.encode(agentScrollbackLines, forKey: .agentScrollbackLines)
         }
 
         if all || anthropicEndpoint != defaults.anthropicEndpoint {
