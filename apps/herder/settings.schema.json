@@ -60,6 +60,24 @@
         }
       }
     },
+    "terminal": {
+      "description": "How terminals behave.",
+      "type": "object",
+      "properties": {
+        "scrollback_lines": {
+          "description": "Lines of history a shell tab keeps. Each line costs memory for as long as the tab lives, hidden or not, and more so the wider the window. Applies to tabs opened after the change. 0 keeps none.",
+          "type": "integer",
+          "minimum": 0,
+          "default": 10000
+        },
+        "agent_scrollback_lines": {
+          "description": "Lines of history an agent tab keeps. Fewer than a shell's, because agent tools keep their own history. Applies to sessions started after the change. 0 keeps none.",
+          "type": "integer",
+          "minimum": 0,
+          "default": 2000
+        }
+      }
+    },
     "providers": {
       "description": "The services Herder itself calls, as opposed to the agents it runs.",
       "type": "object",

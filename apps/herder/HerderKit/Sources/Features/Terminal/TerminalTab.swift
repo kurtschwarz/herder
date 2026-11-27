@@ -40,10 +40,10 @@ final class TerminalTab: Identifiable {
     @ObservationIgnored private let session: any PTYSession
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
 
-    init(session: any PTYSession, size: PTYSize, directory: URL) {
+    init(session: any PTYSession, size: PTYSize, directory: URL, configuration: TerminalConfiguration = .default) {
         self.session = session
         self.directory = directory
-        screen = TerminalScreen(session: session, size: size, workingDirectory: directory)
+        screen = TerminalScreen(session: session, size: size, workingDirectory: directory, configuration: configuration)
     }
 
     deinit {

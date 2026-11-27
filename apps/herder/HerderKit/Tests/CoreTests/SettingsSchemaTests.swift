@@ -47,6 +47,7 @@ import Testing
         #expect(Set(try properties(at: ["updates"]).keys) == names(UserSettings.UpdatesKeys.self))
         #expect(Set(try properties(at: ["agents"]).keys) == names(UserSettings.AgentsKeys.self))
         #expect(Set(try properties(at: ["editor"]).keys) == names(UserSettings.EditorKeys.self))
+        #expect(Set(try properties(at: ["terminal"]).keys) == names(UserSettings.TerminalKeys.self))
         #expect(Set(try properties(at: ["providers"]).keys) == names(UserSettings.ProvidersKeys.self))
         #expect(Set(try properties(at: ["providers", "anthropic"]).keys) == names(UserSettings.AnthropicKeys.self))
 
@@ -73,7 +74,7 @@ import Testing
         }
         try compare(schema, encoded, at: "")
 
-        #expect(checked == 6)
+        #expect(checked == 8)
     }
 
     @Test func anAgentsIDFollowsTheSameRuleAsTheApp() throws {

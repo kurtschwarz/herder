@@ -211,6 +211,31 @@ import Testing
         #expect(try UserSettings.decode(#"{"editor":{"wrap_column":10}}"#).wrapColumn == 10)
     }
 
+    @Test func agentTerminalsKeepLessScrollbackThanShellsByDefault() {
+        let settings = UserSettings()
+
+        #expect(settings.shellScrollbackLines == 10_000)
+        #expect(settings.agentScrollbackLines < settings.shellScrollbackLines)
+    }
+
+    @Test func scrollbackDecodesAndIsWrittenOnlyWhenChanged() throws {
+        let decoded = try UserSettings.decode(#"{"terminal":{"scrollback_lines":500,"agent_scrollback_lines":0}}"#)
+        #expect(decoded.shellScrollbackLines == 500)
+        #expect(decoded.agentScrollbackLines == 0)
+
+        #expect(!(try UserSettings().encoded().contains("scrollback")))
+        #expect(try UserSettings.decode(try decoded.encoded()) == decoded)
+    }
+
+    @Test(arguments: ["-1", "1.5", #""10""#, "null"])
+    func aBadScrollbackIsAProblem(_ value: String) async {
+        file.edit(#"{"terminal":{"agent_scrollback_lines":\#(value)}}"#)
+
+        await store.load()
+
+        #expect(store.problem == "terminal.agent_scrollback_lines must be a whole number of at least 0.")
+    }
+
     @Test func anExternalEditIsAppliedLive() async {
         await store.load()
         store.startWatching()
